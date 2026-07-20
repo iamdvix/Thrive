@@ -1,26 +1,25 @@
 <script setup>
-// Perfil público del emprendimiento; carga sus datos, productos, seguidores y detalle de publicaciones.
-import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
+// Perfil público del emprendimiento; muestra información, productos, seguidores y contacto.
+import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
+
 const route = useRoute();
 const router = useRouter();
-// Estados principales utilizados por el dashboard.
+
 const entrepreneur = ref(null);
 const products = ref([]);
 const loading = ref(true);
 const loadError = ref("");
-// Controla el estado de seguimiento del emprendimiento.
+
 const isFollowing = ref(false);
 const followLoading = ref(false);
 const followerCount = ref(0);
-// Sección dedicada a detalle de producto.
-const selectedProduct = ref(null);
-const selectedProductImageIndex = ref(0);
-// Valores calculados automáticamente a partir del estado actual.
+
 const entrepreneurId = computed(function () {
     return String(route.params.id || "");
 });
+
 const entrepreneurInitials = computed(function () {
     const name = entrepreneur.value?.businessName || "Thrive";
     return name
@@ -32,32 +31,20 @@ const entrepreneurInitials = computed(function () {
         })
         .join("");
 });
+
 const followerCountText = computed(function () {
     return followerCount.value === 1
         ? "1 seguidor"
         : `${followerCount.value} seguidores`;
 });
-const selectedProductImages = computed(function () {
-    return selectedProduct.value?.images || [];
-});
-const selectedProductImage = computed(function () {
-    if (!selectedProductImages.value.length) {
-        return null;
-    }
-    return (
-        selectedProductImages.value[
-            selectedProductImageIndex.value
-        ] || selectedProductImages.value[0]
-    );
-});
-// Funciones pequeñas reutilizadas en distintas partes de la vista.
+
 function formatPrice(price) {
     return new Intl.NumberFormat("en-US", {
         style: "currency",
         currency: "USD"
     }).format(Number(price) || 0);
 }
-// Regresa a la pantalla anterior sin alterar los datos del perfil.
+
 function goBack() {
     if (window.history.length > 1) {
         router.back();
@@ -65,19 +52,23 @@ function goBack() {
     }
     router.push("/catalogo");
 }
-// Carga la información pública del emprendimiento.
+
+// Carga el perfil público y la información relacionada.
 async function loadPublicProfile() {
     loading.value = true;
     loadError.value = "";
     entrepreneur.value = null;
     products.value = [];
+
     try {
         const id = entrepreneurId.value;
+
         if (!id) {
-            loadError.value = "El enlace del emprendimiento no es válido.";
+            loadError.value =
+                "El enlace del emprendimiento no es válido.";
             return;
         }
-        // El ID viene de route.params.id, no del usuario conectado.
+
         const { data: entrepreneurData, error: entrepreneurError } =
             await supabase
                 .from("entrepreneurs")
@@ -91,80 +82,144 @@ async function loadPublicProfile() {
                 `)
                 .eq("id", id)
                 .maybeSingle();
+
         if (entrepreneurError) {
             throw entrepreneurError;
         }
+
         if (!entrepreneurData) {
-            loadError.value = "No pudimos encontrar este emprendimiento.";
+            loadError.value =
+                "No pudimos encontrar este emprendimiento.";
             return;
         }
+
         entrepreneur.value = {
             id: entrepreneurData.id,
-            businessName: entrepreneurData.business_name,
-            description: entrepreneurData.description || "",
-            department: entrepreneurData.department || "",
-            district: entrepreneurData.district || "",
-            avatar: entrepreneurData.logo_url || ""
+            businessName:
+                entrepreneurData.business_name,
+            description:
+                entrepreneurData.description || "",
+            department:
+                entrepreneurData.department || "",
+            district:
+                entrepreneurData.district || "",
+            avatar:
+                entrepreneurData.logo_url || "",
+            whatsapp: ""
         };
+
         await Promise.all([
             loadProducts(id),
             loadFollowState(id),
-            loadFollowerCount(id)
+            loadFollowerCount(id),
+            loadWhatsapp(id)
         ]);
     } catch (error) {
-        console.error("Error al cargar perfil público:", error);
+        console.error(
+            "Error al cargar perfil público:",
+            error
+        );
+
         loadError.value =
             "Ocurrió un problema al cargar este emprendimiento.";
     } finally {
         loading.value = false;
     }
 }
-// Carga los productos publicados por el emprendimiento.
+
+// Obtiene el promedio de reseñas de los productos del emprendimiento.
+async function loadReviewSummary(productIds) {
+    if (!productIds.length) return {};
+
+    const { data, error } = await supabase
+        .from("product_reviews")
+        .select("product_id, rating")
+        .in("product_id", productIds);
+
+    if (error) {
+        console.error(
+            "No se pudieron cargar las reseñas:",
+            error
+        );
+        return {};
+    }
+
+    const summary = {};
+
+    for (const review of data || []) {
+        if (!summary[review.product_id]) {
+            summary[review.product_id] = {
+                total: 0,
+                count: 0
+            };
+        }
+
+        summary[review.product_id].total +=
+            Number(review.rating) || 0;
+
+        summary[review.product_id].count += 1;
+    }
+
+    return summary;
+}
+
+// Carga los productos y su promedio de reseñas.
 async function loadProducts(id) {
-    const { data: productRows, error: productError } = await supabase
-        .from("products")
-        .select(`
-            id,
-            entrepreneur_id,
-            name,
-            description,
-            categories,
-            price,
-            stock,
-            featured,
-            active,
-            created_at
-        `)
-        .eq("entrepreneur_id", id)
-        .eq("active", true)
-        .order("created_at", {
-            ascending: false
-        });
+    const { data: productRows, error: productError } =
+        await supabase
+            .from("products")
+            .select(`
+                id,
+                entrepreneur_id,
+                name,
+                description,
+                categories,
+                price,
+                stock,
+                featured,
+                active,
+                created_at
+            `)
+            .eq("entrepreneur_id", id)
+            .eq("active", true)
+            .order("created_at", {
+                ascending: false
+            });
+
     if (productError) {
         throw productError;
     }
+
     if (!productRows?.length) {
         products.value = [];
         return;
     }
+
     const productIds = productRows.map(function (product) {
         return product.id;
     });
-    const { data: imageRows, error: imageError } = await supabase
-        .from("product_images")
-        .select(`
-            id,
-            product_id,
-            image_url,
-            sort_order
-        `)
-        .in("product_id", productIds)
-        .order("sort_order", {
-            ascending: true
-        });
+
+    const { data: imageRows, error: imageError } =
+        await supabase
+            .from("product_images")
+            .select(`
+                id,
+                product_id,
+                image_url,
+                sort_order
+            `)
+            .in("product_id", productIds)
+            .order("sort_order", {
+                ascending: true
+            });
+
     if (imageError) {
         throw imageError;
     }
+
+    const reviewSummary =
+        await loadReviewSummary(productIds);
+
     products.value = productRows.map(function (product) {
         const images = (imageRows || [])
             .filter(function (image) {
@@ -176,47 +231,100 @@ async function loadProducts(id) {
             .map(function (image) {
                 return image.image_url;
             });
+
+        const reviews =
+            reviewSummary[product.id];
+
         return {
             id: product.id,
-            entrepreneurId: product.entrepreneur_id,
-            name: product.name,
-            description: product.description || "",
-            categories: product.categories || [],
-            price: Number(product.price) || 0,
-            stock: Number(product.stock) || 0,
-            featured: product.featured,
-            image: images[0] || null,
-            images
+            entrepreneurId:
+                product.entrepreneur_id,
+            name:
+                product.name,
+            description:
+                product.description || "",
+            categories:
+                product.categories || [],
+            price:
+                Number(product.price) || 0,
+            stock:
+                Number(product.stock) || 0,
+            featured:
+                product.featured,
+            image:
+                images[0] || null,
+            images,
+            averageRating:
+                reviews?.count
+                    ? reviews.total / reviews.count
+                    : 0,
+            reviewCount:
+                reviews?.count || 0
         };
     });
 }
-// Controla el estado de seguimiento del emprendimiento.
+
+// Carga el teléfono del emprendimiento sin exponer otros datos del perfil.
+async function loadWhatsapp(id) {
+    try {
+        const { data, error } = await supabase.rpc(
+            "get_entrepreneur_public_contact",
+            {
+                target_entrepreneur_id: id
+            }
+        );
+
+        if (error) {
+            throw error;
+        }
+
+        if (entrepreneur.value) {
+            entrepreneur.value.whatsapp =
+                data?.[0]?.phone || "";
+        }
+    } catch (error) {
+        console.warn(
+            "No se pudo cargar el WhatsApp del emprendimiento:",
+            error
+        );
+    }
+}
+
 async function loadFollowState(id) {
     try {
         const {
             data: { user },
             error: userError
         } = await supabase.auth.getUser();
+
         if (userError || !user) {
             isFollowing.value = false;
             return;
         }
+
         const { data, error } = await supabase
             .from("follows")
             .select("id")
             .eq("follower_id", user.id)
             .eq("entrepreneur_id", id)
             .maybeSingle();
+
         if (error) {
             throw error;
         }
-        isFollowing.value = Boolean(data);
+
+        isFollowing.value =
+            Boolean(data);
     } catch (error) {
-        console.error("Error al cargar estado de follow:", error);
+        console.error(
+            "Error al cargar estado de follow:",
+            error
+        );
+
         isFollowing.value = false;
     }
 }
-// Carga la cantidad actual de seguidores del emprendimiento.
+
 async function loadFollowerCount(id) {
     try {
         const { data, error } = await supabase.rpc(
@@ -225,115 +333,163 @@ async function loadFollowerCount(id) {
                 p_entrepreneur_id: id
             }
         );
+
         if (error) {
             throw error;
         }
-        followerCount.value = Number(data) || 0;
+
+        followerCount.value =
+            Number(data) || 0;
     } catch (error) {
-        console.error("Error al cargar contador de seguidores:", error);
+        console.error(
+            "Error al cargar contador de seguidores:",
+            error
+        );
+
         followerCount.value = 0;
     }
 }
-// Permite seguir o dejar de seguir al emprendimiento.
+
 async function toggleFollow() {
-    if (!entrepreneur.value || followLoading.value) return;
+    if (
+        !entrepreneur.value ||
+        followLoading.value
+    ) {
+        return;
+    }
+
     followLoading.value = true;
+
     try {
         const {
             data: { user },
             error: userError
         } = await supabase.auth.getUser();
+
         if (userError || !user) {
             router.push("/auth");
             return;
         }
-        const id = entrepreneur.value.id;
+
+        const id =
+            entrepreneur.value.id;
+
         if (user.id === id) {
-            alert("No puedes seguir tu propio emprendimiento.");
+            alert(
+                "No puedes seguir tu propio emprendimiento."
+            );
             return;
         }
+
         if (isFollowing.value) {
             const { error } = await supabase
                 .from("follows")
                 .delete()
-                .eq("follower_id", user.id)
-                .eq("entrepreneur_id", id);
+                .eq(
+                    "follower_id",
+                    user.id
+                )
+                .eq(
+                    "entrepreneur_id",
+                    id
+                );
+
             if (error) {
                 throw error;
             }
+
             isFollowing.value = false;
-            followerCount.value = Math.max(
-                0,
-                followerCount.value - 1
-            );
+
+            followerCount.value =
+                Math.max(
+                    0,
+                    followerCount.value - 1
+                );
+
             return;
         }
+
         const { error } = await supabase
             .from("follows")
             .insert({
-                follower_id: user.id,
-                entrepreneur_id: id
+                follower_id:
+                    user.id,
+                entrepreneur_id:
+                    id
             });
+
         if (error) {
             if (error.code === "23505") {
                 isFollowing.value = true;
                 await loadFollowerCount(id);
                 return;
             }
+
             throw error;
         }
+
         isFollowing.value = true;
         followerCount.value += 1;
     } catch (error) {
-        console.error("Error al actualizar follow:", error);
-        alert("No fue posible actualizar el seguimiento.");
+        console.error(
+            "Error al actualizar follow:",
+            error
+        );
+
+        alert(
+            "No fue posible actualizar el seguimiento."
+        );
     } finally {
         followLoading.value = false;
     }
 }
-// Controla la información y navegación del detalle de producto.
+
+// Abre el producto en la pantalla independiente de detalle.
 function openProductDetail(product) {
-    selectedProduct.value = product;
-    selectedProductImageIndex.value = 0;
-    document.body.style.overflow = "hidden";
+    if (!product?.id) return;
+
+    router.push({
+        name: "DetalleProducto",
+        params: {
+            id: product.id
+        }
+    });
 }
-// Cierra el detalle del producto y restablece su estado.
-function closeProductDetail() {
-    selectedProduct.value = null;
-    selectedProductImageIndex.value = 0;
-    document.body.style.overflow = "";
+
+// Abre WhatsApp con un mensaje dirigido al emprendimiento.
+function contactWhatsApp() {
+    if (!entrepreneur.value) return;
+
+    const message =
+        encodeURIComponent(
+            `Hola, vi el perfil de ${entrepreneur.value.businessName} en Thrive y quisiera obtener más información.`
+        );
+
+    const rawWhatsapp =
+        String(
+            entrepreneur.value.whatsapp || ""
+        ).replace(/\D/g, "");
+    const whatsapp =
+        rawWhatsapp.length === 8
+            ? `503${rawWhatsapp}`
+            : rawWhatsapp;
+
+    const url =
+        whatsapp
+            ? `https://wa.me/${whatsapp}?text=${message}`
+            : `https://wa.me/?text=${message}`;
+
+    window.open(
+        url,
+        "_blank",
+        "noopener,noreferrer"
+    );
 }
-// Muestra la siguiente imagen disponible del producto.
-function nextProductImage() {
-    if (selectedProductImages.value.length <= 1) return;
-    selectedProductImageIndex.value =
-        (selectedProductImageIndex.value + 1) %
-        selectedProductImages.value.length;
-}
-// Muestra la imagen anterior del producto.
-function previousProductImage() {
-    if (selectedProductImages.value.length <= 1) return;
-    selectedProductImageIndex.value =
-        (
-            selectedProductImageIndex.value -
-            1 +
-            selectedProductImages.value.length
-        ) % selectedProductImages.value.length;
-}
-// Cierra la ventana activa cuando el usuario presiona Escape.
-function handleEscape(event) {
-    if (
-        event.key === "Escape" &&
-        selectedProduct.value
-    ) {
-        closeProductDetail();
-    }
-}
-// Ejecuta y limpia procesos cuando la vista entra o sale de pantalla.
+
 onMounted(function () {
     loadPublicProfile();
-    document.addEventListener("keydown", handleEscape);
 });
+
 watch(
     function () {
         return route.params.id;
@@ -342,11 +498,8 @@ watch(
         loadPublicProfile();
     }
 );
-onBeforeUnmount(function () {
-    document.removeEventListener("keydown", handleEscape);
-    document.body.style.overflow = "";
-});
 </script>
+
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-10 text-gray-700">
     <!-- Cabecera -->
@@ -371,6 +524,7 @@ onBeforeUnmount(function () {
             </div>
         </div>
     </header>
+
     <!-- Cargando -->
     <main
         v-if="loading"
@@ -381,6 +535,7 @@ onBeforeUnmount(function () {
             Cargando emprendimiento...
         </p>
     </main>
+
     <!-- Error -->
     <main
         v-else-if="loadError"
@@ -403,6 +558,7 @@ onBeforeUnmount(function () {
             Intentar nuevamente
         </button>
     </main>
+
     <!-- Contenido -->
     <main
         v-else-if="entrepreneur"
@@ -423,6 +579,7 @@ onBeforeUnmount(function () {
                 >
                     {{ entrepreneurInitials }}
                 </div>
+
                 <div class="min-w-0 flex-1">
                     <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
                         Emprendimiento
@@ -436,10 +593,12 @@ onBeforeUnmount(function () {
                     <p class="mt-3 max-w-2xl text-sm leading-6 text-gray-500">
                         {{ entrepreneur.description || "Este emprendimiento aún no tiene una descripción." }}
                     </p>
-                    <div class="mt-4 flex flex-wrap items-center justify-center gap-3 sm:justify-start">
-                        <span class="text-sm font-bold text-gray-600">
+
+                    <div class="mt-4 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                        <span class="mr-1 text-sm font-bold text-gray-600">
                             {{ followerCountText }}
                         </span>
+
                         <button
                             type="button"
                             :disabled="followLoading"
@@ -459,10 +618,22 @@ onBeforeUnmount(function () {
                                         : "Seguir +"
                             }}
                         </button>
+
+                        <button
+                            type="button"
+                            class="flex items-center gap-2 rounded-full bg-[#25D366] px-4 py-2 text-xs font-bold text-white"
+                            @click="contactWhatsApp"
+                        >
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.009-.371-.011-.57-.011-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479s1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.262.489 1.693.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347M12.05 21.785h-.003a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.885 9.887-9.885 2.64 0 5.122 1.03 6.988 2.897a9.825 9.825 0 012.895 6.993c-.003 5.45-4.437 9.887-9.887 9.887"></path>
+                            </svg>
+                            WhatsApp
+                        </button>
                     </div>
                 </div>
             </div>
         </section>
+
         <!-- Productos -->
         <section class="mt-7">
             <div class="mb-5">
@@ -473,6 +644,7 @@ onBeforeUnmount(function () {
                     Productos de {{ entrepreneur.businessName }}
                 </h2>
             </div>
+
             <div
                 v-if="products.length"
                 class="grid grid-cols-2 gap-x-2 gap-y-5 sm:gap-4 md:grid-cols-3 xl:grid-cols-4"
@@ -497,6 +669,7 @@ onBeforeUnmount(function () {
                             Sin imagen
                         </div>
                     </div>
+
                     <div class="pt-1.5 sm:px-1 sm:pt-3">
                         <div class="mb-1 flex flex-wrap gap-1">
                             <span
@@ -507,15 +680,28 @@ onBeforeUnmount(function () {
                                 {{ category }}
                             </span>
                         </div>
+
                         <h3 class="min-h-[30px] text-[11px] font-medium leading-tight text-gray-500 sm:min-h-[40px] sm:text-sm">
                             {{ product.name }}
                         </h3>
+
+                        <div class="mt-1 flex items-center gap-1 text-[10px] sm:text-xs">
+                            <span class="text-amber-500">★</span>
+                            <span class="font-bold text-gray-600">
+                                {{ Number(product.averageRating).toFixed(1) }}
+                            </span>
+                            <span class="text-gray-400">
+                                {{ product.reviewCount }} reseñas
+                            </span>
+                        </div>
+
                         <p class="mt-1 text-base font-extrabold text-[#4F7180] sm:text-xl">
                             {{ formatPrice(product.price) }}
                         </p>
                     </div>
                 </article>
             </div>
+
             <div
                 v-else
                 class="rounded-[24px] border border-dashed border-[#90E0EF] bg-white px-5 py-16 text-center"
@@ -526,110 +712,5 @@ onBeforeUnmount(function () {
             </div>
         </section>
     </main>
-    <!-- Detalle del producto -->
-    <Teleport to="body">
-        <div
-            v-if="selectedProduct"
-            class="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 sm:items-center sm:p-5"
-            @click.self="closeProductDetail"
-        >
-            <section class="max-h-[94vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[900px] sm:rounded-[28px]">
-                <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
-                    <div>
-                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                            Producto
-                        </p>
-                        <h2 class="font-bold text-gray-700">
-                            {{ selectedProduct.name }}
-                        </h2>
-                    </div>
-                    <button
-                        type="button"
-                        class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
-                        @click="closeProductDetail"
-                    >
-                        ×
-                    </button>
-                </div>
-                <div class="grid md:grid-cols-2">
-                    <div class="bg-gray-50 p-4 sm:p-6">
-                        <div class="relative overflow-hidden rounded-2xl bg-gray-100">
-                            <img
-                                v-if="selectedProductImage"
-                                :src="selectedProductImage"
-                                :alt="selectedProduct.name"
-                                class="aspect-square w-full object-cover"
-                            >
-                            <div
-                                v-else
-                                class="flex aspect-square items-center justify-center text-sm font-bold text-gray-400"
-                            >
-                                Sin fotografía
-                            </div>
-                            <template v-if="selectedProductImages.length > 1">
-                                <button
-                                    type="button"
-                                    class="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl text-gray-600 shadow"
-                                    @click="previousProductImage"
-                                >
-                                    ‹
-                                </button>
-                                <button
-                                    type="button"
-                                    class="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl text-gray-600 shadow"
-                                    @click="nextProductImage"
-                                >
-                                    ›
-                                </button>
-                            </template>
-                        </div>
-                        <div
-                            v-if="selectedProductImages.length > 1"
-                            class="mt-3 flex gap-2 overflow-x-auto"
-                        >
-                            <button
-                                v-for="(image, index) in selectedProductImages"
-                                :key="image"
-                                type="button"
-                                class="h-16 w-16 shrink-0 overflow-hidden rounded-xl border-2"
-                                :class="
-                                    selectedProductImageIndex === index
-                                        ? 'border-[#00B4D8]'
-                                        : 'border-transparent'
-                                "
-                                @click="selectedProductImageIndex = index"
-                            >
-                                <img
-                                    :src="image"
-                                    alt="Fotografía del producto"
-                                    class="h-full w-full object-cover"
-                                >
-                            </button>
-                        </div>
-                    </div>
-                    <div class="p-5 sm:p-7">
-                        <div class="flex flex-wrap gap-2">
-                            <span
-                                v-for="category in selectedProduct.categories"
-                                :key="category"
-                                class="rounded-full bg-[#CAF0F8] px-3 py-1.5 text-xs font-bold text-[#0077B6]"
-                            >
-                                {{ category }}
-                            </span>
-                        </div>
-                        <h2 class="mt-4 text-2xl font-black text-gray-700">
-                            {{ selectedProduct.name }}
-                        </h2>
-                        <p class="mt-4 text-3xl font-extrabold text-[#4F7180]">
-                            {{ formatPrice(selectedProduct.price) }}
-                        </p>
-                        <p class="mt-6 whitespace-pre-line text-sm leading-relaxed text-gray-500">
-                            {{ selectedProduct.description || "Este producto no tiene una descripción." }}
-                        </p>
-                    </div>
-                </div>
-            </section>
-        </div>
-    </Teleport>
 </div>
 </template>

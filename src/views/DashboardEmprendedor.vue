@@ -22,7 +22,6 @@ const activeSection = ref("inicio");
 // Control de ventanas.
 const showProfileEditor = ref(false);
 const showProductEditor = ref(false);
-const showProductPreview = ref(false);
 const showFollowersModal = ref(false);
 // Datos y controles relacionados con los seguidores.
 // Guarda la cantidad total y los datos públicos de quienes siguen al emprendimiento.
@@ -32,6 +31,7 @@ const followersLoading = ref(false);
 // Datos y controles utilizados para editar el perfil del emprendimiento.
 const profileForm = ref({
     businessName: "",
+    phone: "",
     description: "",
     department: "",
     district: ""
@@ -77,9 +77,6 @@ const productCategories = [
     "Plantas y jardinería",
     "Productos para mascotas"
 ];
-// Controla la vista previa del perfil tal como lo verá un cliente.
-const previewProduct = ref(null);
-const previewImageIndex = ref(0);
 // Datos generales y listas utilizadas en esta pantalla.
 const departments = [
     "Ahuachapán",
@@ -117,15 +114,6 @@ const productEditorTitle = computed(function () {
     return productEditorMode.value === "add"
         ? "Añadir producto"
         : "Editar producto";
-});
-const previewImages = computed(function () {
-    return previewProduct.value?.images || [];
-});
-const previewImage = computed(function () {
-    if (!previewImages.value.length) {
-        return null;
-    }
-    return previewImages.value[previewImageIndex.value] || previewImages.value[0];
 });
 const followerCountText = computed(function () {
     return followerCount.value === 1
@@ -179,7 +167,6 @@ async function logout() {
         // Cerramos cualquier ventana antes de cambiar de pantalla.
         showProfileEditor.value = false;
         showProductEditor.value = false;
-        showProductPreview.value = false;
         showFollowersModal.value = false;
         document.body.style.overflow = "";
         router.replace("/auth");
@@ -227,9 +214,26 @@ async function loadDashboard() {
                 "No fue posible cargar la información del emprendimiento.";
             return;
         }
+        // El teléfono pertenece al perfil general de la cuenta.
+        const { data: accountData, error: accountError } =
+            await supabase
+                .from("profiles")
+                .select("phone")
+                .eq("id", user.id)
+                .single();
+
+        if (accountError) {
+            console.warn(
+                "No se pudo cargar el teléfono del perfil:",
+                accountError
+            );
+        }
+
         entrepreneur.value = {
             id: entrepreneurData.id,
             businessName: entrepreneurData.business_name,
+            phone: accountData?.phone || "",
+            email: user.email || "",
             description: entrepreneurData.description,
             department: entrepreneurData.department,
             district: entrepreneurData.district,
@@ -248,6 +252,31 @@ async function loadDashboard() {
         loading.value = false;
     }
 }
+// Obtiene el promedio de reseñas de los productos del emprendedor.
+async function loadReviewSummary(productIds) {
+    if (!productIds.length) return {};
+    const { data, error } = await supabase
+        .from("product_reviews")
+        .select("product_id, rating")
+        .in("product_id", productIds);
+    if (error) {
+        console.error("No se pudieron cargar las reseñas:", error);
+        return {};
+    }
+    const summary = {};
+    for (const review of data || []) {
+        if (!summary[review.product_id]) {
+            summary[review.product_id] = {
+                total: 0,
+                count: 0
+            };
+        }
+        summary[review.product_id].total += Number(review.rating) || 0;
+        summary[review.product_id].count += 1;
+    }
+    return summary;
+}
+
 // Carga todos los productos pertenecientes al emprendedor.
 async function loadProducts(userId) {
     const { data: productRows, error: productError } = await supabase
@@ -269,41 +298,46 @@ async function loadProducts(userId) {
         .order("created_at", {
             ascending: false
         });
+
     if (productError) {
-        console.error(
-            "Error al cargar los productos:",
-            productError
-        );
+        console.error("Error al cargar los productos:", productError);
         throw productError;
     }
+
     if (!productRows?.length) {
         products.value = [];
         return;
     }
+
     const productIds = productRows.map(function (product) {
         return product.id;
     });
-    // Buscamos todas las fotografías pertenecientes a esos productos.
-    const { data: imageRows, error: imageError } = await supabase
-        .from("product_images")
-        .select(`
-            id,
-            product_id,
-            image_url,
-            storage_path,
-            sort_order
-        `)
-        .in("product_id", productIds)
-        .order("sort_order", {
-            ascending: true
-        });
+
+    const [
+        { data: imageRows, error: imageError },
+        reviewSummary
+    ] = await Promise.all([
+        supabase
+            .from("product_images")
+            .select(`
+                id,
+                product_id,
+                image_url,
+                storage_path,
+                sort_order
+            `)
+            .in("product_id", productIds)
+            .order("sort_order", {
+                ascending: true
+            }),
+        loadReviewSummary(productIds)
+    ]);
+
     if (imageError) {
-        console.error(
-            "Error al cargar imágenes:",
-            imageError
-        );
+        console.error("Error al cargar imágenes:", imageError);
         throw imageError;
     }
+
     products.value = productRows.map(function (product) {
         const productImages = (imageRows || [])
             .filter(function (image) {
@@ -320,6 +354,9 @@ async function loadProducts(userId) {
                     sortOrder: image.sort_order
                 };
             });
+
+        const reviews = reviewSummary[product.id];
+
         return {
             id: product.id,
             entrepreneurId: product.entrepreneur_id,
@@ -335,6 +372,12 @@ async function loadProducts(userId) {
                 return image.imageUrl;
             }),
             image: productImages[0]?.imageUrl || null,
+            averageRating:
+                reviews?.count
+                    ? reviews.total / reviews.count
+                    : 0,
+            reviewCount:
+                reviews?.count || 0,
             createdAt: product.created_at
         };
     });
@@ -410,6 +453,7 @@ function openProfileEditor() {
     if (!entrepreneur.value) return;
     profileForm.value = {
         businessName: entrepreneur.value.businessName || "",
+        phone: entrepreneur.value.phone || "",
         description: entrepreneur.value.description || "",
         department: entrepreneur.value.department || "",
         district: entrepreneur.value.district || ""
@@ -552,9 +596,33 @@ async function saveProfile() {
             );
             return;
         }
+
+        // El teléfono se guarda en profiles, igual que en la cuenta del cliente.
+        const { error: accountUpdateError } =
+            await supabase
+                .from("profiles")
+                .update({
+                    phone:
+                        profileForm.value.phone.trim()
+                })
+                .eq(
+                    "id",
+                    entrepreneur.value.id
+                );
+
+        if (accountUpdateError) {
+            alert(
+                "El emprendimiento se actualizó, pero no fue posible guardar el teléfono: " +
+                accountUpdateError.message
+            );
+            return;
+        }
+
         entrepreneur.value = {
             id: data.id,
             businessName: data.business_name,
+            phone: profileForm.value.phone.trim(),
+            email: entrepreneur.value.email || "",
             description: data.description,
             department: data.department,
             district: data.district,
@@ -1045,56 +1113,21 @@ async function updateProduct(user) {
         throw error;
     }
 }
-// Permite previsualizar el perfil desde la perspectiva del cliente.
-function openProductPreview(product) {
-    previewProduct.value = product;
-    previewImageIndex.value = 0;
-    showProductPreview.value = true;
-    document.body.style.overflow = "hidden";
-}
-// Cierra la vista previa del producto.
-function closeProductPreview() {
-    showProductPreview.value = false;
-    previewProduct.value = null;
-    previewImageIndex.value = 0;
-    document.body.style.overflow = "";
-}
-// Avanza a la siguiente imagen dentro de la vista previa.
-function nextPreviewImage() {
-    if (previewImages.value.length <= 1) return;
-    previewImageIndex.value =
-        (
-            previewImageIndex.value + 1
-        ) % previewImages.value.length;
-}
-// Regresa a la imagen anterior dentro de la vista previa.
-function previousPreviewImage() {
-    if (previewImages.value.length <= 1) return;
-    previewImageIndex.value =
-        (
-            previewImageIndex.value -
-            1 +
-            previewImages.value.length
-        ) % previewImages.value.length;
-}
-// Cierra la vista previa y abre directamente el editor del producto.
-function editFromPreview() {
-    const product =
-        previewProduct.value;
-    closeProductPreview();
-    if (product) {
-        openProductEditor(product);
-    }
+// Abre el producto en la pantalla independiente de detalle.
+function openProductDetail(product) {
+    if (!product?.id) return;
+    router.push({
+        name: "DetalleProducto",
+        params: {
+            id: product.id
+        }
+    });
 }
 // Maneja accesos rápidos del teclado para cerrar ventanas.
 function handleEscape(event) {
     if (event.key !== "Escape") return;
     if (showFollowersModal.value) {
         closeFollowersModal();
-        return;
-    }
-    if (showProductPreview.value) {
-        closeProductPreview();
         return;
     }
     if (showProductEditor.value) {
@@ -1332,7 +1365,7 @@ onBeforeUnmount(function () {
                         <button
                             type="button"
                             class="block w-full overflow-hidden rounded-xl bg-gray-100 sm:rounded-2xl"
-                            @click="openProductPreview(product)"
+                            @click="openProductDetail(product)"
                         >
                             <img
                                 v-if="product.image"
@@ -1366,6 +1399,15 @@ onBeforeUnmount(function () {
                             <h3 class="line-clamp-2 min-h-[34px] text-xs font-bold leading-tight text-gray-600 sm:min-h-[40px] sm:text-sm">
                                 {{ product.name }}
                             </h3>
+                            <div class="mt-1 flex items-center gap-1 text-[10px] sm:text-xs">
+                                <span class="text-amber-500">★</span>
+                                <span class="font-bold text-gray-600">
+                                    {{ Number(product.averageRating).toFixed(1) }}
+                                </span>
+                                <span class="text-gray-400">
+                                    {{ product.reviewCount }} reseñas
+                                </span>
+                            </div>
                             <div class="mt-2 flex items-center justify-between gap-2">
                                 <p class="text-base font-black text-[#4F7180] sm:text-xl">
                                     {{ formatPrice(product.price) }}
@@ -1381,9 +1423,9 @@ onBeforeUnmount(function () {
                                 <button
                                     type="button"
                                     class="rounded-xl border border-gray-200 px-2 py-2 text-[10px] font-bold text-gray-500 sm:text-xs"
-                                    @click="openProductPreview(product)"
+                                    @click="openProductDetail(product)"
                                 >
-                                    Ver como cliente
+                                    Ver detalle
                                 </button>
                                 <button
                                     type="button"
@@ -1714,6 +1756,34 @@ onBeforeUnmount(function () {
                             class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         >
                     </div>
+                    <!-- Datos generales de la cuenta, iguales al perfil del cliente. -->
+                    <div>
+                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                            Correo electrónico
+                        </label>
+                        <input
+                            :value="entrepreneur?.email"
+                            disabled
+                            type="email"
+                            class="w-full cursor-not-allowed rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-gray-400 outline-none"
+                        >
+                        <p class="mt-1 text-xs text-gray-400">
+                            El correo pertenece a tu cuenta de acceso.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                            Teléfono
+                        </label>
+                        <input
+                            v-model="profileForm.phone"
+                            type="tel"
+                            autocomplete="tel"
+                            placeholder="0000 0000"
+                            class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                        >
+                    </div>
                     <!-- Descripción -->
                     <div>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
@@ -2026,160 +2096,6 @@ onBeforeUnmount(function () {
                         }}
                     </button>
                 </form>
-            </section>
-        </div>
-    </Teleport>
-    <!-- Vista como cliente. -->
-    <Teleport to="body">
-        <div
-            v-if="showProductPreview && previewProduct"
-            class="fixed inset-0 z-[120] flex items-end justify-center bg-black/55 sm:items-center sm:p-5"
-            @click.self="closeProductPreview"
-        >
-            <section class="max-h-[95vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[850px] sm:rounded-[28px]">
-                <!-- Cabecera -->
-                <div class="sticky top-0 z-20 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
-                    <div class="flex min-w-0 items-center gap-3">
-                        <img
-                            v-if="entrepreneur.avatar"
-                            :src="entrepreneur.avatar"
-                            :alt="entrepreneur.businessName"
-                            class="h-10 w-10 rounded-full object-cover"
-                        >
-                        <div
-                            v-else
-                            class="flex h-10 w-10 items-center justify-center rounded-full bg-[#CAF0F8] text-xs font-black text-[#0077B6]"
-                        >
-                            {{ entrepreneurInitials }}
-                        </div>
-                        <div class="min-w-0">
-                            <p class="truncate text-sm font-black text-gray-700">
-                                {{ entrepreneur.businessName }}
-                            </p>
-                            <p class="text-xs text-gray-400">
-                                Vista del cliente
-                            </p>
-                        </div>
-                    </div>
-                    <button
-                        type="button"
-                        class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
-                        @click="closeProductPreview"
-                    >
-                        ×
-                    </button>
-                </div>
-                <div class="grid lg:grid-cols-2">
-                    <!-- Imágenes -->
-                    <div class="p-4 sm:p-6">
-                        <div class="relative overflow-hidden rounded-[22px] bg-gray-100">
-                            <img
-                                v-if="previewImage"
-                                :src="previewImage"
-                                :alt="previewProduct.name"
-                                class="aspect-square w-full object-cover"
-                            >
-                            <div
-                                v-else
-                                class="flex aspect-square items-center justify-center text-sm font-bold text-gray-400"
-                            >
-                                Sin fotografía
-                            </div>
-                            <span
-                                v-if="previewImages.length"
-                                class="absolute right-3 top-3 rounded-full bg-black/55 px-3 py-1 text-xs font-bold text-white"
-                            >
-                                {{ previewImageIndex + 1 }} / {{ previewImages.length }}
-                            </span>
-                            <template v-if="previewImages.length > 1">
-                                <button
-                                    type="button"
-                                    class="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl text-gray-600 shadow"
-                                    @click="previousPreviewImage"
-                                >
-                                    ‹
-                                </button>
-                                <button
-                                    type="button"
-                                    class="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl text-gray-600 shadow"
-                                    @click="nextPreviewImage"
-                                >
-                                    ›
-                                </button>
-                            </template>
-                        </div>
-                        <!-- Miniaturas -->
-                        <div
-                            v-if="previewImages.length > 1"
-                            class="mt-3 flex gap-2 overflow-x-auto pb-1"
-                        >
-                            <button
-                                v-for="(image, index) in previewImages"
-                                :key="image"
-                                type="button"
-                                class="h-16 w-16 shrink-0 overflow-hidden rounded-xl border-2"
-                                :class="
-                                    previewImageIndex === index
-                                        ? 'border-[#00B4D8]'
-                                        : 'border-transparent'
-                                "
-                                @click="previewImageIndex = index"
-                            >
-                                <img
-                                    :src="image"
-                                    alt="Miniatura"
-                                    class="h-full w-full object-cover"
-                                >
-                            </button>
-                        </div>
-                    </div>
-                    <!-- Información como la vería el cliente -->
-                    <div class="flex flex-col p-5 sm:p-7 lg:justify-center">
-                        <div class="flex flex-wrap gap-2">
-                            <span
-                                v-for="category in previewProduct.categories"
-                                :key="category"
-                                class="rounded-full bg-[#EAF9FC] px-3 py-1.5 text-xs font-bold text-[#0077B6]"
-                            >
-                                {{ category }}
-                            </span>
-                        </div>
-                        <h2 class="mt-4 text-2xl font-black leading-tight text-gray-700 sm:text-3xl">
-                            {{ previewProduct.name }}
-                        </h2>
-                        <p class="mt-3 text-3xl font-black text-[#4F7180]">
-                            {{ formatPrice(previewProduct.price) }}
-                        </p>
-                        <span
-                            class="mt-3 w-fit rounded-full px-3 py-1.5 text-xs font-bold"
-                            :class="stockClasses(previewProduct.stock)"
-                        >
-                            {{ stockText(previewProduct.stock) }}
-                        </span>
-                        <div class="my-5 h-px bg-gray-100"></div>
-                        <h3 class="text-sm font-black text-gray-700">
-                            Descripción
-                        </h3>
-                        <p class="mt-2 whitespace-pre-line text-sm leading-6 text-gray-500">
-                            {{ previewProduct.description || "Este producto no tiene una descripción." }}
-                        </p>
-                        <!-- Botón ilustrativo para mostrar cómo lo verá el cliente -->
-                        <button
-                            type="button"
-                            class="mt-6 w-full rounded-xl bg-[#25D366] px-5 py-3.5 font-bold text-white"
-                        >
-                            Contactar al emprendimiento
-                        </button>
-                        <!-- Acción administrativa -->
-                        <button
-                            type="button"
-                            class="mt-3 w-full rounded-xl border border-[#00B4D8] px-5 py-3 font-bold text-[#0077B6]"
-                            @click="editFromPreview"
-                        >
-                            Editar este producto
-                        </button>
-                    </div>
-                </div>
             </section>
         </div>
     </Teleport>

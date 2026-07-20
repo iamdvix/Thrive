@@ -25,6 +25,11 @@ const profileForm = ref({
 const profilePhotoFile = ref(null);
 // Imagen que mostramos como vista previa.
 const profilePhotoPreview = ref("");
+
+// Campos opcionales para cambiar la contraseña desde el perfil.
+const currentPassword = ref("");
+const newPassword = ref("");
+const confirmNewPassword = ref("");
 // Datos y controles utilizados para mostrar los productos.
 // Productos reales provenientes de Supabase.
 const products = ref([]);
@@ -39,9 +44,6 @@ const selectedDepartment = ref("Todos");
 const followedEntrepreneurs = ref([]);
 // Evita múltiples clics mientras se guarda o elimina un follow.
 const followLoading = ref([]);
-// Controla la información y navegación del detalle de producto.
-const selectedProduct = ref(null);
-const selectedProductImageIndex = ref(0);
 // Carga la información del perfil del cliente conectado.
 async function loadClientProfile() {
     profileLoading.value = true;
@@ -97,6 +99,13 @@ async function loadClientProfile() {
         profileLoading.value = false;
     }
 }
+// Limpia los campos sensibles cada vez que abrimos o cerramos el perfil.
+function clearPasswordFields() {
+    currentPassword.value = "";
+    newPassword.value = "";
+    confirmNewPassword.value = "";
+}
+
 // Abre y prepara la ventana del perfil del cliente.
 function openClientProfile() {
     if (!clientProfile.value) return;
@@ -112,6 +121,7 @@ function openClientProfile() {
         clientProfile.value.avatarUrl || "";
     // No existe una nueva fotografía hasta que se seleccione.
     profilePhotoFile.value = null;
+    clearPasswordFields();
     showClientProfile.value = true;
     document.body.style.overflow = "hidden";
 }
@@ -120,6 +130,7 @@ function closeClientProfile() {
     showClientProfile.value = false;
     profilePhotoFile.value = null;
     profilePhotoPreview.value = "";
+    clearPasswordFields();
     document.body.style.overflow = "";
 }
 // Maneja la selección y vista previa de la foto del cliente.
@@ -161,58 +172,84 @@ async function saveClientProfile() {
     ) {
         return;
     }
+
     if (!profileForm.value.fullName.trim()) {
-        alert(
-            "Escribe tu nombre antes de guardar."
-        );
+        alert("Escribe tu nombre antes de guardar.");
         return;
     }
+
     profileSaving.value = true;
+
     try {
         const {
             data: { user },
             error: userError
         } = await supabase.auth.getUser();
-        if (userError || !user) {
-            alert(
-                "No fue posible verificar tu sesión."
-            );
+
+        if (userError || !user?.email) {
+            alert("No fue posible verificar tu sesión.");
             return;
         }
-        /*
-            Guardamos la URL anterior antes de realizar cambios.
-            De esta manera, después podremos eliminar
-            el archivo antiguo de Storage.
-        */
+
+        const wantsPasswordChange =
+            currentPassword.value.length > 0 ||
+            newPassword.value.length > 0 ||
+            confirmNewPassword.value.length > 0;
+
+        if (wantsPasswordChange) {
+            if (
+                !currentPassword.value ||
+                !newPassword.value ||
+                !confirmNewPassword.value
+            ) {
+                alert("Para cambiar la contraseña debes completar los tres campos.");
+                return;
+            }
+
+            if (newPassword.value.length < 8) {
+                alert("La nueva contraseña debe tener al menos 8 caracteres.");
+                return;
+            }
+
+            if (newPassword.value !== confirmNewPassword.value) {
+                alert("Las nuevas contraseñas no coinciden.");
+                return;
+            }
+
+            // Comprobamos la contraseña actual antes de cambiar información sensible.
+            const { error: passwordCheckError } =
+                await supabase.auth.signInWithPassword({
+                    email: user.email,
+                    password: currentPassword.value
+                });
+
+            if (passwordCheckError) {
+                alert("La contraseña actual es incorrecta.");
+                return;
+            }
+        }
+
         const oldAvatarUrl =
             clientProfile.value.avatarUrl || null;
+
         const oldAvatarPath =
-            getStoragePathFromPublicUrl(
-                oldAvatarUrl
-            );
-        // Por defecto conservamos la foto actual.
-        let avatarUrl =
-            oldAvatarUrl;
-        let newPhotoUploaded = false;
-        /*
-            Si seleccionó una foto nueva,
-            primero la subimos a Storage.
-        */
+            getStoragePathFromPublicUrl(oldAvatarUrl);
+
+        let avatarUrl = oldAvatarUrl;
+        let uploadedPhoto = null;
+
+        // Subimos una nueva foto únicamente cuando el cliente la seleccionó.
         if (profilePhotoFile.value) {
-            const uploadedPhoto =
+            uploadedPhoto =
                 await uploadProfileImage(
                     user.id,
                     profilePhotoFile.value
                 );
+
             avatarUrl =
                 uploadedPhoto.publicUrl;
-            newPhotoUploaded = true;
         }
-        /*
-            Actualizamos profiles.
-            En este momento avatar_url comienza
-            a apuntar a la fotografía nueva.
-        */
+
         const { data, error } =
             await supabase
                 .from("profiles")
@@ -224,10 +261,7 @@ async function saveClientProfile() {
                     avatar_url:
                         avatarUrl
                 })
-                .eq(
-                    "id",
-                    user.id
-                )
+                .eq("id", user.id)
                 .select(`
                     id,
                     full_name,
@@ -235,47 +269,39 @@ async function saveClientProfile() {
                     avatar_url
                 `)
                 .single();
+
         if (error) {
-            console.error(
-                "Error al actualizar el perfil:",
-                error
-            );
-            alert(
-                "No se pudo actualizar el perfil: " +
-                error.message
-            );
-            return;
+            // Si la foto nueva se subió pero el perfil falló, limpiamos ese archivo.
+            if (uploadedPhoto?.path) {
+                try {
+                    await deleteImage(uploadedPhoto.path);
+                } catch (cleanupError) {
+                    console.warn(
+                        "No se pudo limpiar la foto nueva:",
+                        cleanupError
+                    );
+                }
+            }
+
+            throw error;
         }
-        /*
-            Solamente después de que la base de datos
-            haya guardado correctamente la nueva URL,
-            eliminamos la fotografía anterior.
-            Este orden es importante.
-            Nunca eliminamos primero la foto antigua,
-            porque si después falla el UPDATE,
-            el usuario podría quedarse sin fotografía.
-        */
+
+        // Eliminamos la foto anterior solo cuando la nueva URL ya quedó guardada.
         if (
-            newPhotoUploaded &&
-            oldAvatarPath
+            uploadedPhoto?.path &&
+            oldAvatarPath &&
+            oldAvatarPath !== uploadedPhoto.path
         ) {
             try {
-                await deleteImage(
-                    oldAvatarPath
-                );
+                await deleteImage(oldAvatarPath);
             } catch (deleteError) {
-                /*
-                    El perfil ya se actualizó correctamente.
-                    Si falla la limpieza del archivo antiguo,
-                    no impedimos que el usuario continúe.
-                */
                 console.warn(
                     "La foto nueva se guardó, pero no se pudo eliminar la anterior:",
                     deleteError
                 );
             }
         }
-        // Actualizamos inmediatamente la interfaz.
+
         clientProfile.value = {
             ...clientProfile.value,
             fullName:
@@ -285,22 +311,36 @@ async function saveClientProfile() {
             avatarUrl:
                 data.avatar_url || ""
         };
-        alert(
-            "Tu perfil fue actualizado correctamente."
-        );
+
+        // La contraseña se cambia al final, cuando el resto del perfil ya se guardó.
+        if (wantsPasswordChange) {
+            const { error: passwordError } =
+                await supabase.auth.updateUser({
+                    password: newPassword.value
+                });
+
+            if (passwordError) {
+                alert(
+                    "El perfil se actualizó, pero no fue posible cambiar la contraseña: " +
+                    passwordError.message
+                );
+                return;
+            }
+        }
+
+        alert("Tu perfil fue actualizado correctamente.");
         closeClientProfile();
     } catch (error) {
-        console.error(
-            "Error al guardar el perfil:",
-            error
-        );
+        console.error("Error al guardar el perfil:", error);
         alert(
-            "Ocurrió un problema al guardar los cambios."
+            "No fue posible guardar los cambios: " +
+            (error.message || "Error inesperado")
         );
     } finally {
         profileSaving.value = false;
     }
 }
+
 // Cierra la sesión actual y redirige al usuario.
 async function logout() {
     try {
@@ -335,17 +375,62 @@ async function logout() {
         );
     }
 }
+// Obtiene el promedio y cantidad de reseñas de todos los productos cargados.
+async function loadReviewSummary(productIds) {
+    if (!productIds.length) return {};
+    const { data, error } = await supabase
+        .from("product_reviews")
+        .select("product_id, rating")
+        .in("product_id", productIds);
+    if (error) {
+        console.error("No se pudieron cargar los promedios:", error);
+        return {};
+    }
+    const summary = {};
+    for (const review of data || []) {
+        if (!summary[review.product_id]) {
+            summary[review.product_id] = {
+                total: 0,
+                count: 0
+            };
+        }
+        summary[review.product_id].total += Number(review.rating) || 0;
+        summary[review.product_id].count += 1;
+    }
+    return summary;
+}
+
+// Obtiene el número público de WhatsApp de cada emprendimiento.
+async function loadWhatsappNumbers(entrepreneurIds) {
+    const uniqueIds = [...new Set(entrepreneurIds.filter(Boolean))];
+    const entries = await Promise.all(
+        uniqueIds.map(async function (id) {
+            try {
+                const { data, error } = await supabase.rpc(
+                    "get_entrepreneur_public_contact",
+                    {
+                        target_entrepreneur_id: id
+                    }
+                );
+                if (error) throw error;
+                return [
+                    id,
+                    data?.[0]?.phone || ""
+                ];
+            } catch (error) {
+                console.warn("No se pudo cargar el WhatsApp del emprendimiento:", error);
+                return [id, ""];
+            }
+        })
+    );
+    return Object.fromEntries(entries);
+}
+
 // Carga los productos guardados en la base de datos.
 async function loadProducts() {
     loadingProducts.value = true;
     productsError.value = "";
     try {
-        /*
-            Obtenemos los productos reales.
-            También pedimos:
-            - Información del emprendimiento.
-            - Todas las fotografías del producto.
-        */
         const { data, error } = await supabase
             .from("products")
             .select(`
@@ -374,84 +459,71 @@ async function loadProducts() {
                 )
             `)
             .eq("active", true)
-            .order(
-                "created_at",
-                {
-                    ascending: false
-                }
-            );
-        if (error) {
-            throw error;
-        }
-        products.value = (data || []).map(
-            function (product) {
-                /*
-                    Ordenamos las fotografías para que
-                    sort_order = 0 sea siempre la portada.
-                */
-                const imageRecords = (
-                    product.product_images || []
-                )
-                    .slice()
-                    .sort(function (a, b) {
-                        return (
-                            a.sort_order -
-                            b.sort_order
-                        );
-                    });
-                const images =
-                    imageRecords.map(
-                        function (image) {
-                            return image.image_url;
-                        }
-                    );
-                const store =
-                    product.entrepreneurs;
-                return {
-                    id:
-                        product.id,
-                    entrepreneurId:
-                        product.entrepreneur_id,
-                    name:
-                        product.name,
-                    description:
-                        product.description || "",
-                    categories:
-                        product.categories || [],
-                    price:
-                        Number(product.price) || 0,
-                    stock:
-                        Number(product.stock) || 0,
-                    featured:
-                        product.featured,
-                    image:
-                        images[0] || null,
-                    images,
-                    store:
-                        store?.business_name ||
-                        "Emprendimiento",
-                    storeAvatar:
-                        store?.logo_url || "",
-                    department:
-                        store?.department || "",
-                    district:
-                        store?.district || "",
-                    // Las reseñas se conectarán después.
-                    rating:
-                        0,
-                    // El número de WhatsApp lo conectaremos después.
-                    whatsapp:
-                        ""
-                };
-            }
-        );
+            .order("created_at", {
+                ascending: false
+            });
+        if (error) throw error;
+
+        const mappedProducts = (data || []).map(function (product) {
+            const images = (product.product_images || [])
+                .slice()
+                .sort(function (a, b) {
+                    return a.sort_order - b.sort_order;
+                })
+                .map(function (image) {
+                    return image.image_url;
+                });
+            const store = product.entrepreneurs;
+            return {
+                id: product.id,
+                entrepreneurId: product.entrepreneur_id,
+                name: product.name,
+                description: product.description || "",
+                categories: product.categories || [],
+                price: Number(product.price) || 0,
+                stock: Number(product.stock) || 0,
+                featured: product.featured,
+                image: images[0] || null,
+                images,
+                store: store?.business_name || "Emprendimiento",
+                storeAvatar: store?.logo_url || "",
+                department: store?.department || "",
+                district: store?.district || "",
+                averageRating: 0,
+                reviewCount: 0,
+                whatsapp: ""
+            };
+        });
+
+        const productIds = mappedProducts.map(function (product) {
+            return product.id;
+        });
+        const entrepreneurIds = mappedProducts.map(function (product) {
+            return product.entrepreneurId;
+        });
+
+        const [reviewSummary, whatsappNumbers] = await Promise.all([
+            loadReviewSummary(productIds),
+            loadWhatsappNumbers(entrepreneurIds)
+        ]);
+
+        products.value = mappedProducts.map(function (product) {
+            const reviews = reviewSummary[product.id];
+            return {
+                ...product,
+                averageRating:
+                    reviews?.count
+                        ? reviews.total / reviews.count
+                        : 0,
+                reviewCount:
+                    reviews?.count || 0,
+                whatsapp:
+                    whatsappNumbers[product.entrepreneurId] || ""
+            };
+        });
     } catch (error) {
-        console.error(
-            "No se pudieron cargar los productos:",
-            error
-        );
-        productsError.value =
-            "No fue posible cargar los productos.";
+        console.error("No se pudieron cargar los productos:", error);
+        productsError.value = "No fue posible cargar los productos.";
     } finally {
         loadingProducts.value = false;
     }
@@ -533,30 +605,6 @@ const clientInitials = computed(function () {
         })
         .join("");
 });
-// Guarda el producto que el cliente está viendo actualmente.
-const selectedProductImages = computed(
-    function () {
-        return (
-            selectedProduct.value?.images ||
-            []
-        );
-    }
-);
-const selectedProductImage = computed(
-    function () {
-        if (
-            !selectedProductImages.value.length
-        ) {
-            return null;
-        }
-        return (
-            selectedProductImages.value[
-                selectedProductImageIndex.value
-            ] ||
-            selectedProductImages.value[0]
-        );
-    }
-);
 // Funciones pequeñas reutilizadas en distintas partes de la vista.
 function getInitials(store) {
     if (!store) return "TH";
@@ -696,47 +744,15 @@ function openEntrepreneurProfile(
         }
     });
 }
-// Controla la información y navegación del detalle de producto.
+// Abre el detalle del producto en su propia pantalla.
 function openProductDetail(product) {
-    selectedProduct.value = product;
-    selectedProductImageIndex.value = 0;
-    document.body.style.overflow =
-        "hidden";
-}
-// Cierra el detalle del producto y restablece su estado.
-function closeProductDetail() {
-    selectedProduct.value = null;
-    selectedProductImageIndex.value = 0;
-    document.body.style.overflow = "";
-}
-// Muestra la siguiente imagen disponible del producto.
-function nextProductImage() {
-    if (
-        selectedProductImages.value.length <= 1
-    ) {
-        return;
-    }
-    selectedProductImageIndex.value =
-        (
-            selectedProductImageIndex.value +
-            1
-        ) %
-        selectedProductImages.value.length;
-}
-// Muestra la imagen anterior del producto.
-function previousProductImage() {
-    if (
-        selectedProductImages.value.length <= 1
-    ) {
-        return;
-    }
-    selectedProductImageIndex.value =
-        (
-            selectedProductImageIndex.value -
-            1 +
-            selectedProductImages.value.length
-        ) %
-        selectedProductImages.value.length;
+    if (!product?.id) return;
+    router.push({
+        name: "DetalleProducto",
+        params: {
+            id: product.id
+        }
+    });
 }
 // Prepara el contacto del producto por WhatsApp.
 function contactWhatsApp(product) {
@@ -744,10 +760,14 @@ function contactWhatsApp(product) {
         encodeURIComponent(
             `Hola, estoy interesado/a en "${product.name}" de ${product.store}. Quisiera obtener más información sobre el producto.`
         );
-    const whatsapp =
+    const rawWhatsapp =
         String(
             product.whatsapp || ""
         ).replace(/\D/g, "");
+    const whatsapp =
+        rawWhatsapp.length === 8
+            ? `503${rawWhatsapp}`
+            : rawWhatsapp;
     const url =
         whatsapp
             ? `https://wa.me/${whatsapp}?text=${message}`
@@ -761,10 +781,6 @@ function contactWhatsApp(product) {
 // Maneja accesos rápidos del teclado para cerrar ventanas.
 function handleEscape(event) {
     if (event.key !== "Escape") return;
-    if (selectedProduct.value) {
-        closeProductDetail();
-        return;
-    }
     if (showClientProfile.value) {
         closeClientProfile();
     }
@@ -1033,6 +1049,15 @@ onBeforeUnmount(function () {
                             <h3 class="truncate text-[11px] font-medium text-gray-500 sm:text-sm">
                                 {{ product.name }}
                             </h3>
+                            <div class="mt-1 flex items-center gap-1 text-[10px] sm:text-xs">
+                                <span class="text-amber-500">★</span>
+                                <span class="font-bold text-gray-600">
+                                    {{ Number(product.averageRating).toFixed(1) }}
+                                </span>
+                                <span class="text-gray-400">
+                                    ({{ product.reviewCount }})
+                                </span>
+                            </div>
                             <div class="mt-1 flex items-center justify-between gap-2">
                                 <span class="font-extrabold text-[#4F7180]">
                                     {{ formatPrice(product.price) }}
@@ -1200,6 +1225,15 @@ onBeforeUnmount(function () {
                     <h2 class="min-h-[30px] text-[11px] font-medium leading-tight text-gray-500 sm:min-h-[40px] sm:text-sm">
                         {{ product.name }}
                     </h2>
+                    <div class="mt-1 flex items-center gap-1 text-[10px] sm:text-xs">
+                        <span class="text-amber-500">★</span>
+                        <span class="font-bold text-gray-600">
+                            {{ Number(product.averageRating).toFixed(1) }}
+                        </span>
+                        <span class="text-gray-400">
+                            {{ product.reviewCount }} reseñas
+                        </span>
+                    </div>
                     <div class="mt-1 flex items-end justify-between gap-2">
                         <span class="text-base font-extrabold text-[#4F7180] sm:text-xl">
                             {{ formatPrice(product.price) }}
@@ -1212,10 +1246,11 @@ onBeforeUnmount(function () {
                         >
                             <svg
                                 class="h-5 w-5 sm:h-6 sm:w-6"
-                                viewBox="0 0 32 32"
+                                viewBox="0 0 24 24"
                                 fill="currentColor"
+                                aria-hidden="true"
                             >
-                                <path d="M16.04 3C8.86 3 3.02 8.78 3.02 15.9c0 2.27.6 4.49 1.74 6.43L3 28.8l6.66-1.74a13.1 13.1 0 006.37 1.62h.01c7.17 0 13.01-5.78 13.01-12.89C29.05 8.78 23.21 3 16.04 3zm0 23.5a10.9 10.9 0 01-5.56-1.52l-.4-.24-3.95 1.03 1.06-3.82-.26-.4a10.6 10.6 0 01-1.68-5.66c0-5.9 4.84-10.7 10.79-10.7s10.78 4.8 10.78 10.7c0 5.9-4.83 10.7-10.78 10.7z"></path>
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.009-.371-.011-.57-.011-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479s1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.262.489 1.693.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347M12.05 21.785h-.003a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.885 9.887-9.885 2.64 0 5.122 1.03 6.988 2.897a9.825 9.825 0 012.895 6.993c-.003 5.45-4.437 9.887-9.887 9.887"></path>
                             </svg>
                         </button>
                     </div>
@@ -1423,6 +1458,39 @@ onBeforeUnmount(function () {
                             class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-[#00B4D8]"
                         >
                     </div>
+                    <!-- La contraseña es opcional; si no se llena, no se modifica. -->
+                    <div class="border-t border-gray-100 pt-5">
+                        <h3 class="font-black text-gray-700">
+                            Cambiar contraseña
+                        </h3>
+                        <p class="mt-1 text-xs text-gray-400">
+                            Deja estos campos vacíos si no deseas cambiarla.
+                        </p>
+
+                        <div class="mt-4 space-y-3">
+                            <input
+                                v-model="currentPassword"
+                                type="password"
+                                autocomplete="current-password"
+                                placeholder="Contraseña actual"
+                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                            >
+                            <input
+                                v-model="newPassword"
+                                type="password"
+                                autocomplete="new-password"
+                                placeholder="Nueva contraseña"
+                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                            >
+                            <input
+                                v-model="confirmNewPassword"
+                                type="password"
+                                autocomplete="new-password"
+                                placeholder="Confirmar nueva contraseña"
+                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                            >
+                        </div>
+                    </div>
                     <!-- Guardar -->
                     <button
                         type="submit"
@@ -1459,160 +1527,6 @@ onBeforeUnmount(function () {
                         </button>
                     </div>
                 </form>
-            </section>
-        </div>
-    </Teleport>
-    <!-- Detalle del producto. -->
-    <Teleport to="body">
-        <div
-            v-if="selectedProduct"
-            class="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 sm:items-center sm:p-5"
-            @click.self="closeProductDetail"
-        >
-            <section class="max-h-[94vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[950px] sm:rounded-[28px]">
-                <!-- Cabecera -->
-                <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
-                    <div>
-                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                            Detalle del producto
-                        </p>
-                        <h2 class="font-bold text-gray-700">
-                            Información completa
-                        </h2>
-                    </div>
-                    <button
-                        type="button"
-                        class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
-                        @click="closeProductDetail"
-                    >
-                        ×
-                    </button>
-                </div>
-                <div class="grid md:grid-cols-2">
-                    <!-- Galería. -->
-                    <div class="bg-gray-50 p-4 sm:p-6">
-                        <div class="relative overflow-hidden rounded-2xl bg-gray-100">
-                            <img
-                                v-if="selectedProductImage"
-                                :src="selectedProductImage"
-                                :alt="selectedProduct.name"
-                                class="aspect-square w-full object-cover"
-                            >
-                            <div
-                                v-else
-                                class="flex aspect-square items-center justify-center text-sm font-bold text-gray-400"
-                            >
-                                Sin fotografía
-                            </div>
-                            <!-- Flechas -->
-                            <template
-                                v-if="selectedProductImages.length > 1"
-                            >
-                                <button
-                                    type="button"
-                                    class="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl text-gray-600 shadow"
-                                    @click="previousProductImage"
-                                >
-                                    ‹
-                                </button>
-                                <button
-                                    type="button"
-                                    class="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl text-gray-600 shadow"
-                                    @click="nextProductImage"
-                                >
-                                    ›
-                                </button>
-                            </template>
-                        </div>
-                        <!-- Miniaturas -->
-                        <div
-                            v-if="selectedProductImages.length > 1"
-                            class="mt-3 flex gap-2 overflow-x-auto"
-                        >
-                            <button
-                                v-for="(image, index) in selectedProductImages"
-                                :key="image"
-                                type="button"
-                                class="h-16 w-16 shrink-0 overflow-hidden rounded-xl border-2"
-                                :class="
-                                    selectedProductImageIndex === index
-                                        ? 'border-[#00B4D8]'
-                                        : 'border-transparent'
-                                "
-                                @click="
-                                    selectedProductImageIndex = index
-                                "
-                            >
-                                <img
-                                    :src="image"
-                                    alt="Fotografía del producto"
-                                    class="h-full w-full object-cover"
-                                >
-                            </button>
-                        </div>
-                    </div>
-                    <!-- Información. -->
-                    <div class="p-5 sm:p-7">
-                        <!-- Emprendimiento -->
-                        <button
-                            type="button"
-                            class="flex items-center gap-2 text-left"
-                            @click="openEntrepreneurProfile(selectedProduct.entrepreneurId)"
-                        >
-                            <img
-                                v-if="selectedProduct.storeAvatar"
-                                :src="selectedProduct.storeAvatar"
-                                :alt="selectedProduct.store"
-                                class="h-10 w-10 rounded-full border border-gray-100 object-cover"
-                            >
-                            <div
-                                v-else
-                                class="flex h-10 w-10 items-center justify-center rounded-full bg-[#CAF0F8] text-xs font-bold text-[#0077B6]"
-                            >
-                                {{ getInitials(selectedProduct.store) }}
-                            </div>
-                            <div>
-                                <p class="text-sm font-bold text-[#0077B6]">
-                                    {{ selectedProduct.store }}
-                                </p>
-                                <p class="text-xs text-gray-400">
-                                    {{ selectedProduct.district }},
-                                    {{ selectedProduct.department }}
-                                </p>
-                            </div>
-                        </button>
-                        <!-- Categorías -->
-                        <div class="mt-4 flex flex-wrap gap-2">
-                            <span
-                                v-for="category in selectedProduct.categories"
-                                :key="category"
-                                class="rounded-full bg-[#CAF0F8] px-3 py-1.5 text-xs font-bold text-[#0077B6]"
-                            >
-                                {{ category }}
-                            </span>
-                        </div>
-                        <h2 class="mt-4 text-2xl font-black text-gray-700">
-                            {{ selectedProduct.name }}
-                        </h2>
-                        <p class="mt-4 text-3xl font-extrabold text-[#4F7180]">
-                            {{ formatPrice(selectedProduct.price) }}
-                        </p>
-                        <p class="mt-6 whitespace-pre-line text-sm leading-relaxed text-gray-500">
-                            {{
-                                selectedProduct.description ||
-                                "Este producto no tiene una descripción."
-                            }}
-                        </p>
-                        <!-- WhatsApp -->
-                        <button
-                            type="button"
-                            class="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-5 py-3 font-bold text-white transition hover:bg-[#20BD5A]"
-                            @click="contactWhatsApp(selectedProduct)"
-                        >
-                            Consultar por WhatsApp
-                        </button>
-                    </div>
-                </div>
             </section>
         </div>
     </Teleport>
