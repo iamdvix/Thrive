@@ -1,4 +1,5 @@
 <script setup>
+// Panel principal del emprendedor; centraliza perfil, productos, seguidores y vistas de administración.
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
@@ -7,13 +8,8 @@ import {
     uploadProductImages,
     deleteImage
 } from "../lib/storage";
-
 const router = useRouter();
-
-// ===============================
-// ESTADO GENERAL
-// ===============================
-
+// Estados principales utilizados por el dashboard.
 const entrepreneur = ref(null);
 const products = ref([]);
 const loading = ref(true);
@@ -21,58 +17,37 @@ const loadError = ref("");
 const profileSaving = ref(false);
 const productSaving = ref(false);
 const logoutLoading = ref(false);
-
 // Controla la sección visible del dashboard.
 const activeSection = ref("inicio");
-
 // Control de ventanas.
 const showProfileEditor = ref(false);
 const showProductEditor = ref(false);
 const showProductPreview = ref(false);
 const showFollowersModal = ref(false);
-
-// ===============================
-// SEGUIDORES
-// ===============================
-
+// Datos y controles relacionados con los seguidores.
 // Guarda la cantidad total y los datos públicos de quienes siguen al emprendimiento.
 const followerCount = ref(0);
 const followers = ref([]);
 const followersLoading = ref(false);
-
-// ===============================
-// PERFIL
-// ===============================
-
+// Datos y controles utilizados para editar el perfil del emprendimiento.
 const profileForm = ref({
     businessName: "",
     description: "",
     department: "",
     district: ""
 });
-
 const profileLogoFile = ref(null);
 const profileLogoPreview = ref("");
-
-// ===============================
-// CONTRASEÑA
-// ===============================
-
+// Campos utilizados cuando el emprendedor desea cambiar su contraseña.
 const currentPassword = ref("");
 const newPassword = ref("");
 const confirmNewPassword = ref("");
-
 const showCurrentPassword = ref(false);
 const showNewPassword = ref(false);
 const showConfirmPassword = ref(false);
-
-// ===============================
-// PRODUCTOS
-// ===============================
-
+// Datos y controles utilizados para mostrar los productos.
 const productEditorMode = ref("add");
 const selectedProduct = ref(null);
-
 const productForm = ref({
     name: "",
     description: "",
@@ -80,17 +55,13 @@ const productForm = ref({
     price: 0,
     stock: 0
 });
-
 // Aquí mantenemos juntas las imágenes actuales y las nuevas.
 // Esto permite cambiar el orden y elegir fácilmente la portada.
 const editorImages = ref([]);
-
 // Conserva las imágenes originales para saber cuáles
 // fueron eliminadas durante una edición.
 const originalProductImages = ref([]);
-
 const showCategoryDropdown = ref(false);
-
 // 12 categorías principales utilizadas dentro de Thrive.
 const productCategories = [
     "Alimentos y bebidas",
@@ -106,18 +77,10 @@ const productCategories = [
     "Plantas y jardinería",
     "Productos para mascotas"
 ];
-
-// ===============================
-// VISTA PREVIA DEL CLIENTE
-// ===============================
-
+// Controla la vista previa del perfil tal como lo verá un cliente.
 const previewProduct = ref(null);
 const previewImageIndex = ref(0);
-
-// ===============================
-// DATOS GENERALES
-// ===============================
-
+// Datos generales y listas utilizadas en esta pantalla.
 const departments = [
     "Ahuachapán",
     "Cabañas",
@@ -134,14 +97,9 @@ const departments = [
     "Sonsonate",
     "Usulután"
 ];
-
-// ===============================
-// COMPUTED
-// ===============================
-
+// Valores calculados automáticamente a partir del estado actual.
 const entrepreneurInitials = computed(function () {
     const name = entrepreneur.value?.businessName || "Thrive";
-
     return name
         .trim()
         .split(/\s+/)
@@ -151,101 +109,79 @@ const entrepreneurInitials = computed(function () {
         })
         .join("");
 });
-
 const productCountText = computed(function () {
     const total = products.value.length;
     return total === 1 ? "1 producto" : `${total} productos`;
 });
-
 const productEditorTitle = computed(function () {
     return productEditorMode.value === "add"
         ? "Añadir producto"
         : "Editar producto";
 });
-
 const previewImages = computed(function () {
     return previewProduct.value?.images || [];
 });
-
 const previewImage = computed(function () {
     if (!previewImages.value.length) {
         return null;
     }
-
     return previewImages.value[previewImageIndex.value] || previewImages.value[0];
 });
-
 const followerCountText = computed(function () {
     return followerCount.value === 1
         ? "1 seguidor"
         : `${followerCount.value} seguidores`;
 });
-
-// ===============================
-// FUNCIONES GENERALES
-// ===============================
-
+// Funciones pequeñas reutilizadas en distintas partes de la vista.
 function formatPrice(price) {
     return new Intl.NumberFormat("en-US", {
         style: "currency",
         currency: "USD"
     }).format(Number(price) || 0);
 }
-
+// Devuelve las clases visuales correspondientes al nivel de existencias.
 function stockClasses(stock) {
     const amount = Number(stock) || 0;
-
     if (amount > 10) {
         return "bg-green-100 text-green-700";
     }
-
     if (amount >= 5) {
         return "bg-yellow-100 text-yellow-700";
     }
-
     return "bg-red-100 text-red-700";
 }
-
+// Devuelve el texto que describe el estado actual del inventario.
 function stockText(stock) {
     const amount = Number(stock) || 0;
-
     if (amount === 0) return "Sin stock";
     if (amount === 1) return "1 unidad";
-
     return `${amount} unidades`;
 }
-
+// Cambia la sección visible del dashboard.
 function changeSection(section) {
     activeSection.value = section;
-
     window.scrollTo({
         top: 0,
         behavior: "smooth"
     });
 }
-
 // Cierra la sesión actual y vuelve a la pantalla de autenticación.
 async function logout() {
     if (logoutLoading.value) return;
-
     logoutLoading.value = true;
-
     try {
         const { error } = await supabase.auth.signOut({
             scope: "local"
         });
-
         if (error) {
             throw error;
         }
-
         // Cerramos cualquier ventana antes de cambiar de pantalla.
         showProfileEditor.value = false;
         showProductEditor.value = false;
         showProductPreview.value = false;
         showFollowersModal.value = false;
         document.body.style.overflow = "";
-
         router.replace("/auth");
     } catch (error) {
         console.error("Error al cerrar sesión:", error);
@@ -254,27 +190,20 @@ async function logout() {
         logoutLoading.value = false;
     }
 }
-
-// ===============================
-// CARGAR DASHBOARD
-// ===============================
-
+// Carga la información necesaria para mostrar el dashboard.
 async function loadDashboard() {
     loading.value = true;
     loadError.value = "";
-
     try {
         const {
             data: { user },
             error: userError
         } = await supabase.auth.getUser();
-
         if (userError || !user) {
             loadError.value =
                 "No se encontró una sesión activa. Inicia sesión nuevamente.";
             return;
         }
-
         // Primero cargamos la información del emprendimiento.
         const { data: entrepreneurData, error: entrepreneurError } =
             await supabase
@@ -289,18 +218,15 @@ async function loadDashboard() {
                 `)
                 .eq("id", user.id)
                 .single();
-
         if (entrepreneurError || !entrepreneurData) {
             console.error(
                 "Error al cargar el emprendimiento:",
                 entrepreneurError
             );
-
             loadError.value =
                 "No fue posible cargar la información del emprendimiento.";
             return;
         }
-
         entrepreneur.value = {
             id: entrepreneurData.id,
             businessName: entrepreneurData.business_name,
@@ -309,7 +235,6 @@ async function loadDashboard() {
             district: entrepreneurData.district,
             avatar: entrepreneurData.logo_url
         };
-
         // Cargamos productos y seguidores reales desde Supabase.
         await Promise.all([
             loadProducts(user.id),
@@ -317,14 +242,12 @@ async function loadDashboard() {
         ]);
     } catch (error) {
         console.error("Error al cargar el dashboard:", error);
-
         loadError.value =
             "Ocurrió un problema inesperado al cargar el dashboard.";
     } finally {
         loading.value = false;
     }
 }
-
 // Carga todos los productos pertenecientes al emprendedor.
 async function loadProducts(userId) {
     const { data: productRows, error: productError } = await supabase
@@ -346,25 +269,20 @@ async function loadProducts(userId) {
         .order("created_at", {
             ascending: false
         });
-
     if (productError) {
         console.error(
             "Error al cargar los productos:",
             productError
         );
-
         throw productError;
     }
-
     if (!productRows?.length) {
         products.value = [];
         return;
     }
-
     const productIds = productRows.map(function (product) {
         return product.id;
     });
-
     // Buscamos todas las fotografías pertenecientes a esos productos.
     const { data: imageRows, error: imageError } = await supabase
         .from("product_images")
@@ -379,16 +297,13 @@ async function loadProducts(userId) {
         .order("sort_order", {
             ascending: true
         });
-
     if (imageError) {
         console.error(
             "Error al cargar imágenes:",
             imageError
         );
-
         throw imageError;
     }
-
     products.value = productRows.map(function (product) {
         const productImages = (imageRows || [])
             .filter(function (image) {
@@ -405,7 +320,6 @@ async function loadProducts(userId) {
                     sortOrder: image.sort_order
                 };
             });
-
         return {
             id: product.id,
             entrepreneurId: product.entrepreneur_id,
@@ -425,14 +339,9 @@ async function loadProducts(userId) {
         };
     });
 }
-
-// ===============================
-// CARGAR SEGUIDORES
-// ===============================
-
+// Carga y prepara la lista de seguidores del emprendimiento.
 async function loadFollowers() {
     followersLoading.value = true;
-
     try {
         /*
             Esta función RPC devuelve solamente los seguidores
@@ -443,15 +352,11 @@ async function loadFollowers() {
         const { data, error } = await supabase.rpc(
             "get_my_followers"
         );
-
         if (error) {
             throw error;
         }
-
         const rows = data || [];
-
         followerCount.value = rows.length;
-
         followers.value = rows.map(function (follower) {
             return {
                 id: follower.id,
@@ -469,17 +374,15 @@ async function loadFollowers() {
             "Error al cargar seguidores:",
             error
         );
-
         followerCount.value = 0;
         followers.value = [];
     } finally {
         followersLoading.value = false;
     }
 }
-
+// Genera las iniciales que se muestran cuando un seguidor no tiene foto.
 function followerInitials(name) {
     if (!name) return "TH";
-
     return name
         .trim()
         .split(/\s+/)
@@ -489,98 +392,77 @@ function followerInitials(name) {
         })
         .join("");
 }
-
+// Abre la ventana con la lista de seguidores.
 async function openFollowersModal() {
     if (!entrepreneur.value) return;
-
     showFollowersModal.value = true;
     document.body.style.overflow = "hidden";
-
     // Actualizamos la lista cada vez que se abre.
     await loadFollowers();
 }
-
+// Cierra la ventana de seguidores.
 function closeFollowersModal() {
     showFollowersModal.value = false;
     document.body.style.overflow = "";
 }
-
-// ===============================
-// EDITAR PERFIL
-// ===============================
-
+// Funciones utilizadas para abrir, editar y guardar el perfil.
 function openProfileEditor() {
     if (!entrepreneur.value) return;
-
     profileForm.value = {
         businessName: entrepreneur.value.businessName || "",
         description: entrepreneur.value.description || "",
         department: entrepreneur.value.department || "",
         district: entrepreneur.value.district || ""
     };
-
     profileLogoPreview.value =
         entrepreneur.value.avatar || "";
-
     profileLogoFile.value = null;
-
     clearPasswordFields();
-
     showProfileEditor.value = true;
     document.body.style.overflow = "hidden";
 }
-
+// Prepara la vista previa del nuevo logo antes de guardarlo.
 function handleProfileLogo(event) {
     const file = event.target.files?.[0];
-
     if (!file) return;
-
     if (!file.type.startsWith("image/")) {
         alert("Selecciona un archivo de imagen válido.");
         event.target.value = "";
         return;
     }
-
     profileLogoFile.value = file;
-
     const reader = new FileReader();
-
     reader.onload = function (loadEvent) {
         profileLogoPreview.value =
             loadEvent.target.result;
     };
-
     reader.readAsDataURL(file);
 }
-
+// Limpia los campos de contraseña para evitar conservar datos anteriores.
 function clearPasswordFields() {
     currentPassword.value = "";
     newPassword.value = "";
     confirmNewPassword.value = "";
-
     showCurrentPassword.value = false;
     showNewPassword.value = false;
     showConfirmPassword.value = false;
 }
-
+// Cierra el editor de perfil y limpia sus estados temporales.
 function closeProfileEditor() {
     showProfileEditor.value = false;
     profileLogoFile.value = null;
     clearPasswordFields();
     document.body.style.overflow = "";
 }
-
+// Valida y guarda los cambios realizados en el perfil del emprendimiento.
 async function saveProfile() {
     if (!entrepreneur.value || profileSaving.value) return;
-
     profileSaving.value = true;
-
     try {
         const wantsPasswordChange =
             currentPassword.value.length > 0 ||
             newPassword.value.length > 0 ||
             confirmNewPassword.value.length > 0;
-
         if (wantsPasswordChange) {
             if (
                 !currentPassword.value ||
@@ -592,14 +474,12 @@ async function saveProfile() {
                 );
                 return;
             }
-
             if (newPassword.value.length < 8) {
                 alert(
                     "La nueva contraseña debe tener al menos 8 caracteres."
                 );
                 return;
             }
-
             if (
                 newPassword.value !==
                 confirmNewPassword.value
@@ -610,10 +490,8 @@ async function saveProfile() {
                 return;
             }
         }
-
         let logoUrl =
             entrepreneur.value.avatar || null;
-
         // Si existe una nueva imagen, se sube primero a Storage.
         if (profileLogoFile.value) {
             const uploadedLogo =
@@ -621,30 +499,25 @@ async function saveProfile() {
                     entrepreneur.value.id,
                     profileLogoFile.value
                 );
-
             logoUrl = uploadedLogo.publicUrl;
         }
-
         // Verificamos la contraseña actual antes de cambiarla.
         if (wantsPasswordChange) {
             const {
                 data: { user },
                 error: userError
             } = await supabase.auth.getUser();
-
             if (userError || !user?.email) {
                 alert(
                     "No fue posible verificar tu cuenta."
                 );
                 return;
             }
-
             const { error: passwordCheckError } =
                 await supabase.auth.signInWithPassword({
                     email: user.email,
                     password: currentPassword.value
                 });
-
             if (passwordCheckError) {
                 alert(
                     "La contraseña actual es incorrecta."
@@ -652,22 +525,17 @@ async function saveProfile() {
                 return;
             }
         }
-
         const { data, error } = await supabase
             .from("entrepreneurs")
             .update({
                 business_name:
                     profileForm.value.businessName.trim(),
-
                 description:
                     profileForm.value.description.trim(),
-
                 department:
                     profileForm.value.department,
-
                 district:
                     profileForm.value.district.trim(),
-
                 logo_url:
                     logoUrl
             })
@@ -677,7 +545,6 @@ async function saveProfile() {
             )
             .select()
             .single();
-
         if (error) {
             alert(
                 "No fue posible actualizar el perfil: " +
@@ -685,7 +552,6 @@ async function saveProfile() {
             );
             return;
         }
-
         entrepreneur.value = {
             id: data.id,
             businessName: data.business_name,
@@ -694,13 +560,11 @@ async function saveProfile() {
             district: data.district,
             avatar: data.logo_url
         };
-
         if (wantsPasswordChange) {
             const { error: passwordError } =
                 await supabase.auth.updateUser({
                     password: newPassword.value
                 });
-
             if (passwordError) {
                 alert(
                     "El perfil se actualizó, pero no fue posible cambiar la contraseña: " +
@@ -709,16 +573,13 @@ async function saveProfile() {
                 return;
             }
         }
-
         alert("Perfil actualizado correctamente.");
-
         closeProfileEditor();
     } catch (error) {
         console.error(
             "Error al guardar el perfil:",
             error
         );
-
         alert(
             "Ocurrió un problema al guardar los cambios."
         );
@@ -726,39 +587,28 @@ async function saveProfile() {
         profileSaving.value = false;
     }
 }
-
-// ===============================
-// CATEGORÍAS
-// ===============================
-
+// Controla la selección de categorías del emprendimiento o producto.
 function toggleCategory(category) {
     const categories =
         productForm.value.categories;
-
     const index =
         categories.indexOf(category);
-
     if (index === -1) {
         categories.push(category);
     } else {
         categories.splice(index, 1);
     }
 }
-
+// Comprueba si una categoría ya está seleccionada.
 function isCategorySelected(category) {
     return productForm.value.categories.includes(
         category
     );
 }
-
-// ===============================
-// CREAR PRODUCTO
-// ===============================
-
+// Prepara el formulario para registrar un producto nuevo.
 function openAddProduct() {
     productEditorMode.value = "add";
     selectedProduct.value = null;
-
     productForm.value = {
         name: "",
         description: "",
@@ -766,23 +616,16 @@ function openAddProduct() {
         price: 0,
         stock: 0
     };
-
     editorImages.value = [];
     originalProductImages.value = [];
     showCategoryDropdown.value = false;
-
     showProductEditor.value = true;
     document.body.style.overflow = "hidden";
 }
-
-// ===============================
-// EDITAR PRODUCTO
-// ===============================
-
+// Carga un producto existente dentro del formulario de edición.
 function openProductEditor(product) {
     productEditorMode.value = "edit";
     selectedProduct.value = product;
-
     productForm.value = {
         name: product.name || "",
         description: product.description || "",
@@ -792,7 +635,6 @@ function openProductEditor(product) {
         price: Number(product.price) || 0,
         stock: Number(product.stock) || 0
     };
-
     /*
         Las imágenes existentes conservan su ID y ruta.
         Así podemos identificar cuáles se mantienen o eliminan.
@@ -808,67 +650,52 @@ function openProductEditor(product) {
             preview: image.imageUrl
         };
     });
-
     originalProductImages.value =
         editorImages.value.map(function (image) {
             return {
                 ...image
             };
         });
-
     showCategoryDropdown.value = false;
-
     showProductEditor.value = true;
     document.body.style.overflow = "hidden";
 }
-
 // Convierte un archivo en una vista previa.
 function fileToPreview(file) {
     return new Promise(function (resolve, reject) {
         const reader = new FileReader();
-
         reader.onload = function (event) {
             resolve(event.target.result);
         };
-
         reader.onerror = reject;
         reader.readAsDataURL(file);
     });
 }
-
 // Permite añadir varias fotografías sin borrar las anteriores.
 async function handleProductImages(event) {
     const files = Array.from(
         event.target.files || []
     );
-
     if (!files.length) return;
-
     const validFiles = [];
-
     for (const file of files) {
         if (!file.type.startsWith("image/")) {
             continue;
         }
-
         if (file.size > 5 * 1024 * 1024) {
             alert(
                 `${file.name} supera el límite de 5 MB.`
             );
-
             continue;
         }
-
         validFiles.push(file);
     }
-
     const newImages =
         await Promise.all(
             validFiles.map(
                 async function (file, index) {
                     const preview =
                         await fileToPreview(file);
-
                     return {
                         kind: "new",
                         key:
@@ -879,29 +706,23 @@ async function handleProductImages(event) {
                 }
             )
         );
-
     editorImages.value.push(...newImages);
-
     // Permite seleccionar nuevamente los mismos archivos.
     event.target.value = "";
 }
-
 // Elimina una imagen únicamente del formulario.
 // La eliminación real ocurre cuando se guardan los cambios.
 function removeProductImage(index) {
     editorImages.value.splice(index, 1);
 }
-
 // Convierte cualquier fotografía en la portada.
 function makeProductImageCover(index) {
     if (index === 0) return;
-
     const [image] =
         editorImages.value.splice(index, 1);
-
     editorImages.value.unshift(image);
 }
-
+// Cierra el formulario de producto y limpia los datos temporales.
 function closeProductEditor() {
     showProductEditor.value = false;
     selectedProduct.value = null;
@@ -910,57 +731,44 @@ function closeProductEditor() {
     showCategoryDropdown.value = false;
     document.body.style.overflow = "";
 }
-
-// ===============================
-// GUARDAR PRODUCTO
-// ===============================
-
+// Guarda un producto nuevo o actualiza uno existente.
 async function saveProduct() {
     if (productSaving.value) return;
-
     if (!productForm.value.categories.length) {
         alert(
             "Selecciona al menos una categoría."
         );
         return;
     }
-
     productSaving.value = true;
-
     try {
         const {
             data: { user },
             error: userError
         } = await supabase.auth.getUser();
-
         if (userError || !user) {
             alert(
                 "No se encontró una sesión activa."
             );
             return;
         }
-
         if (productEditorMode.value === "add") {
             await createProduct(user);
         } else {
             await updateProduct(user);
         }
-
         await loadProducts(user.id);
-
         alert(
             productEditorMode.value === "add"
                 ? "Producto publicado correctamente."
                 : "Producto actualizado correctamente."
         );
-
         closeProductEditor();
     } catch (error) {
         console.error(
             "Error al guardar el producto:",
             error
         );
-
         alert(
             "No fue posible guardar el producto: " +
             error.message
@@ -969,7 +777,6 @@ async function saveProduct() {
         productSaving.value = false;
     }
 }
-
 // Crea el registro principal y después almacena sus fotografías.
 async function createProduct(user) {
     const { data: newProduct, error: productError } =
@@ -987,21 +794,16 @@ async function createProduct(user) {
             })
             .select()
             .single();
-
     if (productError) {
         throw productError;
     }
-
     const newImages = editorImages.value.filter(function (image) {
         return image.kind === "new";
     });
-
     if (!newImages.length) {
         return;
     }
-
     let uploadedImages = [];
-
     try {
         // Subimos todas las imágenes al Storage del producto.
         uploadedImages = await uploadProductImages(
@@ -1011,7 +813,6 @@ async function createProduct(user) {
                 return image.file;
             })
         );
-
         const imageRows = uploadedImages.map(function (image, index) {
             return {
                 product_id: newProduct.id,
@@ -1020,11 +821,9 @@ async function createProduct(user) {
                 sort_order: index
             };
         });
-
         const { error: imageError } = await supabase
             .from("product_images")
             .insert(imageRows);
-
         if (imageError) {
             throw imageError;
         }
@@ -1043,7 +842,6 @@ async function createProduct(user) {
                 );
             }
         }
-
         /*
             Como el producto todavía no terminó de crearse correctamente,
             eliminamos también su registro. product_images se elimina en
@@ -1060,11 +858,9 @@ async function createProduct(user) {
                 cleanupError
             );
         }
-
         throw error;
     }
 }
-
 // Actualiza el producto y sincroniza por completo sus fotografías.
 async function updateProduct(user) {
     if (!selectedProduct.value) {
@@ -1072,9 +868,7 @@ async function updateProduct(user) {
             "No se encontró el producto seleccionado."
         );
     }
-
     const productId = selectedProduct.value.id;
-
     // Actualizamos primero la información principal del producto.
     const { error: updateError } = await supabase
         .from("products")
@@ -1087,11 +881,9 @@ async function updateProduct(user) {
             updated_at: new Date().toISOString()
         })
         .eq("id", productId);
-
     if (updateError) {
         throw updateError;
     }
-
     /*
         Comparamos las imágenes que existían al abrir el editor
         con las que todavía siguen presentes cuando el usuario guarda.
@@ -1103,20 +895,16 @@ async function updateProduct(user) {
         .map(function (image) {
             return image.id;
         });
-
     const removedImages = originalProductImages.value.filter(
         function (image) {
             return !currentExistingIds.includes(image.id);
         }
     );
-
     const newImages = editorImages.value.filter(function (image) {
         return image.kind === "new";
     });
-
     let uploadedImages = [];
     let insertedImageIds = [];
-
     try {
         // 1. Subimos primero las fotografías nuevas.
         if (newImages.length) {
@@ -1128,24 +916,20 @@ async function updateProduct(user) {
                 })
             );
         }
-
         /*
             2. Construimos las filas nuevas respetando exactamente
             el orden visual del editor. La posición 0 será la portada.
         */
         let uploadedIndex = 0;
         const newImageRows = [];
-
         for (
             let index = 0;
             index < editorImages.value.length;
             index++
         ) {
             const image = editorImages.value[index];
-
             if (image.kind === "new") {
                 const uploaded = uploadedImages[uploadedIndex];
-
                 if (uploaded) {
                     newImageRows.push({
                         product_id: productId,
@@ -1154,11 +938,9 @@ async function updateProduct(user) {
                         sort_order: index
                     });
                 }
-
                 uploadedIndex++;
             }
         }
-
         // 3. Registramos las imágenes nuevas en product_images.
         if (newImageRows.length) {
             const { data: insertedRows, error: insertError } =
@@ -1166,16 +948,13 @@ async function updateProduct(user) {
                     .from("product_images")
                     .insert(newImageRows)
                     .select("id");
-
             if (insertError) {
                 throw insertError;
             }
-
             insertedImageIds = (insertedRows || []).map(function (row) {
                 return row.id;
             });
         }
-
         /*
             4. Actualizamos el orden de las fotografías que ya existían.
             Esto también permite cambiar cuál imagen es la portada.
@@ -1186,23 +965,19 @@ async function updateProduct(user) {
             index++
         ) {
             const image = editorImages.value[index];
-
             if (image.kind !== "existing") {
                 continue;
             }
-
             const { error: orderError } = await supabase
                 .from("product_images")
                 .update({
                     sort_order: index
                 })
                 .eq("id", image.id);
-
             if (orderError) {
                 throw orderError;
             }
         }
-
         /*
             5. Las fotografías quitadas del editor se eliminan
             definitivamente de la tabla product_images.
@@ -1211,16 +986,13 @@ async function updateProduct(user) {
             const removedIds = removedImages.map(function (image) {
                 return image.id;
             });
-
             const { error: deleteRowsError } = await supabase
                 .from("product_images")
                 .delete()
                 .in("id", removedIds);
-
             if (deleteRowsError) {
                 throw deleteRowsError;
             }
-
             /*
                 6. Después de eliminar sus filas, borramos también
                 los archivos físicos del bucket thrive-images.
@@ -1260,7 +1032,6 @@ async function updateProduct(user) {
                 );
             }
         }
-
         for (const image of uploadedImages) {
             try {
                 await deleteImage(image.path);
@@ -1271,42 +1042,34 @@ async function updateProduct(user) {
                 );
             }
         }
-
         throw error;
     }
 }
-
-// ===============================
-// VISTA COMO CLIENTE
-// ===============================
-
+// Permite previsualizar el perfil desde la perspectiva del cliente.
 function openProductPreview(product) {
     previewProduct.value = product;
     previewImageIndex.value = 0;
-
     showProductPreview.value = true;
     document.body.style.overflow = "hidden";
 }
-
+// Cierra la vista previa del producto.
 function closeProductPreview() {
     showProductPreview.value = false;
     previewProduct.value = null;
     previewImageIndex.value = 0;
     document.body.style.overflow = "";
 }
-
+// Avanza a la siguiente imagen dentro de la vista previa.
 function nextPreviewImage() {
     if (previewImages.value.length <= 1) return;
-
     previewImageIndex.value =
         (
             previewImageIndex.value + 1
         ) % previewImages.value.length;
 }
-
+// Regresa a la imagen anterior dentro de la vista previa.
 function previousPreviewImage() {
     if (previewImages.value.length <= 1) return;
-
     previewImageIndex.value =
         (
             previewImageIndex.value -
@@ -1314,80 +1077,61 @@ function previousPreviewImage() {
             previewImages.value.length
         ) % previewImages.value.length;
 }
-
+// Cierra la vista previa y abre directamente el editor del producto.
 function editFromPreview() {
     const product =
         previewProduct.value;
-
     closeProductPreview();
-
     if (product) {
         openProductEditor(product);
     }
 }
-
-// ===============================
-// TECLADO
-// ===============================
-
+// Maneja accesos rápidos del teclado para cerrar ventanas.
 function handleEscape(event) {
     if (event.key !== "Escape") return;
-
     if (showFollowersModal.value) {
         closeFollowersModal();
         return;
     }
-
     if (showProductPreview.value) {
         closeProductPreview();
         return;
     }
-
     if (showProductEditor.value) {
         closeProductEditor();
         return;
     }
-
     if (showProfileEditor.value) {
         closeProfileEditor();
     }
 }
-
 onMounted(function () {
     loadDashboard();
-
     document.addEventListener(
         "keydown",
         handleEscape
     );
 });
-
 onBeforeUnmount(function () {
     document.removeEventListener(
         "keydown",
         handleEscape
     );
-
     document.body.style.overflow = "";
 });
 </script>
-
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-0">
-
-    <!-- ================= CABECERA ================= -->
+    <!-- Cabecera. -->
     <header class="sticky top-0 z-40 bg-[#F8FBFC]">
         <div class="mx-auto max-w-[1450px] px-2 pt-2 sm:px-5 lg:px-8 lg:pt-4">
-
             <!-- Isla principal -->
             <div class="flex items-center gap-1 rounded-[24px] bg-[#00B4D8] p-1.5 shadow-sm sm:gap-2 sm:p-2">
-
                 <div class="flex min-w-0 flex-1 items-center px-3">
                     <span class="truncate text-sm font-bold text-white sm:text-base">
                         {{ entrepreneur?.businessName || "Thrive" }}
                     </span>
                 </div>
-
                 <!-- Mensajes -->
                 <button
                     type="button"
@@ -1399,7 +1143,6 @@ onBeforeUnmount(function () {
                         <path stroke-linecap="round" d="M8 9h8M8 13h5"></path>
                     </svg>
                 </button>
-
                 <!-- Notificaciones -->
                 <button
                     type="button"
@@ -1411,7 +1154,6 @@ onBeforeUnmount(function () {
                     </svg>
                 </button>
             </div>
-
             <!-- Menú para computadora -->
             <nav class="hidden items-center gap-2 py-3 lg:flex">
                 <button
@@ -1436,20 +1178,17 @@ onBeforeUnmount(function () {
             </nav>
         </div>
     </header>
-
-    <!-- ================= CARGANDO ================= -->
+    <!-- Cargando. -->
     <main
         v-if="loading"
         class="mx-auto max-w-[1450px] px-5 py-24 text-center"
     >
         <div class="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div>
-
         <p class="mt-4 text-sm font-semibold text-gray-400">
             Cargando tu emprendimiento...
         </p>
     </main>
-
-    <!-- ================= ERROR ================= -->
+    <!-- Error. -->
     <main
         v-else-if="loadError"
         class="mx-auto max-w-[1450px] px-5 py-24 text-center"
@@ -1457,15 +1196,12 @@ onBeforeUnmount(function () {
         <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100 font-black text-red-600">
             !
         </div>
-
         <p class="mt-4 font-black text-gray-700">
             No pudimos cargar el dashboard
         </p>
-
         <p class="mt-2 text-sm text-gray-400">
             {{ loadError }}
         </p>
-
         <button
             type="button"
             class="mt-5 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white"
@@ -1474,57 +1210,43 @@ onBeforeUnmount(function () {
             Intentar nuevamente
         </button>
     </main>
-
-    <!-- ================= CONTENIDO ================= -->
+    <!-- Contenido. -->
     <main
         v-else-if="entrepreneur"
         class="mx-auto max-w-[1450px] px-3 pb-10 pt-3 sm:px-5 lg:px-8"
     >
-
-        <!-- ======================================= -->
         <!-- INICIO -->
-        <!-- ======================================= -->
         <section v-if="activeSection === 'inicio'">
-
             <!-- Perfil -->
             <section class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
-
                 <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-
                     <div class="flex flex-col items-center gap-5 text-center sm:flex-row sm:text-left">
-
                         <img
                             v-if="entrepreneur.avatar"
                             :src="entrepreneur.avatar"
                             :alt="entrepreneur.businessName"
                             class="h-24 w-24 rounded-full border-4 border-[#CAF0F8] object-cover sm:h-28 sm:w-28"
                         >
-
                         <div
                             v-else
                             class="flex h-24 w-24 items-center justify-center rounded-full border-4 border-[#CAF0F8] bg-[#EAF9FC] text-2xl font-black text-[#0077B6] sm:h-28 sm:w-28"
                         >
                             {{ entrepreneurInitials }}
                         </div>
-
                         <div>
                             <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
                                 Mi emprendimiento
                             </p>
-
                             <h1 class="mt-1 text-2xl font-black text-gray-700 sm:text-3xl">
                                 {{ entrepreneur.businessName }}
                             </h1>
-
                             <p class="mt-1 text-sm text-gray-400">
                                 {{ entrepreneur.district }},
                                 {{ entrepreneur.department }}
                             </p>
-
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-gray-500">
                                 {{ entrepreneur.description }}
                             </p>
-
                             <!-- Seguidores -->
                             <button
                                 type="button"
@@ -1534,14 +1256,12 @@ onBeforeUnmount(function () {
                                 <span class="text-base font-black text-[#0077B6]">
                                     {{ followerCount }}
                                 </span>
-
                                 <span class="text-xs font-bold text-[#4F7180]">
                                     {{ followerCount === 1 ? "seguidor" : "seguidores" }}
                                 </span>
                             </button>
                         </div>
                     </div>
-
                     <div class="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
                         <button
                             type="button"
@@ -1550,7 +1270,6 @@ onBeforeUnmount(function () {
                         >
                             Editar perfil
                         </button>
-
                         <button
                             type="button"
                             :disabled="logoutLoading"
@@ -1570,32 +1289,25 @@ onBeforeUnmount(function () {
                                     d="M10 17l5-5-5-5M15 12H3M14 4h5a2 2 0 012 2v12a2 2 0 01-2 2h-5"
                                 ></path>
                             </svg>
-
                             {{ logoutLoading ? "Cerrando..." : "Cerrar sesión" }}
                         </button>
                     </div>
                 </div>
             </section>
-
             <!-- Productos -->
             <section class="mt-7">
-
                 <div class="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-
                     <div>
                         <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
                             Mi catálogo
                         </p>
-
                         <h2 class="mt-1 text-2xl font-black text-gray-700">
                             Mis productos
                         </h2>
-
                         <p class="mt-1 text-sm text-gray-400">
                             {{ productCountText }}
                         </p>
                     </div>
-
                     <button
                         type="button"
                         class="flex w-full items-center justify-center gap-2 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#009CC0] sm:w-auto"
@@ -1604,11 +1316,9 @@ onBeforeUnmount(function () {
                         <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <path stroke-linecap="round" d="M12 5v14M5 12h14"></path>
                         </svg>
-
                         Añadir producto
                     </button>
                 </div>
-
                 <!-- Productos con el mismo estilo limpio del catálogo -->
                 <div
                     v-if="products.length"
@@ -1630,7 +1340,6 @@ onBeforeUnmount(function () {
                                 :alt="product.name"
                                 class="aspect-square w-full object-cover"
                             >
-
                             <div
                                 v-else
                                 class="flex aspect-square items-center justify-center text-xs font-bold text-gray-400"
@@ -1638,9 +1347,7 @@ onBeforeUnmount(function () {
                                 Sin fotografía
                             </div>
                         </button>
-
                         <div class="pt-1.5 sm:px-1 sm:pt-3">
-
                             <div class="mb-1 flex flex-wrap gap-1">
                                 <span
                                     v-for="category in product.categories.slice(0, 1)"
@@ -1649,7 +1356,6 @@ onBeforeUnmount(function () {
                                 >
                                     {{ category }}
                                 </span>
-
                                 <span
                                     v-if="product.categories.length > 1"
                                     class="text-[9px] font-bold text-gray-400"
@@ -1657,16 +1363,13 @@ onBeforeUnmount(function () {
                                     +{{ product.categories.length - 1 }}
                                 </span>
                             </div>
-
                             <h3 class="line-clamp-2 min-h-[34px] text-xs font-bold leading-tight text-gray-600 sm:min-h-[40px] sm:text-sm">
                                 {{ product.name }}
                             </h3>
-
                             <div class="mt-2 flex items-center justify-between gap-2">
                                 <p class="text-base font-black text-[#4F7180] sm:text-xl">
                                     {{ formatPrice(product.price) }}
                                 </p>
-
                                 <span
                                     class="rounded-full px-2 py-1 text-[9px] font-bold sm:text-[10px]"
                                     :class="stockClasses(product.stock)"
@@ -1674,7 +1377,6 @@ onBeforeUnmount(function () {
                                     {{ stockText(product.stock) }}
                                 </span>
                             </div>
-
                             <div class="mt-3 grid grid-cols-2 gap-2">
                                 <button
                                     type="button"
@@ -1683,7 +1385,6 @@ onBeforeUnmount(function () {
                                 >
                                     Ver como cliente
                                 </button>
-
                                 <button
                                     type="button"
                                     class="rounded-xl bg-[#CAF0F8] px-2 py-2 text-[10px] font-bold text-[#0077B6] sm:text-xs"
@@ -1695,7 +1396,6 @@ onBeforeUnmount(function () {
                         </div>
                     </article>
                 </div>
-
                 <!-- Sin productos -->
                 <div
                     v-else
@@ -1708,15 +1408,12 @@ onBeforeUnmount(function () {
                             <path d="M12 11v10"></path>
                         </svg>
                     </div>
-
                     <h3 class="mt-4 font-black text-gray-700">
                         Tu catálogo está vacío
                     </h3>
-
                     <p class="mt-1 text-sm text-gray-400">
                         Publica tu primer producto para comenzar.
                     </p>
-
                     <button
                         type="button"
                         class="mt-5 rounded-xl bg-[#00B4D8] px-6 py-3 text-sm font-bold text-white"
@@ -1727,10 +1424,7 @@ onBeforeUnmount(function () {
                 </div>
             </section>
         </section>
-
-        <!-- ======================================= -->
         <!-- INVENTARIO -->
-        <!-- ======================================= -->
         <section
             v-else-if="activeSection === 'inventario'"
             class="rounded-[28px] bg-white px-5 py-16 text-center shadow-sm sm:px-10"
@@ -1742,19 +1436,14 @@ onBeforeUnmount(function () {
                     <path d="M12 11v10"></path>
                 </svg>
             </div>
-
             <h2 class="mt-5 text-2xl font-black text-gray-700">
                 Inventario
             </h2>
-
             <p class="mx-auto mt-2 max-w-lg text-sm leading-6 text-gray-400">
                 Esta sección está preparada para gestionar existencias, movimientos y disponibilidad de tus productos.
             </p>
         </section>
-
-        <!-- ======================================= -->
         <!-- NOVEDADES -->
-        <!-- ======================================= -->
         <section
             v-else-if="activeSection === 'novedades'"
             class="rounded-[28px] bg-white px-5 py-16 text-center shadow-sm sm:px-10"
@@ -1766,19 +1455,14 @@ onBeforeUnmount(function () {
                     <path stroke-linecap="round" d="M10 21h4"></path>
                 </svg>
             </div>
-
             <h2 class="mt-5 text-2xl font-black text-gray-700">
                 Novedades
             </h2>
-
             <p class="mx-auto mt-2 max-w-lg text-sm leading-6 text-gray-400">
                 Aquí podrás encontrar novedades, avisos y herramientas importantes para tu emprendimiento.
             </p>
         </section>
-
-        <!-- ======================================= -->
         <!-- CALCULADORA -->
-        <!-- ======================================= -->
         <section
             v-else
             class="rounded-[28px] bg-white px-5 py-16 text-center shadow-sm sm:px-10"
@@ -1789,21 +1473,17 @@ onBeforeUnmount(function () {
                     <path d="M8 7h8M8 11h2M14 11h2M8 15h2M14 15h2"></path>
                 </svg>
             </div>
-
             <h2 class="mt-5 text-2xl font-black text-gray-700">
                 Calculadora
             </h2>
-
             <p class="mx-auto mt-2 max-w-lg text-sm leading-6 text-gray-400">
                 Esta sección queda preparada para la calculadora financiera y de costos que agregaremos posteriormente.
             </p>
         </section>
     </main>
-
-    <!-- ================= MENÚ MÓVIL ================= -->
+    <!-- Menú móvil. -->
     <nav class="fixed rounded-t-[28px] inset-x-0 bottom-0 z-50 border-t border-white/20 bg-[#00B4D8] shadow-[0_-6px_20px_rgba(0,0,0,0.12)] lg:hidden">
         <div class="mx-auto grid max-w-lg grid-cols-4">
-
             <!-- Inicio -->
             <button
                 type="button"
@@ -1815,12 +1495,10 @@ onBeforeUnmount(function () {
                     <path d="M3 11l9-8 9 8"></path>
                     <path d="M5 10v10h14V10"></path>
                 </svg>
-
                 <span class="text-[9px] font-bold">
                     Inicio
                 </span>
             </button>
-
             <!-- Inventario -->
             <button
                 type="button"
@@ -1832,12 +1510,10 @@ onBeforeUnmount(function () {
                     <path d="M4 7l8-4 8 4-8 4-8-4z"></path>
                     <path d="M4 7v10l8 4 8-4V7"></path>
                 </svg>
-
                 <span class="text-[9px] font-bold">
                     Inventario
                 </span>
             </button>
-
             <!-- Novedades -->
             <button
                 type="button"
@@ -1848,12 +1524,10 @@ onBeforeUnmount(function () {
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                     <path stroke-linecap="round" d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path>
                 </svg>
-
                 <span class="text-[9px] font-bold">
                     Novedades
                 </span>
             </button>
-
             <!-- Calculadora -->
             <button
                 type="button"
@@ -1865,15 +1539,13 @@ onBeforeUnmount(function () {
                     <rect x="5" y="3" width="14" height="18" rx="2"></rect>
                     <path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"></path>
                 </svg>
-
                 <span class="text-[9px] font-bold">
                     Calculadora
                 </span>
             </button>
         </div>
     </nav>
-
-    <!-- ================= SEGUIDORES ================= -->
+    <!-- Seguidores. -->
     <Teleport to="body">
         <div
             v-if="showFollowersModal"
@@ -1881,23 +1553,19 @@ onBeforeUnmount(function () {
             @click.self="closeFollowersModal"
         >
             <section class="max-h-[85vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[520px] sm:rounded-[28px]">
-
                 <!-- Cabecera -->
                 <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
                     <div>
                         <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
                             Comunidad
                         </p>
-
                         <h2 class="text-lg font-black text-gray-700">
                             Seguidores
                         </h2>
-
                         <p class="mt-0.5 text-xs text-gray-400">
                             {{ followerCountText }}
                         </p>
                     </div>
-
                     <button
                         type="button"
                         class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
@@ -1906,19 +1574,16 @@ onBeforeUnmount(function () {
                         ×
                     </button>
                 </div>
-
                 <!-- Cargando -->
                 <div
                     v-if="followersLoading"
                     class="px-5 py-14 text-center"
                 >
                     <div class="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div>
-
                     <p class="mt-3 text-sm font-semibold text-gray-400">
                         Cargando seguidores...
                     </p>
                 </div>
-
                 <!-- Sin seguidores -->
                 <div
                     v-else-if="!followers.length"
@@ -1937,16 +1602,13 @@ onBeforeUnmount(function () {
                             <path stroke-linecap="round" d="M3 20a6 6 0 0112 0M14 20a4 4 0 018 0"></path>
                         </svg>
                     </div>
-
                     <h3 class="mt-4 font-black text-gray-700">
                         Aún no tienes seguidores
                     </h3>
-
                     <p class="mt-1 text-sm text-gray-400">
                         Aquí aparecerán las personas que sigan tu emprendimiento.
                     </p>
                 </div>
-
                 <!-- Lista de seguidores -->
                 <div
                     v-else
@@ -1963,19 +1625,16 @@ onBeforeUnmount(function () {
                             :alt="follower.fullName"
                             class="h-11 w-11 shrink-0 rounded-full border border-gray-100 object-cover"
                         >
-
                         <div
                             v-else
                             class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#CAF0F8] text-xs font-black text-[#0077B6]"
                         >
                             {{ followerInitials(follower.fullName) }}
                         </div>
-
                         <div class="min-w-0">
                             <p class="truncate text-sm font-bold text-gray-700">
                                 {{ follower.fullName }}
                             </p>
-
                             <p class="text-xs text-gray-400">
                                 Sigue tu emprendimiento
                             </p>
@@ -1985,8 +1644,7 @@ onBeforeUnmount(function () {
             </section>
         </div>
     </Teleport>
-
-    <!-- ================= EDITAR PERFIL ================= -->
+    <!-- Editar perfil. -->
     <Teleport to="body">
         <div
             v-if="showProfileEditor"
@@ -1994,19 +1652,15 @@ onBeforeUnmount(function () {
             @click.self="closeProfileEditor"
         >
             <section class="max-h-[92vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[620px] sm:rounded-[28px]">
-
                 <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
-
                     <div>
                         <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
                             Mi emprendimiento
                         </p>
-
                         <h2 class="text-lg font-black text-gray-700">
                             Editar perfil
                         </h2>
                     </div>
-
                     <button
                         type="button"
                         class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
@@ -2015,37 +1669,30 @@ onBeforeUnmount(function () {
                         ×
                     </button>
                 </div>
-
                 <form
                     class="space-y-5 p-5 sm:p-7"
                     @submit.prevent="saveProfile"
                 >
-
                     <!-- Foto -->
                     <div>
                         <label class="mb-3 block text-sm font-bold text-gray-600">
                             Foto del emprendimiento
                         </label>
-
                         <div class="flex flex-col items-center gap-4 sm:flex-row">
-
                             <img
                                 v-if="profileLogoPreview"
                                 :src="profileLogoPreview"
                                 alt="Foto del emprendimiento"
                                 class="h-24 w-24 rounded-full border-4 border-[#CAF0F8] object-cover"
                             >
-
                             <div
                                 v-else
                                 class="flex h-24 w-24 items-center justify-center rounded-full bg-[#CAF0F8] text-xl font-black text-[#0077B6]"
                             >
                                 {{ entrepreneurInitials }}
                             </div>
-
                             <label class="cursor-pointer rounded-xl border border-[#00B4D8] px-4 py-2.5 text-sm font-bold text-[#0077B6] hover:bg-[#CAF0F8]">
                                 Cambiar foto
-
                                 <input
                                     type="file"
                                     accept="image/*"
@@ -2055,13 +1702,11 @@ onBeforeUnmount(function () {
                             </label>
                         </div>
                     </div>
-
                     <!-- Nombre -->
                     <div>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
                             Nombre del emprendimiento
                         </label>
-
                         <input
                             v-model="profileForm.businessName"
                             required
@@ -2069,13 +1714,11 @@ onBeforeUnmount(function () {
                             class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         >
                     </div>
-
                     <!-- Descripción -->
                     <div>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
                             Descripción
                         </label>
-
                         <textarea
                             v-model="profileForm.description"
                             required
@@ -2083,15 +1726,12 @@ onBeforeUnmount(function () {
                             class="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         ></textarea>
                     </div>
-
                     <!-- Ubicación -->
                     <div class="grid gap-4 sm:grid-cols-2">
-
                         <div>
                             <label class="mb-1.5 block text-sm font-bold text-gray-600">
                                 Departamento
                             </label>
-
                             <select
                                 v-model="profileForm.department"
                                 required
@@ -2106,12 +1746,10 @@ onBeforeUnmount(function () {
                                 </option>
                             </select>
                         </div>
-
                         <div>
                             <label class="mb-1.5 block text-sm font-bold text-gray-600">
                                 Distrito
                             </label>
-
                             <input
                                 v-model="profileForm.district"
                                 required
@@ -2120,20 +1758,15 @@ onBeforeUnmount(function () {
                             >
                         </div>
                     </div>
-
                     <!-- Contraseña -->
                     <div class="border-t border-gray-100 pt-5">
-
                         <h3 class="font-black text-gray-700">
                             Cambiar contraseña
                         </h3>
-
                         <p class="mt-1 text-xs text-gray-400">
                             Deja estos campos vacíos si no deseas cambiarla.
                         </p>
-
                         <div class="mt-4 space-y-3">
-
                             <input
                                 v-model="currentPassword"
                                 :type="showCurrentPassword ? 'text' : 'password'"
@@ -2141,7 +1774,6 @@ onBeforeUnmount(function () {
                                 placeholder="Contraseña actual"
                                 class="password-field w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                             >
-
                             <input
                                 v-model="newPassword"
                                 :type="showNewPassword ? 'text' : 'password'"
@@ -2149,7 +1781,6 @@ onBeforeUnmount(function () {
                                 placeholder="Nueva contraseña"
                                 class="password-field w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                             >
-
                             <input
                                 v-model="confirmNewPassword"
                                 :type="showConfirmPassword ? 'text' : 'password'"
@@ -2159,7 +1790,6 @@ onBeforeUnmount(function () {
                             >
                         </div>
                     </div>
-
                     <button
                         type="submit"
                         :disabled="profileSaving"
@@ -2171,8 +1801,7 @@ onBeforeUnmount(function () {
             </section>
         </div>
     </Teleport>
-
-    <!-- ================= CREAR / EDITAR PRODUCTO ================= -->
+    <!-- Crear / editar producto. -->
     <Teleport to="body">
         <div
             v-if="showProductEditor"
@@ -2180,19 +1809,15 @@ onBeforeUnmount(function () {
             @click.self="closeProductEditor"
         >
             <section class="max-h-[94vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[700px] sm:rounded-[28px]">
-
                 <div class="sticky top-0 z-20 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
-
                     <div>
                         <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
                             Mi catálogo
                         </p>
-
                         <h2 class="text-lg font-black text-gray-700">
                             {{ productEditorTitle }}
                         </h2>
                     </div>
-
                     <button
                         type="button"
                         class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
@@ -2201,22 +1826,18 @@ onBeforeUnmount(function () {
                         ×
                     </button>
                 </div>
-
                 <form
                     class="space-y-5 p-5 sm:p-7"
                     @submit.prevent="saveProduct"
                 >
-
                     <!-- Fotografías -->
                     <div>
                         <label class="block text-sm font-bold text-gray-600">
                             Fotografías
                         </label>
-
                         <p class="mt-1 text-xs text-gray-400">
                             La primera fotografía será la portada del producto.
                         </p>
-
                         <div
                             v-if="editorImages.length"
                             class="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4"
@@ -2231,16 +1852,13 @@ onBeforeUnmount(function () {
                                     alt="Producto"
                                     class="aspect-square w-full object-cover"
                                 >
-
                                 <span
                                     v-if="index === 0"
                                     class="absolute bottom-1 left-1 rounded-full bg-[#00B4D8] px-2 py-1 text-[9px] font-bold text-white"
                                 >
                                     Portada
                                 </span>
-
                                 <div class="absolute right-1 top-1 flex gap-1">
-
                                     <button
                                         v-if="index !== 0"
                                         type="button"
@@ -2250,7 +1868,6 @@ onBeforeUnmount(function () {
                                     >
                                         ★
                                     </button>
-
                                     <button
                                         type="button"
                                         title="Eliminar"
@@ -2262,10 +1879,8 @@ onBeforeUnmount(function () {
                                 </div>
                             </div>
                         </div>
-
                         <label class="mt-4 flex cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-[#90E0EF] bg-[#F7FCFD] px-4 py-5 text-sm font-bold text-[#0077B6] transition hover:bg-[#CAF0F8]">
                             Añadir fotografías
-
                             <input
                                 type="file"
                                 accept="image/*"
@@ -2275,13 +1890,11 @@ onBeforeUnmount(function () {
                             >
                         </label>
                     </div>
-
                     <!-- Nombre -->
                     <div>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
                             Nombre del producto
                         </label>
-
                         <input
                             v-model="productForm.name"
                             required
@@ -2290,14 +1903,11 @@ onBeforeUnmount(function () {
                             class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         >
                     </div>
-
                     <!-- Categorías múltiples -->
                     <div class="relative">
-
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
                             Categorías
                         </label>
-
                         <button
                             type="button"
                             class="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 text-left text-sm outline-none hover:border-[#00B4D8]"
@@ -2316,12 +1926,10 @@ onBeforeUnmount(function () {
                                         : "Seleccionar categorías"
                                 }}
                             </span>
-
                             <span class="text-gray-400">
                                 ▼
                             </span>
                         </button>
-
                         <div
                             v-if="showCategoryDropdown"
                             class="absolute left-0 right-0 z-30 mt-2 max-h-64 overflow-y-auto rounded-2xl border border-gray-100 bg-white p-2 shadow-xl"
@@ -2345,11 +1953,9 @@ onBeforeUnmount(function () {
                                         ✓
                                     </span>
                                 </span>
-
                                 {{ category }}
                             </button>
                         </div>
-
                         <!-- Categorías seleccionadas -->
                         <div
                             v-if="productForm.categories.length"
@@ -2366,15 +1972,12 @@ onBeforeUnmount(function () {
                             </button>
                         </div>
                     </div>
-
                     <!-- Precio y stock -->
                     <div class="grid grid-cols-2 gap-3">
-
                         <div>
                             <label class="mb-1.5 block text-sm font-bold text-gray-600">
                                 Precio
                             </label>
-
                             <input
                                 v-model.number="productForm.price"
                                 required
@@ -2384,12 +1987,10 @@ onBeforeUnmount(function () {
                                 class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                             >
                         </div>
-
                         <div>
                             <label class="mb-1.5 block text-sm font-bold text-gray-600">
                                 Stock
                             </label>
-
                             <input
                                 v-model.number="productForm.stock"
                                 required
@@ -2399,13 +2000,11 @@ onBeforeUnmount(function () {
                             >
                         </div>
                     </div>
-
                     <!-- Descripción -->
                     <div>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
                             Descripción
                         </label>
-
                         <textarea
                             v-model="productForm.description"
                             rows="4"
@@ -2413,7 +2012,6 @@ onBeforeUnmount(function () {
                             class="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         ></textarea>
                     </div>
-
                     <button
                         type="submit"
                         :disabled="productSaving"
@@ -2431,8 +2029,7 @@ onBeforeUnmount(function () {
             </section>
         </div>
     </Teleport>
-
-    <!-- ================= VISTA COMO CLIENTE ================= -->
+    <!-- Vista como cliente. -->
     <Teleport to="body">
         <div
             v-if="showProductPreview && previewProduct"
@@ -2440,37 +2037,30 @@ onBeforeUnmount(function () {
             @click.self="closeProductPreview"
         >
             <section class="max-h-[95vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[850px] sm:rounded-[28px]">
-
                 <!-- Cabecera -->
                 <div class="sticky top-0 z-20 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
-
                     <div class="flex min-w-0 items-center gap-3">
-
                         <img
                             v-if="entrepreneur.avatar"
                             :src="entrepreneur.avatar"
                             :alt="entrepreneur.businessName"
                             class="h-10 w-10 rounded-full object-cover"
                         >
-
                         <div
                             v-else
                             class="flex h-10 w-10 items-center justify-center rounded-full bg-[#CAF0F8] text-xs font-black text-[#0077B6]"
                         >
                             {{ entrepreneurInitials }}
                         </div>
-
                         <div class="min-w-0">
                             <p class="truncate text-sm font-black text-gray-700">
                                 {{ entrepreneur.businessName }}
                             </p>
-
                             <p class="text-xs text-gray-400">
                                 Vista del cliente
                             </p>
                         </div>
                     </div>
-
                     <button
                         type="button"
                         class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
@@ -2479,37 +2069,29 @@ onBeforeUnmount(function () {
                         ×
                     </button>
                 </div>
-
                 <div class="grid lg:grid-cols-2">
-
                     <!-- Imágenes -->
                     <div class="p-4 sm:p-6">
-
                         <div class="relative overflow-hidden rounded-[22px] bg-gray-100">
-
                             <img
                                 v-if="previewImage"
                                 :src="previewImage"
                                 :alt="previewProduct.name"
                                 class="aspect-square w-full object-cover"
                             >
-
                             <div
                                 v-else
                                 class="flex aspect-square items-center justify-center text-sm font-bold text-gray-400"
                             >
                                 Sin fotografía
                             </div>
-
                             <span
                                 v-if="previewImages.length"
                                 class="absolute right-3 top-3 rounded-full bg-black/55 px-3 py-1 text-xs font-bold text-white"
                             >
                                 {{ previewImageIndex + 1 }} / {{ previewImages.length }}
                             </span>
-
                             <template v-if="previewImages.length > 1">
-
                                 <button
                                     type="button"
                                     class="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl text-gray-600 shadow"
@@ -2517,7 +2099,6 @@ onBeforeUnmount(function () {
                                 >
                                     ‹
                                 </button>
-
                                 <button
                                     type="button"
                                     class="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl text-gray-600 shadow"
@@ -2527,7 +2108,6 @@ onBeforeUnmount(function () {
                                 </button>
                             </template>
                         </div>
-
                         <!-- Miniaturas -->
                         <div
                             v-if="previewImages.length > 1"
@@ -2553,10 +2133,8 @@ onBeforeUnmount(function () {
                             </button>
                         </div>
                     </div>
-
                     <!-- Información como la vería el cliente -->
                     <div class="flex flex-col p-5 sm:p-7 lg:justify-center">
-
                         <div class="flex flex-wrap gap-2">
                             <span
                                 v-for="category in previewProduct.categories"
@@ -2566,32 +2144,25 @@ onBeforeUnmount(function () {
                                 {{ category }}
                             </span>
                         </div>
-
                         <h2 class="mt-4 text-2xl font-black leading-tight text-gray-700 sm:text-3xl">
                             {{ previewProduct.name }}
                         </h2>
-
                         <p class="mt-3 text-3xl font-black text-[#4F7180]">
                             {{ formatPrice(previewProduct.price) }}
                         </p>
-
                         <span
                             class="mt-3 w-fit rounded-full px-3 py-1.5 text-xs font-bold"
                             :class="stockClasses(previewProduct.stock)"
                         >
                             {{ stockText(previewProduct.stock) }}
                         </span>
-
                         <div class="my-5 h-px bg-gray-100"></div>
-
                         <h3 class="text-sm font-black text-gray-700">
                             Descripción
                         </h3>
-
                         <p class="mt-2 whitespace-pre-line text-sm leading-6 text-gray-500">
                             {{ previewProduct.description || "Este producto no tiene una descripción." }}
                         </p>
-
                         <!-- Botón ilustrativo para mostrar cómo lo verá el cliente -->
                         <button
                             type="button"
@@ -2599,7 +2170,6 @@ onBeforeUnmount(function () {
                         >
                             Contactar al emprendimiento
                         </button>
-
                         <!-- Acción administrativa -->
                         <button
                             type="button"
@@ -2615,7 +2185,6 @@ onBeforeUnmount(function () {
     </Teleport>
 </div>
 </template>
-
 <style scoped>
 .password-field::-ms-reveal,
 .password-field::-ms-clear {
@@ -2623,7 +2192,6 @@ onBeforeUnmount(function () {
     width: 0;
     height: 0;
 }
-
 /* Evita que el texto largo desborde las tarjetas. */
 .line-clamp-2 {
     display: -webkit-box;

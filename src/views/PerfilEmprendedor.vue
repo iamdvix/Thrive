@@ -1,46 +1,28 @@
 <script setup>
+// Perfil público del emprendimiento; carga sus datos, productos, seguidores y detalle de publicaciones.
 import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
-
 const route = useRoute();
 const router = useRouter();
-
-// ===============================
-// ESTADO GENERAL
-// ===============================
-
+// Estados principales utilizados por el dashboard.
 const entrepreneur = ref(null);
 const products = ref([]);
 const loading = ref(true);
 const loadError = ref("");
-
-// ===============================
-// FOLLOW
-// ===============================
-
+// Controla el estado de seguimiento del emprendimiento.
 const isFollowing = ref(false);
 const followLoading = ref(false);
 const followerCount = ref(0);
-
-// ===============================
-// DETALLE DE PRODUCTO
-// ===============================
-
+// Sección dedicada a detalle de producto.
 const selectedProduct = ref(null);
 const selectedProductImageIndex = ref(0);
-
-// ===============================
-// COMPUTED
-// ===============================
-
+// Valores calculados automáticamente a partir del estado actual.
 const entrepreneurId = computed(function () {
     return String(route.params.id || "");
 });
-
 const entrepreneurInitials = computed(function () {
     const name = entrepreneur.value?.businessName || "Thrive";
-
     return name
         .trim()
         .split(/\s+/)
@@ -50,67 +32,51 @@ const entrepreneurInitials = computed(function () {
         })
         .join("");
 });
-
 const followerCountText = computed(function () {
     return followerCount.value === 1
         ? "1 seguidor"
         : `${followerCount.value} seguidores`;
 });
-
 const selectedProductImages = computed(function () {
     return selectedProduct.value?.images || [];
 });
-
 const selectedProductImage = computed(function () {
     if (!selectedProductImages.value.length) {
         return null;
     }
-
     return (
         selectedProductImages.value[
             selectedProductImageIndex.value
         ] || selectedProductImages.value[0]
     );
 });
-
-// ===============================
-// FUNCIONES GENERALES
-// ===============================
-
+// Funciones pequeñas reutilizadas en distintas partes de la vista.
 function formatPrice(price) {
     return new Intl.NumberFormat("en-US", {
         style: "currency",
         currency: "USD"
     }).format(Number(price) || 0);
 }
-
+// Regresa a la pantalla anterior sin alterar los datos del perfil.
 function goBack() {
     if (window.history.length > 1) {
         router.back();
         return;
     }
-
     router.push("/catalogo");
 }
-
-// ===============================
-// CARGAR PERFIL PÚBLICO
-// ===============================
-
+// Carga la información pública del emprendimiento.
 async function loadPublicProfile() {
     loading.value = true;
     loadError.value = "";
     entrepreneur.value = null;
     products.value = [];
-
     try {
         const id = entrepreneurId.value;
-
         if (!id) {
             loadError.value = "El enlace del emprendimiento no es válido.";
             return;
         }
-
         // El ID viene de route.params.id, no del usuario conectado.
         const { data: entrepreneurData, error: entrepreneurError } =
             await supabase
@@ -125,16 +91,13 @@ async function loadPublicProfile() {
                 `)
                 .eq("id", id)
                 .maybeSingle();
-
         if (entrepreneurError) {
             throw entrepreneurError;
         }
-
         if (!entrepreneurData) {
             loadError.value = "No pudimos encontrar este emprendimiento.";
             return;
         }
-
         entrepreneur.value = {
             id: entrepreneurData.id,
             businessName: entrepreneurData.business_name,
@@ -143,7 +106,6 @@ async function loadPublicProfile() {
             district: entrepreneurData.district || "",
             avatar: entrepreneurData.logo_url || ""
         };
-
         await Promise.all([
             loadProducts(id),
             loadFollowState(id),
@@ -157,11 +119,7 @@ async function loadPublicProfile() {
         loading.value = false;
     }
 }
-
-// ===============================
-// CARGAR PRODUCTOS
-// ===============================
-
+// Carga los productos publicados por el emprendimiento.
 async function loadProducts(id) {
     const { data: productRows, error: productError } = await supabase
         .from("products")
@@ -182,20 +140,16 @@ async function loadProducts(id) {
         .order("created_at", {
             ascending: false
         });
-
     if (productError) {
         throw productError;
     }
-
     if (!productRows?.length) {
         products.value = [];
         return;
     }
-
     const productIds = productRows.map(function (product) {
         return product.id;
     });
-
     const { data: imageRows, error: imageError } = await supabase
         .from("product_images")
         .select(`
@@ -208,11 +162,9 @@ async function loadProducts(id) {
         .order("sort_order", {
             ascending: true
         });
-
     if (imageError) {
         throw imageError;
     }
-
     products.value = productRows.map(function (product) {
         const images = (imageRows || [])
             .filter(function (image) {
@@ -224,7 +176,6 @@ async function loadProducts(id) {
             .map(function (image) {
                 return image.image_url;
             });
-
         return {
             id: product.id,
             entrepreneurId: product.entrepreneur_id,
@@ -239,41 +190,33 @@ async function loadProducts(id) {
         };
     });
 }
-
-// ===============================
-// FOLLOW
-// ===============================
-
+// Controla el estado de seguimiento del emprendimiento.
 async function loadFollowState(id) {
     try {
         const {
             data: { user },
             error: userError
         } = await supabase.auth.getUser();
-
         if (userError || !user) {
             isFollowing.value = false;
             return;
         }
-
         const { data, error } = await supabase
             .from("follows")
             .select("id")
             .eq("follower_id", user.id)
             .eq("entrepreneur_id", id)
             .maybeSingle();
-
         if (error) {
             throw error;
         }
-
         isFollowing.value = Boolean(data);
     } catch (error) {
         console.error("Error al cargar estado de follow:", error);
         isFollowing.value = false;
     }
 }
-
+// Carga la cantidad actual de seguidores del emprendimiento.
 async function loadFollowerCount(id) {
     try {
         const { data, error } = await supabase.rpc(
@@ -282,78 +225,63 @@ async function loadFollowerCount(id) {
                 p_entrepreneur_id: id
             }
         );
-
         if (error) {
             throw error;
         }
-
         followerCount.value = Number(data) || 0;
     } catch (error) {
         console.error("Error al cargar contador de seguidores:", error);
         followerCount.value = 0;
     }
 }
-
+// Permite seguir o dejar de seguir al emprendimiento.
 async function toggleFollow() {
     if (!entrepreneur.value || followLoading.value) return;
-
     followLoading.value = true;
-
     try {
         const {
             data: { user },
             error: userError
         } = await supabase.auth.getUser();
-
         if (userError || !user) {
             router.push("/auth");
             return;
         }
-
         const id = entrepreneur.value.id;
-
         if (user.id === id) {
             alert("No puedes seguir tu propio emprendimiento.");
             return;
         }
-
         if (isFollowing.value) {
             const { error } = await supabase
                 .from("follows")
                 .delete()
                 .eq("follower_id", user.id)
                 .eq("entrepreneur_id", id);
-
             if (error) {
                 throw error;
             }
-
             isFollowing.value = false;
             followerCount.value = Math.max(
                 0,
                 followerCount.value - 1
             );
-
             return;
         }
-
         const { error } = await supabase
             .from("follows")
             .insert({
                 follower_id: user.id,
                 entrepreneur_id: id
             });
-
         if (error) {
             if (error.code === "23505") {
                 isFollowing.value = true;
                 await loadFollowerCount(id);
                 return;
             }
-
             throw error;
         }
-
         isFollowing.value = true;
         followerCount.value += 1;
     } catch (error) {
@@ -363,34 +291,28 @@ async function toggleFollow() {
         followLoading.value = false;
     }
 }
-
-// ===============================
-// DETALLE DEL PRODUCTO
-// ===============================
-
+// Controla la información y navegación del detalle de producto.
 function openProductDetail(product) {
     selectedProduct.value = product;
     selectedProductImageIndex.value = 0;
     document.body.style.overflow = "hidden";
 }
-
+// Cierra el detalle del producto y restablece su estado.
 function closeProductDetail() {
     selectedProduct.value = null;
     selectedProductImageIndex.value = 0;
     document.body.style.overflow = "";
 }
-
+// Muestra la siguiente imagen disponible del producto.
 function nextProductImage() {
     if (selectedProductImages.value.length <= 1) return;
-
     selectedProductImageIndex.value =
         (selectedProductImageIndex.value + 1) %
         selectedProductImages.value.length;
 }
-
+// Muestra la imagen anterior del producto.
 function previousProductImage() {
     if (selectedProductImages.value.length <= 1) return;
-
     selectedProductImageIndex.value =
         (
             selectedProductImageIndex.value -
@@ -398,7 +320,7 @@ function previousProductImage() {
             selectedProductImages.value.length
         ) % selectedProductImages.value.length;
 }
-
+// Cierra la ventana activa cuando el usuario presiona Escape.
 function handleEscape(event) {
     if (
         event.key === "Escape" &&
@@ -407,16 +329,11 @@ function handleEscape(event) {
         closeProductDetail();
     }
 }
-
-// ===============================
-// CICLO DE VIDA
-// ===============================
-
+// Ejecuta y limpia procesos cuando la vista entra o sale de pantalla.
 onMounted(function () {
     loadPublicProfile();
     document.addEventListener("keydown", handleEscape);
 });
-
 watch(
     function () {
         return route.params.id;
@@ -425,16 +342,13 @@ watch(
         loadPublicProfile();
     }
 );
-
 onBeforeUnmount(function () {
     document.removeEventListener("keydown", handleEscape);
     document.body.style.overflow = "";
 });
 </script>
-
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-10 text-gray-700">
-
     <!-- Cabecera -->
     <header class="sticky top-0 z-40 bg-[#F8FBFC]">
         <div class="mx-auto max-w-[1450px] px-2 pt-2 sm:px-5 lg:px-8 lg:pt-4">
@@ -449,7 +363,6 @@ onBeforeUnmount(function () {
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6"></path>
                     </svg>
                 </button>
-
                 <div class="min-w-0 flex-1">
                     <p class="truncate text-sm font-bold text-white">
                         {{ entrepreneur?.businessName || "Perfil del emprendimiento" }}
@@ -458,7 +371,6 @@ onBeforeUnmount(function () {
             </div>
         </div>
     </header>
-
     <!-- Cargando -->
     <main
         v-if="loading"
@@ -469,7 +381,6 @@ onBeforeUnmount(function () {
             Cargando emprendimiento...
         </p>
     </main>
-
     <!-- Error -->
     <main
         v-else-if="loadError"
@@ -478,15 +389,12 @@ onBeforeUnmount(function () {
         <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100 font-black text-red-600">
             !
         </div>
-
         <h1 class="mt-4 text-xl font-black text-gray-700">
             No pudimos cargar el perfil
         </h1>
-
         <p class="mt-2 text-sm text-gray-400">
             {{ loadError }}
         </p>
-
         <button
             type="button"
             class="mt-5 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white"
@@ -495,7 +403,6 @@ onBeforeUnmount(function () {
             Intentar nuevamente
         </button>
     </main>
-
     <!-- Contenido -->
     <main
         v-else-if="entrepreneur"
@@ -510,36 +417,29 @@ onBeforeUnmount(function () {
                     :alt="entrepreneur.businessName"
                     class="h-24 w-24 rounded-full border-4 border-[#CAF0F8] object-cover sm:h-28 sm:w-28"
                 >
-
                 <div
                     v-else
                     class="flex h-24 w-24 items-center justify-center rounded-full border-4 border-[#CAF0F8] bg-[#EAF9FC] text-2xl font-black text-[#0077B6] sm:h-28 sm:w-28"
                 >
                     {{ entrepreneurInitials }}
                 </div>
-
                 <div class="min-w-0 flex-1">
                     <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
                         Emprendimiento
                     </p>
-
                     <h1 class="mt-1 text-2xl font-black text-gray-700 sm:text-3xl">
                         {{ entrepreneur.businessName }}
                     </h1>
-
                     <p class="mt-1 text-sm text-gray-400">
                         {{ entrepreneur.district }}, {{ entrepreneur.department }}
                     </p>
-
                     <p class="mt-3 max-w-2xl text-sm leading-6 text-gray-500">
                         {{ entrepreneur.description || "Este emprendimiento aún no tiene una descripción." }}
                     </p>
-
                     <div class="mt-4 flex flex-wrap items-center justify-center gap-3 sm:justify-start">
                         <span class="text-sm font-bold text-gray-600">
                             {{ followerCountText }}
                         </span>
-
                         <button
                             type="button"
                             :disabled="followLoading"
@@ -563,7 +463,6 @@ onBeforeUnmount(function () {
                 </div>
             </div>
         </section>
-
         <!-- Productos -->
         <section class="mt-7">
             <div class="mb-5">
@@ -574,7 +473,6 @@ onBeforeUnmount(function () {
                     Productos de {{ entrepreneur.businessName }}
                 </h2>
             </div>
-
             <div
                 v-if="products.length"
                 class="grid grid-cols-2 gap-x-2 gap-y-5 sm:gap-4 md:grid-cols-3 xl:grid-cols-4"
@@ -592,7 +490,6 @@ onBeforeUnmount(function () {
                             :alt="product.name"
                             class="aspect-square w-full object-cover"
                         >
-
                         <div
                             v-else
                             class="flex aspect-square items-center justify-center text-xs font-bold text-gray-400"
@@ -600,7 +497,6 @@ onBeforeUnmount(function () {
                             Sin imagen
                         </div>
                     </div>
-
                     <div class="pt-1.5 sm:px-1 sm:pt-3">
                         <div class="mb-1 flex flex-wrap gap-1">
                             <span
@@ -611,18 +507,15 @@ onBeforeUnmount(function () {
                                 {{ category }}
                             </span>
                         </div>
-
                         <h3 class="min-h-[30px] text-[11px] font-medium leading-tight text-gray-500 sm:min-h-[40px] sm:text-sm">
                             {{ product.name }}
                         </h3>
-
                         <p class="mt-1 text-base font-extrabold text-[#4F7180] sm:text-xl">
                             {{ formatPrice(product.price) }}
                         </p>
                     </div>
                 </article>
             </div>
-
             <div
                 v-else
                 class="rounded-[24px] border border-dashed border-[#90E0EF] bg-white px-5 py-16 text-center"
@@ -633,7 +526,6 @@ onBeforeUnmount(function () {
             </div>
         </section>
     </main>
-
     <!-- Detalle del producto -->
     <Teleport to="body">
         <div
@@ -651,7 +543,6 @@ onBeforeUnmount(function () {
                             {{ selectedProduct.name }}
                         </h2>
                     </div>
-
                     <button
                         type="button"
                         class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
@@ -660,7 +551,6 @@ onBeforeUnmount(function () {
                         ×
                     </button>
                 </div>
-
                 <div class="grid md:grid-cols-2">
                     <div class="bg-gray-50 p-4 sm:p-6">
                         <div class="relative overflow-hidden rounded-2xl bg-gray-100">
@@ -670,14 +560,12 @@ onBeforeUnmount(function () {
                                 :alt="selectedProduct.name"
                                 class="aspect-square w-full object-cover"
                             >
-
                             <div
                                 v-else
                                 class="flex aspect-square items-center justify-center text-sm font-bold text-gray-400"
                             >
                                 Sin fotografía
                             </div>
-
                             <template v-if="selectedProductImages.length > 1">
                                 <button
                                     type="button"
@@ -686,7 +574,6 @@ onBeforeUnmount(function () {
                                 >
                                     ‹
                                 </button>
-
                                 <button
                                     type="button"
                                     class="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl text-gray-600 shadow"
@@ -696,7 +583,6 @@ onBeforeUnmount(function () {
                                 </button>
                             </template>
                         </div>
-
                         <div
                             v-if="selectedProductImages.length > 1"
                             class="mt-3 flex gap-2 overflow-x-auto"
@@ -721,7 +607,6 @@ onBeforeUnmount(function () {
                             </button>
                         </div>
                     </div>
-
                     <div class="p-5 sm:p-7">
                         <div class="flex flex-wrap gap-2">
                             <span
@@ -732,15 +617,12 @@ onBeforeUnmount(function () {
                                 {{ category }}
                             </span>
                         </div>
-
                         <h2 class="mt-4 text-2xl font-black text-gray-700">
                             {{ selectedProduct.name }}
                         </h2>
-
                         <p class="mt-4 text-3xl font-extrabold text-[#4F7180]">
                             {{ formatPrice(selectedProduct.price) }}
                         </p>
-
                         <p class="mt-6 whitespace-pre-line text-sm leading-relaxed text-gray-500">
                             {{ selectedProduct.description || "Este producto no tiene una descripción." }}
                         </p>
