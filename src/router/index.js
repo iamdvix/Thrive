@@ -11,6 +11,7 @@ import Catalogo from "../views/Catalogo.vue";
 import DashboardEmprendedor from "../views/DashboardEmprendedor.vue";
 import PerfilEmprendedor from "../views/PerfilEmprendedor.vue";
 import DetalleProducto from "../views/DetalleProducto.vue";
+import Calculadora from "../views/Calculadora.vue";
 
 const routes = [
     // Página principal.
@@ -62,6 +63,11 @@ const routes = [
     {
         path: "/:pathMatch(.*)*",
         redirect: "/"
+    },
+    {
+    path: "/calculadora",
+    name: "Calculadora",
+    component: Calculadora
     }
 ];
 

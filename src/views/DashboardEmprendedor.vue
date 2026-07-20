@@ -145,8 +145,13 @@ function stockText(stock) {
     if (amount === 1) return "1 unidad";
     return `${amount} unidades`;
 }
-// Cambia la sección visible del dashboard.
+// Cambia la sección visible del dashboard o abre la calculadora en su propia página.
 function changeSection(section) {
+    // La calculadora tiene su propia vista para aprovechar mejor el espacio.
+    if (section === "calculadora") {
+        router.push("/calculadora");
+        return;
+    }
     activeSection.value = section;
     window.scrollTo({
         top: 0,
@@ -1139,6 +1144,12 @@ function handleEscape(event) {
     }
 }
 onMounted(function () {
+    // Si regresamos desde la calculadora, abrimos directamente la sección elegida allí.
+    const pendingSection = sessionStorage.getItem("thriveDashboardSection");
+    if (["inicio", "inventario", "novedades"].includes(pendingSection)) {
+        activeSection.value = pendingSection;
+        sessionStorage.removeItem("thriveDashboardSection");
+    }
     loadDashboard();
     document.addEventListener(
         "keydown",
@@ -1155,40 +1166,31 @@ onBeforeUnmount(function () {
 </script>
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-0">
-    <!-- Cabecera. -->
+    <!-- Cabecera. En móvil conserva la vista original y en laptop funciona como navegación principal. -->
     <header class="sticky top-0 z-40 bg-[#F8FBFC]">
         <div class="mx-auto max-w-[1450px] px-2 pt-2 sm:px-5 lg:px-8 lg:pt-4">
-            <!-- Isla principal -->
-            <div class="flex items-center gap-1 rounded-[24px] bg-[#00B4D8] p-1.5 shadow-sm sm:gap-2 sm:p-2">
+            <!-- Cabecera móvil: mantiene el nombre y los accesos rápidos de la aplicación. -->
+            <div class="flex items-center gap-1 rounded-[24px] bg-[#00B4D8] p-1.5 shadow-sm sm:gap-2 sm:p-2 lg:hidden">
                 <div class="flex min-w-0 flex-1 items-center px-3">
                     <span class="truncate text-sm font-bold text-white sm:text-base">
                         {{ entrepreneur?.businessName || "Thrive" }}
                     </span>
                 </div>
-                <!-- Mensajes -->
-                <button
-                    type="button"
-                    aria-label="Mensajes"
-                    class="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/20"
-                >
+                <button type="button" aria-label="Mensajes" class="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/20">
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                         <path stroke-linejoin="round" d="M4 5h16v12H8l-4 3V5z"></path>
                         <path stroke-linecap="round" d="M8 9h8M8 13h5"></path>
                     </svg>
                 </button>
-                <!-- Notificaciones -->
-                <button
-                    type="button"
-                    aria-label="Notificaciones"
-                    class="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/20"
-                >
+                <button type="button" aria-label="Notificaciones" class="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/20">
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                         <path stroke-linecap="round" d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"></path>
                     </svg>
                 </button>
             </div>
-            <!-- Menú para computadora -->
-            <nav class="hidden items-center gap-2 py-3 lg:flex">
+
+            <!-- Navbar principal para laptop. La antigua isla azul ahora sí se utiliza para navegar. -->
+            <nav class="hidden items-center justify-center gap-2 rounded-[24px] bg-[#00B4D8] p-2 shadow-sm lg:flex">
                 <button
                     v-for="item in [
                         ['inicio', 'Inicio'],
@@ -1198,12 +1200,8 @@ onBeforeUnmount(function () {
                     ]"
                     :key="item[0]"
                     type="button"
-                    class="rounded-full px-4 py-2 text-sm font-bold transition"
-                    :class="
-                        activeSection === item[0]
-                            ? 'bg-[#CAF0F8] text-[#0077B6]'
-                            : 'text-gray-400 hover:bg-white hover:text-[#0077B6]'
-                    "
+                    class="rounded-full px-6 py-2.5 text-sm font-bold transition"
+                    :class="activeSection === item[0] ? 'bg-white text-[#0077B6] shadow-sm' : 'text-white/85 hover:bg-white/15 hover:text-white'"
                     @click="changeSection(item[0])"
                 >
                     {{ item[1] }}
