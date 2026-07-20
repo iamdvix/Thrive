@@ -616,15 +616,14 @@ async function deleteMyReview(review = myReview.value) {
 
     try {
         /*
-            Eliminamos mediante una función segura de Supabase.
-            Esto evita que una política RLS deje la reseña visible
-            solo de forma local mientras la fila sigue en la base.
+            Eliminamos usando el producto actual y el usuario autenticado.
+            Así no dependemos del ID que devuelve la lista de reseñas.
         */
         const { data, error } = await supabase.rpc(
-            "delete_my_product_review",
+            "delete_my_product_review_by_product",
             {
-                target_review_id:
-                    review.id
+                target_product_id:
+                    productId.value
             }
         );
 
@@ -632,11 +631,19 @@ async function deleteMyReview(review = myReview.value) {
             throw error;
         }
 
-        if (!data) {
+        if (data !== true) {
             throw new Error(
-                "Supabase no confirmó la eliminación de la reseña."
+                "No se encontró una reseña propia para eliminar."
             );
         }
+
+        // Quitamos inmediatamente la reseña propia de la pantalla.
+        reviews.value =
+            reviews.value.filter(
+                function (item) {
+                    return item.userId !== currentUserId.value;
+                }
+            );
 
         reviewForm.value = {
             rating: 5,
@@ -646,7 +653,7 @@ async function deleteMyReview(review = myReview.value) {
         editingReviewId.value = "";
         openReviewMenuId.value = "";
 
-        // Recargamos desde la base para confirmar que ya no existe.
+        // Confirmamos el estado real con Supabase.
         await loadReviews();
 
         alert("Reseña eliminada correctamente.");
