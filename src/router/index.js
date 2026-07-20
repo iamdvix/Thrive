@@ -10,7 +10,8 @@ import DashboardEmprendedor from "../views/DashboardEmprendedor.vue";
 
 // Cada ruta conecta una dirección con su respectiva vista.
 const router = createRouter({
-    history: createWebHistory(),
+    // Importante para que Vue Router funcione correctamente dentro de /Thrive/.
+    history: createWebHistory(import.meta.env.BASE_URL),
     routes: [
         {
             path: "/",
@@ -37,11 +38,6 @@ const router = createRouter({
             path: "/dashboard-emprendedor",
             name: "DashboardEmprendedor",
             component: DashboardEmprendedor
-        },
-        {
-            path: "/emprendedor/:id",
-            name: "PerfilEmprendedor",
-            component: PerfilEmprendedor
         }
     ]
 });
