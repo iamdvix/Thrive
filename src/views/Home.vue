@@ -474,13 +474,13 @@ onBeforeUnmount(function () {
                 <!-- Tarjeta principal sobre la galería -->
                 <div class="pointer-events-none relative z-30 mx-auto flex min-h-[calc(100vh-76px)] w-full max-w-[1500px] items-center px-8 lg:px-12">
 
-                    <div class="pointer-events-auto w-full max-w-[580px] rounded-[32px] border border-white/20 bg-black/60 p-9 shadow-[0_30px_80px_rgba(0,0,0,0.35)] backdrop-blur-md lg:p-11">
+                    <div class="pointer-events-auto w-full max-w-[640px] rounded-[32px] border border-white/20 bg-black/60 p-9 shadow-[0_30px_80px_rgba(0,0,0,0.35)] backdrop-blur-md lg:p-11">
 
                         <p class="text-xs font-bold uppercase tracking-[0.18em] text-[#90E0EF]">
                             Comunidad emprendedora
                         </p>
 
-                        <h1 class="mt-5 text-5xl font-black leading-[1.02] tracking-tight text-white lg:text-6xl">
+                        <h1 class="mt-5 max-w-[560px] text-5xl font-black leading-[1.05] tracking-tight text-white lg:text-[56px]">
                             Haz crecer tu
                             <span class="text-[#90E0EF]">
                                 emprendimiento.
