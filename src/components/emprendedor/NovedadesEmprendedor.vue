@@ -1,5 +1,5 @@
 <script setup>
-// Muestra a los emprendedores las publicaciones creadas por las instituciones.
+// Muestra al emprendedor las novedades publicadas por instituciones.
 import {
     ref,
     computed,
@@ -7,6 +7,7 @@ import {
     onBeforeUnmount
 } from "vue";
 import { supabase } from "../../lib/supabaseClient";
+import NovedadDetalleModal from "../compartidos/NovedadDetalleModal.vue";
 
 const posts = ref([]);
 const loading = ref(true);
@@ -27,9 +28,10 @@ const postTypes = [
 ];
 
 const filteredPosts = computed(function () {
-    const search = searchText.value
-        .trim()
-        .toLowerCase();
+    const search =
+        searchText.value
+            .trim()
+            .toLowerCase();
 
     return posts.value.filter(function (post) {
         const matchesType =
@@ -48,7 +50,10 @@ const filteredPosts = computed(function () {
                 .toLowerCase()
                 .includes(search);
 
-        return matchesType && matchesSearch;
+        return (
+            matchesType &&
+            matchesSearch
+        );
     });
 });
 
@@ -56,30 +61,57 @@ function typeLabel(type) {
     return (
         postTypes.find(function (item) {
             return item[0] === type;
-        })?.[1] || "Publicación"
+        })?.[1] ||
+        "Publicación"
     );
 }
 
-function formatDate(date) {
-    if (!date) return "Sin fecha";
-
-    return new Intl.DateTimeFormat("es-SV", {
-        day: "numeric",
-        month: "short",
-        year: "numeric"
-    }).format(new Date(date));
+function isInformativeType(type) {
+    return [
+        "noticia",
+        "anuncio"
+    ].includes(type);
 }
 
-function formatDateTime(date) {
-    if (!date) return "Sin fecha";
+function formatDate(date) {
+    if (!date) return "";
 
-    return new Intl.DateTimeFormat("es-SV", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit"
-    }).format(new Date(date));
+    return new Intl.DateTimeFormat(
+        "es-SV",
+        {
+            day: "numeric",
+            month: "short",
+            year: "numeric"
+        }
+    ).format(
+        new Date(date)
+    );
+}
+
+function cardDate(post) {
+    if (
+        isInformativeType(
+            post.postType
+        )
+    ) {
+        return "";
+    }
+
+    if (post.eventDate) {
+        return formatDate(
+            post.eventDate
+        );
+    }
+
+    if (post.deadline) {
+        return `Hasta ${formatDate(
+            post.deadline
+        )}`;
+    }
+
+    return formatDate(
+        post.publishedAt
+    );
 }
 
 async function loadPosts() {
@@ -87,7 +119,10 @@ async function loadPosts() {
     loadError.value = "";
 
     try {
-        const { data: postRows, error: postError } = await supabase
+        const {
+            data: postRows,
+            error: postError
+        } = await supabase
             .from("institution_posts")
             .select(`
                 id,
@@ -100,6 +135,9 @@ async function loadPosts() {
                 event_date,
                 event_end_date,
                 deadline,
+                requires_registration,
+                available_spots,
+                contact_phone,
                 published_at,
                 created_at
             `)
@@ -109,18 +147,22 @@ async function loadPosts() {
                 nullsFirst: false
             });
 
-        if (postError) throw postError;
+        if (postError) {
+            throw postError;
+        }
 
-        const rows = postRows || [];
+        const rows =
+            postRows || [];
 
         if (!rows.length) {
             posts.value = [];
             return;
         }
 
-        const postIds = rows.map(function (post) {
-            return post.id;
-        });
+        const postIds =
+            rows.map(function (post) {
+                return post.id;
+            });
 
         const institutionIds = [
             ...new Set(
@@ -130,7 +172,10 @@ async function loadPosts() {
             )
         ];
 
-        const [imageResponse, institutionResponse] = await Promise.all([
+        const [
+            imageResponse,
+            institutionResponse
+        ] = await Promise.all([
             supabase
                 .from("institution_post_images")
                 .select(`
@@ -161,54 +206,96 @@ async function loadPosts() {
             throw institutionResponse.error;
         }
 
-        const imageRows = imageResponse.data || [];
-        const institutionRows = institutionResponse.data || [];
+        const imageRows =
+            imageResponse.data || [];
 
-        posts.value = rows.map(function (post) {
-            const institution = institutionRows.find(
-                function (item) {
-                    return item.id === post.institution_id;
-                }
-            );
+        const institutionRows =
+            institutionResponse.data || [];
 
-            const images = imageRows
-                .filter(function (image) {
-                    return image.post_id === post.id;
-                })
-                .map(function (image) {
-                    return {
-                        id: image.id,
-                        imageUrl: image.image_url
-                    };
-                });
+        posts.value =
+            rows.map(function (post) {
+                const institution =
+                    institutionRows.find(
+                        function (item) {
+                            return (
+                                item.id ===
+                                post.institution_id
+                            );
+                        }
+                    );
 
-            return {
-                id: post.id,
-                institutionId: post.institution_id,
-                institutionName:
-                    institution?.institution_name ||
-                    "Institución Thrive",
-                institutionLogo:
-                    institution?.logo_url || "",
-                title: post.title,
-                description: post.description,
-                postType: post.post_type,
-                location: post.location || "",
-                externalUrl: post.external_url || "",
-                eventDate: post.event_date,
-                eventEndDate: post.event_end_date,
-                deadline: post.deadline,
-                publishedAt:
-                    post.published_at || post.created_at,
-                images,
-                cover: images[0]?.imageUrl || ""
-            };
-        });
+                const images =
+                    imageRows
+                        .filter(
+                            function (image) {
+                                return (
+                                    image.post_id ===
+                                    post.id
+                                );
+                            }
+                        )
+                        .map(
+                            function (image) {
+                                return {
+                                    id:
+                                        image.id,
+                                    imageUrl:
+                                        image.image_url
+                                };
+                            }
+                        );
+
+                return {
+                    id:
+                        post.id,
+                    institutionId:
+                        post.institution_id,
+                    institutionName:
+                        institution?.institution_name ||
+                        "Institución Thrive",
+                    institutionLogo:
+                        institution?.logo_url ||
+                        "",
+                    title:
+                        post.title,
+                    description:
+                        post.description,
+                    postType:
+                        post.post_type,
+                    location:
+                        post.location ||
+                        "",
+                    externalUrl:
+                        post.external_url ||
+                        "",
+                    eventDate:
+                        post.event_date,
+                    eventEndDate:
+                        post.event_end_date,
+                    deadline:
+                        post.deadline,
+                    requiresRegistration:
+                        post.requires_registration,
+                    availableSpots:
+                        post.available_spots,
+                    contactPhone:
+                        post.contact_phone ||
+                        "",
+                    publishedAt:
+                        post.published_at ||
+                        post.created_at,
+                    images,
+                    cover:
+                        images[0]?.imageUrl ||
+                        ""
+                };
+            });
     } catch (error) {
         console.error(
             "Error al cargar novedades:",
             error
         );
+
         loadError.value =
             "No fue posible cargar las novedades institucionales.";
     } finally {
@@ -219,7 +306,8 @@ async function loadPosts() {
 function openDetail(post) {
     selectedPost.value = post;
     showDetail.value = true;
-    document.body.style.overflow = "hidden";
+    document.body.style.overflow =
+        "hidden";
 }
 
 function closeDetail() {
@@ -239,6 +327,7 @@ function handleEscape(event) {
 
 onMounted(function () {
     loadPosts();
+
     document.addEventListener(
         "keydown",
         handleEscape
@@ -250,6 +339,7 @@ onBeforeUnmount(function () {
         "keydown",
         handleEscape
     );
+
     document.body.style.overflow = "";
 });
 </script>
@@ -264,16 +354,18 @@ onBeforeUnmount(function () {
             Novedades
         </h1>
         <p class="mt-1 text-sm text-gray-400">
-            Talleres, eventos y oportunidades publicados por instituciones.
+            Talleres, eventos, convocatorias y oportunidades de instituciones.
         </p>
     </div>
 
+    <!-- Buscador y filtros. -->
     <section class="mb-6 rounded-[24px] bg-white p-3 shadow-sm sm:p-4">
         <div class="flex items-center gap-3 rounded-xl bg-[#F8FBFC] px-4 py-3">
             <svg class="h-5 w-5 shrink-0 text-gray-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                 <circle cx="11" cy="11" r="7"></circle>
                 <path stroke-linecap="round" d="M20 20l-3.5-3.5"></path>
             </svg>
+
             <input
                 v-model="searchText"
                 type="search"
@@ -288,7 +380,7 @@ onBeforeUnmount(function () {
                 :key="type[0]"
                 type="button"
                 class="shrink-0 rounded-full px-4 py-2 text-xs font-bold transition"
-                :class="selectedType === type[0] ? 'bg-[#00B4D8] text-white' : 'bg-[#CAF0F8] text-[#0077B6]'"
+                :class="selectedType === type[0] ? 'bg-[#00B4D8] text-white shadow-sm' : 'bg-[#CAF0F8] text-[#0077B6]'"
                 @click="selectedType = type[0]"
             >
                 {{ type[1] }}
@@ -313,6 +405,7 @@ onBeforeUnmount(function () {
         <p class="font-black text-gray-700">
             {{ loadError }}
         </p>
+
         <button
             type="button"
             class="mt-4 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white"
@@ -322,64 +415,95 @@ onBeforeUnmount(function () {
         </button>
     </div>
 
+    <!-- Tarjetas más llamativas, pero conservando el estilo del catálogo. -->
     <div
         v-else-if="filteredPosts.length"
-        class="grid grid-cols-2 gap-x-2 gap-y-5 sm:gap-4 md:grid-cols-3 xl:grid-cols-4"
+        class="grid grid-cols-2 gap-x-2 gap-y-6 sm:gap-4 md:grid-cols-3 xl:grid-cols-4"
     >
         <article
             v-for="post in filteredPosts"
             :key="post.id"
-            class="min-w-0 overflow-hidden bg-transparent"
+            class="group min-w-0 overflow-hidden"
         >
             <button
                 type="button"
-                class="block w-full overflow-hidden rounded-xl bg-gray-100 text-left sm:rounded-2xl"
+                class="relative block w-full overflow-hidden rounded-2xl bg-[#EAF9FC] text-left shadow-sm"
                 @click="openDetail(post)"
             >
                 <img
                     v-if="post.cover"
                     :src="post.cover"
                     :alt="post.title"
-                    class="aspect-square w-full object-cover"
+                    class="aspect-square w-full object-cover transition duration-300 group-hover:scale-[1.02]"
                 >
+
                 <div
                     v-else
-                    class="flex aspect-square items-center justify-center bg-[#EAF9FC] text-xs font-bold text-[#0077B6]"
+                    class="flex aspect-square items-center justify-center bg-gradient-to-br from-[#CAF0F8] to-[#EAF9FC] text-xs font-black text-[#0077B6]"
                 >
                     {{ typeLabel(post.postType) }}
                 </div>
+
+                <span class="absolute left-2 top-2 rounded-full bg-white/90 px-2.5 py-1 text-[9px] font-black uppercase text-[#0077B6] shadow-sm backdrop-blur">
+                    {{ typeLabel(post.postType) }}
+                </span>
+
+                <span
+                    v-if="post.images.length > 1"
+                    class="absolute bottom-2 right-2 rounded-full bg-black/55 px-2.5 py-1 text-[9px] font-bold text-white"
+                >
+                    {{ post.images.length }} imágenes
+                </span>
+
+                <span
+                    v-if="post.requiresRegistration && post.availableSpots !== null"
+                    class="absolute right-2 top-2 rounded-full px-2.5 py-1 text-[9px] font-black shadow-sm"
+                    :class="Number(post.availableSpots) > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'"
+                >
+                    {{ Number(post.availableSpots) > 0 ? `${post.availableSpots} cupos` : "Lleno" }}
+                </span>
             </button>
 
-            <div class="pt-2 sm:px-1 sm:pt-3">
+            <div class="pt-3 sm:px-1">
                 <div class="flex items-center gap-2">
                     <img
                         v-if="post.institutionLogo"
                         :src="post.institutionLogo"
                         :alt="post.institutionName"
-                        class="h-6 w-6 rounded-full object-cover"
+                        class="h-7 w-7 rounded-full border border-[#CAF0F8] object-cover"
                     >
+
                     <div
                         v-else
-                        class="flex h-6 w-6 items-center justify-center rounded-full bg-[#CAF0F8] text-[9px] font-black text-[#0077B6]"
+                        class="flex h-7 w-7 items-center justify-center rounded-full bg-[#CAF0F8] text-[9px] font-black text-[#0077B6]"
                     >
                         {{ post.institutionName.charAt(0).toUpperCase() }}
                     </div>
+
                     <p class="truncate text-[10px] font-bold text-gray-400 sm:text-xs">
                         {{ post.institutionName }}
                     </p>
                 </div>
 
-                <p class="mt-2 text-[9px] font-bold uppercase text-[#00B4D8]">
-                    {{ typeLabel(post.postType) }}
-                </p>
-
-                <h2 class="mt-1 line-clamp-2 min-h-[34px] text-xs font-bold leading-tight text-gray-600 sm:min-h-[40px] sm:text-sm">
+                <h2 class="mt-2 line-clamp-2 min-h-[34px] text-xs font-black leading-tight text-gray-600 sm:min-h-[40px] sm:text-sm">
                     {{ post.title }}
                 </h2>
 
-                <p class="mt-2 text-[10px] text-gray-400 sm:text-xs">
-                    {{ formatDate(post.publishedAt) }}
+                <!-- Noticias y anuncios no muestran fechas. -->
+                <p
+                    v-if="cardDate(post)"
+                    class="mt-2 text-[10px] font-semibold text-gray-400 sm:text-xs"
+                >
+                    {{ cardDate(post) }}
                 </p>
+
+                <button
+                    type="button"
+                    class="mt-3 w-full rounded-xl bg-[#CAF0F8] px-3 py-2.5 text-[10px] font-black text-[#0077B6] transition hover:bg-[#B8EAF4] sm:text-xs"
+                    @click="openDetail(post)"
+                >
+                    Ver información
+                </button>
             </div>
         </article>
     </div>
@@ -394,134 +518,20 @@ onBeforeUnmount(function () {
                 <path stroke-linecap="round" d="M8 9h8M8 13h8M8 17h5"></path>
             </svg>
         </div>
+
         <h3 class="mt-4 font-black text-gray-700">
             No encontramos novedades
         </h3>
+
         <p class="mt-1 text-sm text-gray-400">
             Las publicaciones institucionales aparecerán aquí.
         </p>
     </div>
 
-    <Teleport to="body">
-        <div
-            v-if="showDetail && selectedPost"
-            class="fixed inset-0 z-[110] flex items-end justify-center bg-black/50 sm:items-center sm:p-5"
-            @click.self="closeDetail"
-        >
-            <section class="max-h-[94vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[760px] sm:rounded-[28px]">
-                <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
-                    <div class="min-w-0">
-                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                            {{ typeLabel(selectedPost.postType) }}
-                        </p>
-                        <h2 class="truncate text-lg font-black text-gray-700">
-                            {{ selectedPost.title }}
-                        </h2>
-                    </div>
-                    <button
-                        type="button"
-                        class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
-                        @click="closeDetail"
-                    >
-                        ×
-                    </button>
-                </div>
-
-                <div
-                    v-if="selectedPost.images.length"
-                    class="grid grid-cols-2 gap-2 p-3 sm:p-5"
-                >
-                    <img
-                        v-for="image in selectedPost.images"
-                        :key="image.id"
-                        :src="image.imageUrl"
-                        :alt="selectedPost.title"
-                        class="aspect-square w-full rounded-2xl object-cover"
-                    >
-                </div>
-
-                <div class="p-5 sm:p-7">
-                    <div class="flex items-center gap-3">
-                        <img
-                            v-if="selectedPost.institutionLogo"
-                            :src="selectedPost.institutionLogo"
-                            :alt="selectedPost.institutionName"
-                            class="h-11 w-11 rounded-full object-cover"
-                        >
-                        <div
-                            v-else
-                            class="flex h-11 w-11 items-center justify-center rounded-full bg-[#CAF0F8] font-black text-[#0077B6]"
-                        >
-                            {{ selectedPost.institutionName.charAt(0).toUpperCase() }}
-                        </div>
-                        <div>
-                            <p class="font-black text-gray-700">
-                                {{ selectedPost.institutionName }}
-                            </p>
-                            <p class="text-xs text-gray-400">
-                                Publicado el {{ formatDate(selectedPost.publishedAt) }}
-                            </p>
-                        </div>
-                    </div>
-
-                    <h2 class="mt-5 text-2xl font-black text-gray-700 sm:text-3xl">
-                        {{ selectedPost.title }}
-                    </h2>
-
-                    <p class="mt-4 whitespace-pre-line text-sm leading-7 text-gray-500">
-                        {{ selectedPost.description }}
-                    </p>
-
-                    <div class="mt-6 grid gap-3 sm:grid-cols-2">
-                        <div
-                            v-if="selectedPost.eventDate"
-                            class="rounded-2xl bg-[#F8FBFC] p-4"
-                        >
-                            <p class="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                                Fecha
-                            </p>
-                            <p class="mt-1 text-sm font-bold text-gray-600">
-                                {{ formatDateTime(selectedPost.eventDate) }}
-                            </p>
-                        </div>
-
-                        <div
-                            v-if="selectedPost.location"
-                            class="rounded-2xl bg-[#F8FBFC] p-4"
-                        >
-                            <p class="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                                Ubicación
-                            </p>
-                            <p class="mt-1 text-sm font-bold text-gray-600">
-                                {{ selectedPost.location }}
-                            </p>
-                        </div>
-
-                        <div
-                            v-if="selectedPost.deadline"
-                            class="rounded-2xl bg-[#F8FBFC] p-4"
-                        >
-                            <p class="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                                Fecha límite
-                            </p>
-                            <p class="mt-1 text-sm font-bold text-gray-600">
-                                {{ formatDateTime(selectedPost.deadline) }}
-                            </p>
-                        </div>
-
-                        <a
-                            v-if="selectedPost.externalUrl"
-                            :href="selectedPost.externalUrl"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="flex items-center justify-center rounded-2xl bg-[#00B4D8] p-4 text-sm font-bold text-white"
-                        >
-                            Abrir enlace
-                        </a>
-                    </div>
-                </div>
-            </section>
-        </div>
-    </Teleport>
+    <NovedadDetalleModal
+        :show="showDetail"
+        :post="selectedPost"
+        @close="closeDetail"
+    />
 </section>
 </template>

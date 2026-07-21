@@ -1,5 +1,5 @@
 <script setup>
-// Gestión completa de publicaciones institucionales.
+// Crea, edita y previsualiza publicaciones institucionales.
 import {
     ref,
     computed,
@@ -11,6 +11,7 @@ import {
     uploadInstitutionPostImages,
     deleteInstitutionImages
 } from "../../lib/institutionStorage";
+import NovedadDetalleModal from "../compartidos/NovedadDetalleModal.vue";
 
 const props = defineProps({
     institution: {
@@ -39,6 +40,9 @@ const form = ref({
     eventDate: "",
     eventEndDate: "",
     deadline: "",
+    requiresRegistration: false,
+    availableSpots: "",
+    contactPhone: "",
     status: "draft"
 });
 
@@ -57,17 +61,38 @@ const editorTitle = computed(function () {
         : "Editar publicación";
 });
 
+const previewPost = computed(function () {
+    if (!selectedPost.value) {
+        return null;
+    }
+
+    return {
+        ...selectedPost.value,
+        institutionName:
+            props.institution.institutionName,
+        institutionLogo:
+            props.institution.logoUrl
+    };
+});
+
 function typeLabel(type) {
     return (
         postTypes.find(function (item) {
             return item[0] === type;
-        })?.[1] || "Publicación"
+        })?.[1] ||
+        "Publicación"
     );
 }
 
 function statusLabel(status) {
-    if (status === "published") return "Publicado";
-    if (status === "archived") return "Archivado";
+    if (status === "published") {
+        return "Publicado";
+    }
+
+    if (status === "archived") {
+        return "Archivado";
+    }
+
     return "Borrador";
 }
 
@@ -83,35 +108,77 @@ function statusClasses(status) {
     return "bg-amber-100 text-amber-700";
 }
 
-function formatDate(date) {
-    if (!date) return "Sin fecha";
-
-    return new Intl.DateTimeFormat("es-SV", {
-        day: "numeric",
-        month: "short",
-        year: "numeric"
-    }).format(new Date(date));
+function isInformativeType(type) {
+    return [
+        "noticia",
+        "anuncio"
+    ].includes(type);
 }
 
-function formatDateTime(date) {
-    if (!date) return "Sin fecha";
+function supportsAttendance(type) {
+    return [
+        "taller",
+        "evento",
+        "convocatoria",
+        "oportunidad"
+    ].includes(type);
+}
 
-    return new Intl.DateTimeFormat("es-SV", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit"
-    }).format(new Date(date));
+function formatDate(date) {
+    if (!date) return "";
+
+    return new Intl.DateTimeFormat(
+        "es-SV",
+        {
+            day: "numeric",
+            month: "short",
+            year: "numeric"
+        }
+    ).format(
+        new Date(date)
+    );
+}
+
+function cardDate(post) {
+    if (
+        isInformativeType(
+            post.postType
+        )
+    ) {
+        return "";
+    }
+
+    if (post.eventDate) {
+        return formatDate(
+            post.eventDate
+        );
+    }
+
+    if (post.deadline) {
+        return `Hasta ${formatDate(
+            post.deadline
+        )}`;
+    }
+
+    return formatDate(
+        post.createdAt
+    );
 }
 
 function toInputDateTime(date) {
     if (!date) return "";
 
-    const value = new Date(date);
-    const offset = value.getTimezoneOffset() * 60000;
+    const value =
+        new Date(date);
 
-    return new Date(value.getTime() - offset)
+    const offset =
+        value.getTimezoneOffset() *
+        60000;
+
+    return new Date(
+        value.getTime() -
+        offset
+    )
         .toISOString()
         .slice(0, 16);
 }
@@ -131,14 +198,14 @@ function revokeLocalPreview(image) {
         image?.kind === "new" &&
         image.preview
     ) {
-        URL.revokeObjectURL(image.preview);
+        URL.revokeObjectURL(
+            image.preview
+        );
     }
 }
 
-function resetForm() {
-    editorImages.value.forEach(revokeLocalPreview);
-
-    form.value = {
+function emptyForm() {
+    return {
         title: "",
         description: "",
         postType: "noticia",
@@ -147,9 +214,21 @@ function resetForm() {
         eventDate: "",
         eventEndDate: "",
         deadline: "",
+        requiresRegistration: false,
+        availableSpots: "",
+        contactPhone:
+            props.institution.phone ||
+            "",
         status: "draft"
     };
+}
 
+function resetForm() {
+    editorImages.value.forEach(
+        revokeLocalPreview
+    );
+
+    form.value = emptyForm();
     editorImages.value = [];
     originalImages.value = [];
 }
@@ -159,7 +238,10 @@ async function loadPosts() {
     loadError.value = "";
 
     try {
-        const { data: postRows, error: postError } = await supabase
+        const {
+            data: postRows,
+            error: postError
+        } = await supabase
             .from("institution_posts")
             .select(`
                 id,
@@ -172,27 +254,41 @@ async function loadPosts() {
                 event_date,
                 event_end_date,
                 deadline,
+                requires_registration,
+                available_spots,
+                contact_phone,
                 status,
                 published_at,
                 created_at,
                 updated_at
             `)
-            .eq("institution_id", props.institution.id)
+            .eq(
+                "institution_id",
+                props.institution.id
+            )
             .order("created_at", {
                 ascending: false
             });
 
-        if (postError) throw postError;
+        if (postError) {
+            throw postError;
+        }
 
-        const rows = postRows || [];
-        const postIds = rows.map(function (post) {
-            return post.id;
-        });
+        const rows =
+            postRows || [];
+
+        const postIds =
+            rows.map(function (post) {
+                return post.id;
+            });
 
         let imageRows = [];
 
         if (postIds.length) {
-            const { data, error } = await supabase
+            const {
+                data,
+                error
+            } = await supabase
                 .from("institution_post_images")
                 .select(`
                     id,
@@ -206,48 +302,90 @@ async function loadPosts() {
                     ascending: true
                 });
 
-            if (error) throw error;
-            imageRows = data || [];
+            if (error) {
+                throw error;
+            }
+
+            imageRows =
+                data || [];
         }
 
-        posts.value = rows.map(function (post) {
-            const images = imageRows
-                .filter(function (image) {
-                    return image.post_id === post.id;
-                })
-                .map(function (image) {
-                    return {
-                        id: image.id,
-                        imageUrl: image.image_url,
-                        storagePath: image.storage_path,
-                        sortOrder: image.sort_order
-                    };
-                });
+        posts.value =
+            rows.map(function (post) {
+                const imageRecords =
+                    imageRows
+                        .filter(
+                            function (image) {
+                                return (
+                                    image.post_id ===
+                                    post.id
+                                );
+                            }
+                        )
+                        .map(
+                            function (image) {
+                                return {
+                                    id:
+                                        image.id,
+                                    imageUrl:
+                                        image.image_url,
+                                    storagePath:
+                                        image.storage_path,
+                                    sortOrder:
+                                        image.sort_order
+                                };
+                            }
+                        );
 
-            return {
-                id: post.id,
-                institutionId: post.institution_id,
-                title: post.title,
-                description: post.description,
-                postType: post.post_type,
-                location: post.location || "",
-                externalUrl: post.external_url || "",
-                eventDate: post.event_date,
-                eventEndDate: post.event_end_date,
-                deadline: post.deadline,
-                status: post.status,
-                publishedAt: post.published_at,
-                createdAt: post.created_at,
-                updatedAt: post.updated_at,
-                imageRecords: images,
-                cover: images[0]?.imageUrl || ""
-            };
-        });
+                return {
+                    id:
+                        post.id,
+                    institutionId:
+                        post.institution_id,
+                    title:
+                        post.title,
+                    description:
+                        post.description,
+                    postType:
+                        post.post_type,
+                    location:
+                        post.location || "",
+                    externalUrl:
+                        post.external_url || "",
+                    eventDate:
+                        post.event_date,
+                    eventEndDate:
+                        post.event_end_date,
+                    deadline:
+                        post.deadline,
+                    requiresRegistration:
+                        post.requires_registration,
+                    availableSpots:
+                        post.available_spots,
+                    contactPhone:
+                        post.contact_phone || "",
+                    status:
+                        post.status,
+                    publishedAt:
+                        post.published_at,
+                    createdAt:
+                        post.created_at,
+                    updatedAt:
+                        post.updated_at,
+                    imageRecords,
+                    images:
+                        imageRecords,
+                    cover:
+                        imageRecords[0]?.imageUrl ||
+                        ""
+                };
+            });
     } catch (error) {
         console.error(
             "Error al cargar publicaciones:",
             error
         );
+
         loadError.value =
             "No fue posible cargar las publicaciones.";
     } finally {
@@ -260,7 +398,8 @@ function openAddPost() {
     selectedPost.value = null;
     resetForm();
     showEditor.value = true;
-    document.body.style.overflow = "hidden";
+    document.body.style.overflow =
+        "hidden";
 }
 
 function openEditPost(post) {
@@ -268,35 +407,71 @@ function openEditPost(post) {
     selectedPost.value = post;
 
     form.value = {
-        title: post.title,
-        description: post.description,
-        postType: post.postType,
-        location: post.location,
-        externalUrl: post.externalUrl,
-        eventDate: toInputDateTime(post.eventDate),
-        eventEndDate: toInputDateTime(post.eventEndDate),
-        deadline: toInputDateTime(post.deadline),
-        status: post.status
+        title:
+            post.title,
+        description:
+            post.description,
+        postType:
+            post.postType,
+        location:
+            post.location,
+        externalUrl:
+            post.externalUrl,
+        eventDate:
+            toInputDateTime(
+                post.eventDate
+            ),
+        eventEndDate:
+            toInputDateTime(
+                post.eventEndDate
+            ),
+        deadline:
+            toInputDateTime(
+                post.deadline
+            ),
+        requiresRegistration:
+            post.requiresRegistration,
+        availableSpots:
+            post.availableSpots ??
+            "",
+        contactPhone:
+            post.contactPhone ||
+            props.institution.phone ||
+            "",
+        status:
+            post.status
     };
 
-    editorImages.value = post.imageRecords.map(function (image) {
-        return {
-            kind: "existing",
-            id: image.id,
-            preview: image.imageUrl,
-            storagePath: image.storagePath
-        };
-    });
+    editorImages.value =
+        post.imageRecords.map(
+            function (image) {
+                return {
+                    kind: "existing",
+                    id:
+                        image.id,
+                    preview:
+                        image.imageUrl,
+                    storagePath:
+                        image.storagePath
+                };
+            }
+        );
 
-    originalImages.value = post.imageRecords.map(function (image) {
-        return {
-            id: image.id,
-            storagePath: image.storagePath
-        };
-    });
+    originalImages.value =
+        post.imageRecords.map(
+            function (image) {
+                return {
+                    id:
+                        image.id,
+                    storagePath:
+                        image.storagePath
+                };
+            }
+        );
 
     showEditor.value = true;
-    document.body.style.overflow = "hidden";
+    document.body.style.overflow =
+        "hidden";
 }
 
 function closeEditor() {
@@ -309,7 +484,8 @@ function closeEditor() {
 function openPreview(post) {
     selectedPost.value = post;
     showPreview.value = true;
-    document.body.style.overflow = "hidden";
+    document.body.style.overflow =
+        "hidden";
 }
 
 function closePreview() {
@@ -318,10 +494,11 @@ function closePreview() {
     document.body.style.overflow = "";
 }
 
-// Conserva la publicación antes de cerrar la vista previa.
 function editFromPreview() {
-    const post = selectedPost.value;
-    closePreview();
+    const post =
+        selectedPost.value;
+
+    showPreview.value = false;
 
     if (post) {
         openEditPost(post);
@@ -329,8 +506,12 @@ function editFromPreview() {
 }
 
 function deleteFromPreview() {
-    const post = selectedPost.value;
-    closePreview();
+    const post =
+        selectedPost.value;
+
+    showPreview.value = false;
+    selectedPost.value = null;
+    document.body.style.overflow = "";
 
     if (post) {
         deletePost(post);
@@ -338,86 +519,216 @@ function deleteFromPreview() {
 }
 
 function handleImages(event) {
-    const files = Array.from(event.target.files || []);
+    const files =
+        Array.from(
+            event.target.files ||
+            []
+        );
 
-    if (!files.length) return;
+    if (!files.length) {
+        return;
+    }
 
-    const available = 6 - editorImages.value.length;
+    const available =
+        6 -
+        editorImages.value.length;
 
     if (available <= 0) {
-        alert("Puedes subir hasta 6 imágenes.");
+        alert(
+            "Puedes subir hasta 6 imágenes."
+        );
+
         event.target.value = "";
         return;
     }
 
-    const validFiles = files
-        .filter(function (file) {
-            return (
-                file.type.startsWith("image/") &&
-                file.size <= 5 * 1024 * 1024
-            );
-        })
-        .slice(0, available);
+    const validFiles =
+        files
+            .filter(
+                function (file) {
+                    return (
+                        file.type.startsWith(
+                            "image/"
+                        ) &&
+                        file.size <=
+                        5 * 1024 * 1024
+                    );
+                }
+            )
+            .slice(0, available);
 
-    if (validFiles.length !== files.slice(0, available).length) {
+    if (
+        validFiles.length !==
+        files.slice(
+            0,
+            available
+        ).length
+    ) {
         alert(
             "Algunas imágenes no eran válidas o superaban los 5 MB."
         );
     }
 
-    validFiles.forEach(function (file) {
-        editorImages.value.push({
-            kind: "new",
-            file,
-            preview: createLocalPreview(file),
-            key: crypto.randomUUID()
-        });
-    });
+    validFiles.forEach(
+        function (file) {
+            editorImages.value.push({
+                kind: "new",
+                file,
+                preview:
+                    createLocalPreview(
+                        file
+                    ),
+                key:
+                    crypto.randomUUID()
+            });
+        }
+    );
 
     event.target.value = "";
 }
 
 function removeImage(index) {
-    revokeLocalPreview(editorImages.value[index]);
-    editorImages.value.splice(index, 1);
+    revokeLocalPreview(
+        editorImages.value[index]
+    );
+
+    editorImages.value.splice(
+        index,
+        1
+    );
 }
 
 function makeCover(index) {
-    if (index <= 0) return;
+    if (index <= 0) {
+        return;
+    }
 
-    const image = editorImages.value.splice(index, 1)[0];
-    editorImages.value.unshift(image);
+    const image =
+        editorImages.value.splice(
+            index,
+            1
+        )[0];
+
+    editorImages.value.unshift(
+        image
+    );
 }
 
 async function savePost() {
-    if (saving.value) return;
+    if (saving.value) {
+        return;
+    }
 
     if (
         !form.value.title.trim() ||
         !form.value.description.trim()
     ) {
-        alert("Escribe el título y la descripción.");
+        alert(
+            "Escribe el título y la descripción."
+        );
+        return;
+    }
+
+    const attendancePost =
+        supportsAttendance(
+            form.value.postType
+        );
+
+    if (
+        attendancePost &&
+        !form.value.contactPhone.trim() &&
+        !form.value.externalUrl.trim()
+    ) {
+        alert(
+            "Agrega un WhatsApp de contacto o un enlace para que los emprendedores puedan inscribirse."
+        );
+        return;
+    }
+
+    if (
+        form.value.requiresRegistration &&
+        (
+            form.value.availableSpots === "" ||
+            Number(
+                form.value.availableSpots
+            ) < 0
+        )
+    ) {
+        alert(
+            "Escribe una cantidad válida de cupos disponibles."
+        );
         return;
     }
 
     saving.value = true;
+
     let createdPostId = "";
     let uploaded = [];
 
     try {
+        const informativePost =
+            isInformativeType(
+                form.value.postType
+            );
+
         const payload = {
-            institution_id: props.institution.id,
-            title: form.value.title.trim(),
-            description: form.value.description.trim(),
-            post_type: form.value.postType,
-            location: form.value.location.trim() || null,
-            external_url: form.value.externalUrl.trim() || null,
-            event_date: toIso(form.value.eventDate),
-            event_end_date: toIso(form.value.eventEndDate),
-            deadline: toIso(form.value.deadline),
-            status: form.value.status,
+            institution_id:
+                props.institution.id,
+            title:
+                form.value.title.trim(),
+            description:
+                form.value.description.trim(),
+            post_type:
+                form.value.postType,
+            location:
+                informativePost
+                    ? null
+                    : form.value.location.trim() ||
+                      null,
+            external_url:
+                form.value.externalUrl.trim() ||
+                null,
+            event_date:
+                informativePost
+                    ? null
+                    : toIso(
+                        form.value.eventDate
+                    ),
+            event_end_date:
+                informativePost
+                    ? null
+                    : toIso(
+                        form.value.eventEndDate
+                    ),
+            deadline:
+                informativePost
+                    ? null
+                    : toIso(
+                        form.value.deadline
+                    ),
+            requires_registration:
+                informativePost
+                    ? false
+                    : Boolean(
+                        form.value.requiresRegistration
+                    ),
+            available_spots:
+                informativePost ||
+                !form.value.requiresRegistration
+                    ? null
+                    : Number(
+                        form.value.availableSpots
+                    ),
+            contact_phone:
+                attendancePost
+                    ? form.value.contactPhone.trim() ||
+                      null
+                    : null,
+            status:
+                form.value.status,
             published_at:
-                form.value.status === "published"
+                form.value.status ===
+                "published"
                     ? selectedPost.value?.publishedAt ||
                       new Date().toISOString()
                     : null
@@ -425,132 +736,230 @@ async function savePost() {
 
         let postId = "";
 
-        if (editorMode.value === "add") {
-            const { data, error } = await supabase
+        if (
+            editorMode.value ===
+            "add"
+        ) {
+            const {
+                data,
+                error
+            } = await supabase
                 .from("institution_posts")
                 .insert(payload)
                 .select("id")
                 .single();
 
-            if (error) throw error;
+            if (error) {
+                throw error;
+            }
 
             postId = data.id;
             createdPostId = data.id;
         } else {
-            postId = selectedPost.value.id;
+            postId =
+                selectedPost.value.id;
 
-            const { error } = await supabase
-                .from("institution_posts")
-                .update(payload)
-                .eq("id", postId)
-                .eq("institution_id", props.institution.id);
-
-            if (error) throw error;
-        }
-
-        const newImages = editorImages.value.filter(function (image) {
-            return image.kind === "new";
-        });
-
-        uploaded = await uploadInstitutionPostImages(
-            props.institution.id,
-            postId,
-            newImages.map(function (image) {
-                return image.file;
-            })
-        );
-
-        const uploadByFile = new Map();
-
-        newImages.forEach(function (image, index) {
-            uploadByFile.set(image.file, uploaded[index]);
-        });
-
-        const finalImages = editorImages.value.map(function (image, index) {
-            if (image.kind === "existing") {
-                return {
-                    kind: "existing",
-                    id: image.id,
-                    storagePath: image.storagePath,
-                    sortOrder: index
-                };
-            }
-
-            const uploadedImage = uploadByFile.get(image.file);
-
-            return {
-                kind: "new",
-                imageUrl: uploadedImage.publicUrl,
-                storagePath: uploadedImage.path,
-                sortOrder: index
-            };
-        });
-
-        const newRows = finalImages
-            .filter(function (image) {
-                return image.kind === "new";
-            })
-            .map(function (image) {
-                return {
-                    post_id: postId,
-                    image_url: image.imageUrl,
-                    storage_path: image.storagePath,
-                    sort_order: image.sortOrder
-                };
-            });
-
-        if (newRows.length) {
-            const { error } = await supabase
-                .from("institution_post_images")
-                .insert(newRows);
-
-            if (error) throw error;
-        }
-
-        const existingImages = finalImages.filter(function (image) {
-            return image.kind === "existing";
-        });
-
-        for (const image of existingImages) {
-            const { error } = await supabase
-                .from("institution_post_images")
-                .update({
-                    sort_order: image.sortOrder
-                })
-                .eq("id", image.id);
-
-            if (error) throw error;
-        }
-
-        if (editorMode.value === "edit") {
-            const currentIds = new Set(
-                existingImages.map(function (image) {
-                    return image.id;
-                })
-            );
-
-            const removed = originalImages.value.filter(function (image) {
-                return !currentIds.has(image.id);
-            });
-
-            if (removed.length) {
-                const { error } = await supabase
-                    .from("institution_post_images")
-                    .delete()
-                    .in(
-                        "id",
-                        removed.map(function (image) {
-                            return image.id;
-                        })
+            const { error } =
+                await supabase
+                    .from("institution_posts")
+                    .update(payload)
+                    .eq("id", postId)
+                    .eq(
+                        "institution_id",
+                        props.institution.id
                     );
 
-                if (error) throw error;
+            if (error) {
+                throw error;
+            }
+        }
+
+        const newImages =
+            editorImages.value.filter(
+                function (image) {
+                    return (
+                        image.kind ===
+                        "new"
+                    );
+                }
+            );
+
+        uploaded =
+            await uploadInstitutionPostImages(
+                props.institution.id,
+                postId,
+                newImages.map(
+                    function (image) {
+                        return image.file;
+                    }
+                )
+            );
+
+        const uploadByFile =
+            new Map();
+
+        newImages.forEach(
+            function (image, index) {
+                uploadByFile.set(
+                    image.file,
+                    uploaded[index]
+                );
+            }
+        );
+
+        const finalImages =
+            editorImages.value.map(
+                function (
+                    image,
+                    index
+                ) {
+                    if (
+                        image.kind ===
+                        "existing"
+                    ) {
+                        return {
+                            kind:
+                                "existing",
+                            id:
+                                image.id,
+                            storagePath:
+                                image.storagePath,
+                            sortOrder:
+                                index
+                        };
+                    }
+
+                    const uploadedImage =
+                        uploadByFile.get(
+                            image.file
+                        );
+
+                    return {
+                        kind:
+                            "new",
+                        imageUrl:
+                            uploadedImage.publicUrl,
+                        storagePath:
+                            uploadedImage.path,
+                        sortOrder:
+                            index
+                    };
+                }
+            );
+
+        const newRows =
+            finalImages
+                .filter(
+                    function (image) {
+                        return (
+                            image.kind ===
+                            "new"
+                        );
+                    }
+                )
+                .map(
+                    function (image) {
+                        return {
+                            post_id:
+                                postId,
+                            image_url:
+                                image.imageUrl,
+                            storage_path:
+                                image.storagePath,
+                            sort_order:
+                                image.sortOrder
+                        };
+                    }
+                );
+
+        if (newRows.length) {
+            const { error } =
+                await supabase
+                    .from("institution_post_images")
+                    .insert(newRows);
+
+            if (error) {
+                throw error;
+            }
+        }
+
+        const existingImages =
+            finalImages.filter(
+                function (image) {
+                    return (
+                        image.kind ===
+                        "existing"
+                    );
+                }
+            );
+
+        for (
+            const image of
+            existingImages
+        ) {
+            const { error } =
+                await supabase
+                    .from("institution_post_images")
+                    .update({
+                        sort_order:
+                            image.sortOrder
+                    })
+                    .eq("id", image.id);
+
+            if (error) {
+                throw error;
+            }
+        }
+
+        if (
+            editorMode.value ===
+            "edit"
+        ) {
+            const currentIds =
+                new Set(
+                    existingImages.map(
+                        function (image) {
+                            return image.id;
+                        }
+                    )
+                );
+
+            const removed =
+                originalImages.value.filter(
+                    function (image) {
+                        return !currentIds.has(
+                            image.id
+                        );
+                    }
+                );
+
+            if (removed.length) {
+                const { error } =
+                    await supabase
+                        .from("institution_post_images")
+                        .delete()
+                        .in(
+                            "id",
+                            removed.map(
+                                function (image) {
+                                    return image.id;
+                                }
+                            )
+                        );
+
+                if (error) {
+                    throw error;
+                }
 
                 try {
                     await deleteInstitutionImages(
-                        removed.map(function (image) {
-                            return image.storagePath;
-                        })
+                        removed.map(
+                            function (image) {
+                                return (
+                                    image.storagePath
+                                );
+                            }
+                        )
                     );
                 } catch (storageError) {
                     console.warn(
@@ -562,11 +971,14 @@ async function savePost() {
         }
 
         await loadPosts();
+
         alert(
-            editorMode.value === "add"
+            editorMode.value ===
+                "add"
                 ? "Publicación creada correctamente."
                 : "Publicación actualizada correctamente."
         );
+
         closeEditor();
     } catch (error) {
         console.error(
@@ -577,9 +989,11 @@ async function savePost() {
         if (uploaded.length) {
             try {
                 await deleteInstitutionImages(
-                    uploaded.map(function (image) {
-                        return image.path;
-                    })
+                    uploaded.map(
+                        function (image) {
+                            return image.path;
+                        }
+                    )
                 );
             } catch (cleanupError) {
                 console.warn(
@@ -593,12 +1007,18 @@ async function savePost() {
             await supabase
                 .from("institution_posts")
                 .delete()
-                .eq("id", createdPostId);
+                .eq(
+                    "id",
+                    createdPostId
+                );
         }
 
         alert(
             "No fue posible guardar la publicación: " +
-            (error.message || "Error inesperado")
+            (
+                error.message ||
+                "Error inesperado"
+            )
         );
     } finally {
         saving.value = false;
@@ -606,30 +1026,48 @@ async function savePost() {
 }
 
 async function deletePost(post) {
-    if (!post || saving.value) return;
+    if (
+        !post ||
+        saving.value
+    ) {
+        return;
+    }
 
-    const confirmed = window.confirm(
-        `¿Deseas eliminar "${post.title}"?`
-    );
+    const confirmed =
+        window.confirm(
+            `¿Deseas eliminar "${post.title}"?`
+        );
 
-    if (!confirmed) return;
+    if (!confirmed) {
+        return;
+    }
 
     saving.value = true;
 
     try {
-        const { error } = await supabase
-            .from("institution_posts")
-            .delete()
-            .eq("id", post.id)
-            .eq("institution_id", props.institution.id);
+        const { error } =
+            await supabase
+                .from("institution_posts")
+                .delete()
+                .eq("id", post.id)
+                .eq(
+                    "institution_id",
+                    props.institution.id
+                );
 
-        if (error) throw error;
+        if (error) {
+            throw error;
+        }
 
         try {
             await deleteInstitutionImages(
-                post.imageRecords.map(function (image) {
-                    return image.storagePath;
-                })
+                post.imageRecords.map(
+                    function (image) {
+                        return (
+                            image.storagePath
+                        );
+                    }
+                )
             );
         } catch (storageError) {
             console.warn(
@@ -638,24 +1076,37 @@ async function deletePost(post) {
             );
         }
 
-        posts.value = posts.value.filter(function (item) {
-            return item.id !== post.id;
-        });
+        posts.value =
+            posts.value.filter(
+                function (item) {
+                    return (
+                        item.id !==
+                        post.id
+                    );
+                }
+            );
 
-        alert("Publicación eliminada.");
+        alert(
+            "Publicación eliminada."
+        );
     } catch (error) {
         console.error(
             "Error al eliminar publicación:",
             error
         );
-        alert("No fue posible eliminar la publicación.");
+
+        alert(
+            "No fue posible eliminar la publicación."
+        );
     } finally {
         saving.value = false;
     }
 }
 
 function handleEscape(event) {
-    if (event.key !== "Escape") return;
+    if (event.key !== "Escape") {
+        return;
+    }
 
     if (showPreview.value) {
         closePreview();
@@ -668,13 +1119,25 @@ function handleEscape(event) {
 }
 
 onMounted(function () {
+    resetForm();
     loadPosts();
-    document.addEventListener("keydown", handleEscape);
+
+    document.addEventListener(
+        "keydown",
+        handleEscape
+    );
 });
 
 onBeforeUnmount(function () {
-    document.removeEventListener("keydown", handleEscape);
-    editorImages.value.forEach(revokeLocalPreview);
+    document.removeEventListener(
+        "keydown",
+        handleEscape
+    );
+
+    editorImages.value.forEach(
+        revokeLocalPreview
+    );
+
     document.body.style.overflow = "";
 });
 </script>
@@ -690,7 +1153,7 @@ onBeforeUnmount(function () {
                 Publicaciones
             </h1>
             <p class="mt-1 text-sm text-gray-400">
-                Noticias, talleres, eventos y oportunidades.
+                Crea contenido y revisa exactamente cómo lo verá el emprendedor.
             </p>
         </div>
 
@@ -732,64 +1195,85 @@ onBeforeUnmount(function () {
         </button>
     </div>
 
-    <!-- Las tarjetas conservan la distribución visual del catálogo. -->
     <div
         v-else-if="posts.length"
-        class="grid grid-cols-2 gap-x-2 gap-y-5 sm:gap-4 md:grid-cols-3 xl:grid-cols-4"
+        class="grid grid-cols-2 gap-x-2 gap-y-6 sm:gap-4 md:grid-cols-3 xl:grid-cols-4"
     >
         <article
             v-for="post in posts"
             :key="post.id"
-            class="min-w-0 overflow-hidden bg-transparent"
+            class="group min-w-0 overflow-hidden"
         >
             <button
                 type="button"
-                class="block w-full overflow-hidden rounded-xl bg-gray-100 sm:rounded-2xl"
+                class="relative block w-full overflow-hidden rounded-2xl bg-[#EAF9FC] text-left shadow-sm"
                 @click="openPreview(post)"
             >
                 <img
                     v-if="post.cover"
                     :src="post.cover"
                     :alt="post.title"
-                    class="aspect-square w-full object-cover"
+                    class="aspect-square w-full object-cover transition duration-300 group-hover:scale-[1.02]"
                 >
+
                 <div
                     v-else
-                    class="flex aspect-square items-center justify-center bg-[#EAF9FC] text-xs font-bold text-[#0077B6]"
+                    class="flex aspect-square items-center justify-center bg-gradient-to-br from-[#CAF0F8] to-[#EAF9FC] text-xs font-black text-[#0077B6]"
                 >
                     {{ typeLabel(post.postType) }}
                 </div>
+
+                <span class="absolute left-2 top-2 rounded-full bg-white/90 px-2.5 py-1 text-[9px] font-black uppercase text-[#0077B6] shadow-sm">
+                    {{ typeLabel(post.postType) }}
+                </span>
+
+                <span
+                    v-if="post.imageRecords.length > 1"
+                    class="absolute bottom-2 right-2 rounded-full bg-black/55 px-2.5 py-1 text-[9px] font-bold text-white"
+                >
+                    {{ post.imageRecords.length }} imágenes
+                </span>
             </button>
 
-            <div class="pt-1.5 sm:px-1 sm:pt-3">
+            <div class="pt-3 sm:px-1">
                 <div class="flex items-center justify-between gap-2">
-                    <span class="text-[9px] font-bold uppercase text-[#00B4D8]">
-                        {{ typeLabel(post.postType) }}
-                    </span>
                     <span
-                        class="rounded-full px-2 py-1 text-[9px] font-bold"
+                        class="rounded-full px-2.5 py-1 text-[9px] font-black"
                         :class="statusClasses(post.status)"
                     >
                         {{ statusLabel(post.status) }}
                     </span>
+
+                    <span
+                        v-if="post.requiresRegistration && post.availableSpots !== null"
+                        class="text-[9px] font-black"
+                        :class="Number(post.availableSpots) > 0 ? 'text-green-600' : 'text-red-600'"
+                    >
+                        {{ Number(post.availableSpots) > 0 ? `${post.availableSpots} cupos` : "Sin cupos" }}
+                    </span>
                 </div>
 
-                <h2 class="mt-2 line-clamp-2 min-h-[34px] text-xs font-bold leading-tight text-gray-600 sm:min-h-[40px] sm:text-sm">
+                <h2 class="mt-2 line-clamp-2 min-h-[34px] text-xs font-black leading-tight text-gray-600 sm:min-h-[40px] sm:text-sm">
                     {{ post.title }}
                 </h2>
 
-                <p class="mt-2 text-[10px] text-gray-400 sm:text-xs">
-                    {{ formatDate(post.createdAt) }}
+                <!-- Noticias y anuncios no muestran la fecha de creación. -->
+                <p
+                    v-if="cardDate(post)"
+                    class="mt-2 text-[10px] font-semibold text-gray-400 sm:text-xs"
+                >
+                    {{ cardDate(post) }}
                 </p>
 
                 <div class="mt-3 grid grid-cols-3 gap-2">
                     <button
                         type="button"
-                        class="rounded-xl border border-gray-200 px-2 py-2 text-[10px] font-bold text-gray-500 sm:text-xs"
+                        class="rounded-xl border border-[#00B4D8] px-2 py-2 text-[9px] font-black text-[#0077B6] sm:text-[10px]"
                         @click="openPreview(post)"
                     >
-                        Ver
+                        Vista emprendedor
                     </button>
+
                     <button
                         type="button"
                         class="rounded-xl bg-[#CAF0F8] px-2 py-2 text-[10px] font-bold text-[#0077B6] sm:text-xs"
@@ -797,6 +1281,7 @@ onBeforeUnmount(function () {
                     >
                         Editar
                     </button>
+
                     <button
                         type="button"
                         class="rounded-xl border border-red-200 px-2 py-2 text-[10px] font-bold text-red-600 sm:text-xs"
@@ -813,13 +1298,7 @@ onBeforeUnmount(function () {
         v-else
         class="rounded-[24px] border border-dashed border-[#90E0EF] bg-white px-5 py-16 text-center"
     >
-        <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#CAF0F8] text-[#0077B6]">
-            <svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                <path stroke-linejoin="round" d="M4 5h16v14H4z"></path>
-                <path stroke-linecap="round" d="M8 9h8M8 13h8M8 17h5"></path>
-            </svg>
-        </div>
-        <h3 class="mt-4 font-black text-gray-700">
+        <h3 class="font-black text-gray-700">
             Aún no tienes publicaciones
         </h3>
         <p class="mt-1 text-sm text-gray-400">
@@ -841,7 +1320,7 @@ onBeforeUnmount(function () {
             class="fixed inset-0 z-[110] flex items-end justify-center bg-black/50 sm:items-center sm:p-5"
             @click.self="closeEditor"
         >
-            <section class="max-h-[94vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[700px] sm:rounded-[28px]">
+            <section class="max-h-[94vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[720px] sm:rounded-[28px]">
                 <div class="sticky top-0 z-20 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
                     <div>
                         <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
@@ -851,6 +1330,7 @@ onBeforeUnmount(function () {
                             {{ editorTitle }}
                         </h2>
                     </div>
+
                     <button
                         type="button"
                         class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
@@ -864,12 +1344,13 @@ onBeforeUnmount(function () {
                     class="space-y-5 p-5 sm:p-7"
                     @submit.prevent="savePost"
                 >
+                    <!-- Imágenes -->
                     <div>
                         <label class="block text-sm font-bold text-gray-600">
                             Imágenes
                         </label>
                         <p class="mt-1 text-xs text-gray-400">
-                            La primera imagen será la portada. Máximo 6 imágenes.
+                            La primera será la portada. El emprendedor podrá desplazarse entre todas.
                         </p>
 
                         <div
@@ -886,12 +1367,14 @@ onBeforeUnmount(function () {
                                     alt="Publicación"
                                     class="aspect-square w-full object-cover"
                                 >
+
                                 <span
                                     v-if="index === 0"
                                     class="absolute bottom-1 left-1 rounded-full bg-[#00B4D8] px-2 py-1 text-[9px] font-bold text-white"
                                 >
                                     Portada
                                 </span>
+
                                 <div class="absolute right-1 top-1 flex gap-1">
                                     <button
                                         v-if="index !== 0"
@@ -902,6 +1385,7 @@ onBeforeUnmount(function () {
                                     >
                                         ★
                                     </button>
+
                                     <button
                                         type="button"
                                         title="Eliminar"
@@ -994,22 +1478,37 @@ onBeforeUnmount(function () {
                         ></textarea>
                     </div>
 
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <div>
-                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                                Ubicación
-                            </label>
-                            <input
-                                v-model="form.location"
-                                type="text"
-                                placeholder="Lugar del taller o evento"
-                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                            >
+                    <!-- Estos datos no aparecen para noticias ni anuncios. -->
+                    <template v-if="!isInformativeType(form.postType)">
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <div>
+                                <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                                    Ubicación
+                                </label>
+                                <input
+                                    v-model="form.location"
+                                    type="text"
+                                    placeholder="Lugar del taller o evento"
+                                    class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                                >
+                            </div>
+
+                            <div>
+                                <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                                    WhatsApp de contacto
+                                </label>
+                                <input
+                                    v-model="form.contactPhone"
+                                    type="tel"
+                                    placeholder="Ejemplo: 7000 0000"
+                                    class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                                >
+                            </div>
                         </div>
 
                         <div>
                             <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                                Enlace externo
+                                Enlace externo o de inscripción
                             </label>
                             <input
                                 v-model="form.externalUrl"
@@ -1018,39 +1517,90 @@ onBeforeUnmount(function () {
                                 class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                             >
                         </div>
-                    </div>
 
-                    <div class="grid gap-4 md:grid-cols-3">
-                        <div>
-                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                                Inicio
-                            </label>
-                            <input
-                                v-model="form.eventDate"
-                                type="datetime-local"
-                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                            >
+                        <div class="grid gap-4 md:grid-cols-3">
+                            <div>
+                                <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                                    Inicio
+                                </label>
+                                <input
+                                    v-model="form.eventDate"
+                                    type="datetime-local"
+                                    class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                                >
+                            </div>
+
+                            <div>
+                                <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                                    Finalización
+                                </label>
+                                <input
+                                    v-model="form.eventEndDate"
+                                    type="datetime-local"
+                                    class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                                >
+                            </div>
+
+                            <div>
+                                <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                                    Fecha límite
+                                </label>
+                                <input
+                                    v-model="form.deadline"
+                                    type="datetime-local"
+                                    class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                                >
+                            </div>
                         </div>
-                        <div>
-                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                                Finalización
+
+                        <!-- Cupos -->
+                        <div class="rounded-2xl bg-[#F8FBFC] p-4 sm:p-5">
+                            <label class="flex cursor-pointer items-start gap-3">
+                                <input
+                                    v-model="form.requiresRegistration"
+                                    type="checkbox"
+                                    class="mt-1 h-4 w-4 accent-[#00B4D8]"
+                                >
+                                <span>
+                                    <span class="block text-sm font-black text-gray-700">
+                                        Esta actividad requiere inscripción o tiene cupos
+                                    </span>
+                                    <span class="mt-1 block text-xs leading-5 text-gray-400">
+                                        Actívalo para mostrarle al emprendedor cuántos cupos quedan.
+                                    </span>
+                                </span>
                             </label>
-                            <input
-                                v-model="form.eventEndDate"
-                                type="datetime-local"
-                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+
+                            <div
+                                v-if="form.requiresRegistration"
+                                class="mt-4"
                             >
+                                <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                                    Cupos disponibles
+                                </label>
+                                <input
+                                    v-model.number="form.availableSpots"
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    placeholder="Ejemplo: 30"
+                                    class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 outline-none focus:border-[#00B4D8]"
+                                >
+                            </div>
                         </div>
-                        <div>
-                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                                Fecha límite
-                            </label>
-                            <input
-                                v-model="form.deadline"
-                                type="datetime-local"
-                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                            >
-                        </div>
+                    </template>
+
+                    <!-- Noticias y anuncios sí pueden tener un enlace informativo. -->
+                    <div v-else>
+                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                            Enlace externo opcional
+                        </label>
+                        <input
+                            v-model="form.externalUrl"
+                            type="url"
+                            placeholder="https://..."
+                            class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                        >
                     </div>
 
                     <button
@@ -1065,133 +1615,14 @@ onBeforeUnmount(function () {
         </div>
     </Teleport>
 
-    <!-- Vista completa de una publicación. -->
-    <Teleport to="body">
-        <div
-            v-if="showPreview && selectedPost"
-            class="fixed inset-0 z-[105] flex items-end justify-center bg-black/50 sm:items-center sm:p-5"
-            @click.self="closePreview"
-        >
-            <section class="max-h-[94vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[760px] sm:rounded-[28px]">
-                <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
-                    <div>
-                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                            Vista previa
-                        </p>
-                        <h2 class="line-clamp-1 text-lg font-black text-gray-700">
-                            {{ selectedPost.title }}
-                        </h2>
-                    </div>
-                    <button
-                        type="button"
-                        class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
-                        @click="closePreview"
-                    >
-                        ×
-                    </button>
-                </div>
-
-                <div
-                    v-if="selectedPost.imageRecords.length"
-                    class="grid grid-cols-2 gap-2 p-3 sm:p-5"
-                >
-                    <img
-                        v-for="image in selectedPost.imageRecords"
-                        :key="image.id"
-                        :src="image.imageUrl"
-                        :alt="selectedPost.title"
-                        class="aspect-square w-full rounded-2xl object-cover"
-                    >
-                </div>
-
-                <div class="p-5 sm:p-7">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <span class="rounded-full bg-[#CAF0F8] px-3 py-1 text-xs font-bold text-[#0077B6]">
-                            {{ typeLabel(selectedPost.postType) }}
-                        </span>
-                        <span
-                            class="rounded-full px-3 py-1 text-xs font-bold"
-                            :class="statusClasses(selectedPost.status)"
-                        >
-                            {{ statusLabel(selectedPost.status) }}
-                        </span>
-                    </div>
-
-                    <h2 class="mt-4 text-2xl font-black text-gray-700 sm:text-3xl">
-                        {{ selectedPost.title }}
-                    </h2>
-
-                    <p class="mt-4 whitespace-pre-line text-sm leading-7 text-gray-500">
-                        {{ selectedPost.description }}
-                    </p>
-
-                    <div class="mt-6 grid gap-3 sm:grid-cols-2">
-                        <div
-                            v-if="selectedPost.eventDate"
-                            class="rounded-2xl bg-[#F8FBFC] p-4"
-                        >
-                            <p class="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                                Fecha
-                            </p>
-                            <p class="mt-1 text-sm font-bold text-gray-600">
-                                {{ formatDateTime(selectedPost.eventDate) }}
-                            </p>
-                        </div>
-
-                        <div
-                            v-if="selectedPost.location"
-                            class="rounded-2xl bg-[#F8FBFC] p-4"
-                        >
-                            <p class="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                                Ubicación
-                            </p>
-                            <p class="mt-1 text-sm font-bold text-gray-600">
-                                {{ selectedPost.location }}
-                            </p>
-                        </div>
-
-                        <div
-                            v-if="selectedPost.deadline"
-                            class="rounded-2xl bg-[#F8FBFC] p-4"
-                        >
-                            <p class="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                                Fecha límite
-                            </p>
-                            <p class="mt-1 text-sm font-bold text-gray-600">
-                                {{ formatDateTime(selectedPost.deadline) }}
-                            </p>
-                        </div>
-
-                        <a
-                            v-if="selectedPost.externalUrl"
-                            :href="selectedPost.externalUrl"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="flex items-center justify-center rounded-2xl bg-[#00B4D8] p-4 text-sm font-bold text-white"
-                        >
-                            Abrir enlace
-                        </a>
-                    </div>
-
-                    <div class="mt-6 grid grid-cols-2 gap-3">
-                        <button
-                            type="button"
-                            class="rounded-xl bg-[#CAF0F8] px-4 py-3 text-sm font-bold text-[#0077B6]"
-                            @click="editFromPreview"
-                        >
-                            Editar
-                        </button>
-                        <button
-                            type="button"
-                            class="rounded-xl border border-red-200 px-4 py-3 text-sm font-bold text-red-600"
-                            @click="deleteFromPreview"
-                        >
-                            Eliminar
-                        </button>
-                    </div>
-                </div>
-            </section>
-        </div>
-    </Teleport>
+    <!-- La misma visualización que recibe el emprendedor. -->
+    <NovedadDetalleModal
+        :show="showPreview"
+        :post="previewPost"
+        :can-manage="true"
+        @close="closePreview"
+        @edit="editFromPreview"
+        @delete="deleteFromPreview"
+    />
 </section>
 </template>
