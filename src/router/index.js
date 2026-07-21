@@ -1,10 +1,11 @@
-// Router principal de Thrive; organiza rutas públicas, privadas y permisos por rol.
+// Router principal de Thrive.
 import {
     createRouter,
     createWebHashHistory
 } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
 
+// Vistas principales.
 import Home from "../views/Home.vue";
 import Auth from "../views/Auth.vue";
 import Catalogo from "../views/Catalogo.vue";
@@ -16,6 +17,7 @@ import PerfilEmprendedor from "../views/PerfilEmprendedor.vue";
 import DetalleProducto from "../views/DetalleProducto.vue";
 
 const routes = [
+    // Página principal.
     {
         path: "/",
         name: "Home",
@@ -24,6 +26,12 @@ const routes = [
             title: "Thrive"
         }
     },
+
+    /*
+        Esta ruta siempre queda disponible.
+        Aunque exista una sesión iniciada, el botón
+        "Comenzar" de Home abrirá Auth.vue.
+    */
     {
         path: "/auth",
         name: "Auth",
@@ -32,6 +40,8 @@ const routes = [
             title: "Acceso | Thrive"
         }
     },
+
+    // Catálogo para clientes.
     {
         path: "/catalogo",
         name: "Catalogo",
@@ -42,6 +52,8 @@ const routes = [
             title: "Catálogo | Thrive"
         }
     },
+
+    // Panel principal del emprendedor.
     {
         path: "/dashboard-emprendedor",
         name: "DashboardEmprendedor",
@@ -52,6 +64,8 @@ const routes = [
             title: "Panel emprendedor | Thrive"
         }
     },
+
+    // Inventario del emprendedor.
     {
         path: "/dashboard-emprendedor/inventario",
         alias: "/inventario",
@@ -63,6 +77,8 @@ const routes = [
             title: "Inventario | Thrive"
         }
     },
+
+    // Calculadora del emprendedor.
     {
         path: "/dashboard-emprendedor/calculadora",
         alias: "/calculadora",
@@ -74,6 +90,8 @@ const routes = [
             title: "Calculadora | Thrive"
         }
     },
+
+    // Panel principal de instituciones.
     {
         path: "/dashboard-institucion",
         name: "DashboardInstitucion",
@@ -84,6 +102,8 @@ const routes = [
             title: "Panel institucional | Thrive"
         }
     },
+
+    // Perfil público de un emprendimiento.
     {
         path: "/emprendedor/:id",
         name: "PerfilEmprendedor",
@@ -99,6 +119,8 @@ const routes = [
             title: "Emprendimiento | Thrive"
         }
     },
+
+    // Detalle público interno de un producto.
     {
         path: "/producto/:id",
         name: "DetalleProducto",
@@ -114,6 +136,8 @@ const routes = [
             title: "Producto | Thrive"
         }
     },
+
+    // Cualquier ruta inexistente vuelve al inicio.
     {
         path: "/:pathMatch(.*)*",
         name: "NotFound",
@@ -122,11 +146,17 @@ const routes = [
 ];
 
 const router = createRouter({
-    // Hash History evita errores al recargar rutas dentro de GitHub Pages.
+    /*
+        Hash History evita errores al recargar
+        rutas internas en GitHub Pages.
+    */
     history: createWebHashHistory(
         import.meta.env.BASE_URL
     ),
+
     routes,
+
+    // Cada página nueva comienza desde arriba.
     scrollBehavior() {
         return {
             top: 0,
@@ -135,26 +165,34 @@ const router = createRouter({
     }
 });
 
+// Página principal de cada tipo de cuenta.
 const homeByRole = {
     cliente: "Catalogo",
     emprendedor: "DashboardEmprendedor",
     institucion: "DashboardInstitucion"
 };
 
+// Consulta la sesión y el tipo de usuario conectado.
 async function getSessionAndRole() {
     const {
         data: { session },
         error: sessionError
     } = await supabase.auth.getSession();
 
-    if (sessionError || !session?.user) {
+    if (
+        sessionError ||
+        !session?.user
+    ) {
         return {
             session: null,
             role: null
         };
     }
 
-    const { data: profile, error: profileError } = await supabase
+    const {
+        data: profile,
+        error: profileError
+    } = await supabase
         .from("profiles")
         .select("user_type")
         .eq("id", session.user.id)
@@ -162,66 +200,80 @@ async function getSessionAndRole() {
 
     if (profileError) {
         console.warn(
-            "No se pudo comprobar el tipo de cuenta:",
+            "No se pudo comprobar el tipo de usuario:",
             profileError
         );
     }
 
     return {
         session,
-        role: profile?.user_type || null
+        role:
+            profile?.user_type ||
+            null
     };
 }
 
+// Protege únicamente las rutas privadas.
 router.beforeEach(async function (to) {
-    const requiresAuth = to.matched.some(
-        function (record) {
-            return record.meta.requiresAuth;
-        }
-    );
+    const requiresAuth =
+        to.matched.some(
+            function (route) {
+                return (
+                    route.meta.requiresAuth
+                );
+            }
+        );
 
-    const needsSessionCheck =
-        requiresAuth || to.name === "Auth";
-
-    if (!needsSessionCheck) {
+    /*
+        Home y Auth son públicas.
+        No se redirigen aunque haya una sesión activa.
+    */
+    if (!requiresAuth) {
         return true;
     }
 
-    const { session, role } =
-        await getSessionAndRole();
+    const {
+        session,
+        role
+    } = await getSessionAndRole();
 
-    if (!session && requiresAuth) {
+    // Sin sesión, enviamos al inicio de sesión.
+    if (!session) {
         return {
             name: "Auth",
             query: {
-                redirect: to.fullPath
+                redirect:
+                    to.fullPath
             }
         };
     }
 
-    if (session && to.name === "Auth") {
-        return {
-            name: homeByRole[role] || "Home"
-        };
-    }
+    const allowedRoles =
+        to.meta.roles || [];
 
-    const allowedRoles = to.meta.roles || [];
-
+    /*
+        Si el usuario intenta entrar a una sección
+        de otro tipo de cuenta, vuelve a su panel.
+    */
     if (
-        requiresAuth &&
         allowedRoles.length &&
         !allowedRoles.includes(role)
     ) {
         return {
-            name: homeByRole[role] || "Home"
+            name:
+                homeByRole[role] ||
+                "Home"
         };
     }
 
     return true;
 });
 
+// Cambia el título de la pestaña del navegador.
 router.afterEach(function (to) {
-    document.title = to.meta.title || "Thrive";
+    document.title =
+        to.meta.title ||
+        "Thrive";
 });
 
 export default router;
