@@ -8,6 +8,7 @@ import PerfilEmprendedor from "../views/PerfilEmprendedor.vue";
 import DetalleProducto from "../views/DetalleProducto.vue";
 import Calculadora from "../views/Calculadora.vue";
 import Inventario from "../views/Inventario.vue";
+import DashboardInstitucion from "../views/DashboardInstitucion.vue";
 
 const routes = [
     {
@@ -57,6 +58,11 @@ const routes = [
     {
         path: "/:pathMatch(.*)*",
         redirect: "/"
+    },
+    {
+    path: "/dashboard-institucion",
+    name: "DashboardInstitucion",
+    component: DashboardInstitucion
     }
 ];
 

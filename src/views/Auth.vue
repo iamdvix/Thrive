@@ -1,5 +1,5 @@
 <script setup>
-// Pantalla de acceso y registro; aquí se mantiene toda la lógica de autenticación de clientes y emprendedores.
+// Pantalla de acceso y registro; permite iniciar sesión a clientes, emprendedores e instituciones.
 import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
@@ -244,10 +244,22 @@ async function loginUser() {
             router.push("/dashboard-emprendedor");
             return;
         }
+
+        if (profile.user_type === "institucion") {
+            /*
+                Las instituciones no se registran desde esta pantalla.
+                Sus cuentas son creadas previamente por los administradores
+                y desde aquí únicamente inician sesión.
+            */
+            router.push("/dashboard-institucion");
+            return;
+        }
+
         if (profile.user_type === "cliente") {
             router.push("/catalogo");
             return;
         }
+
         alert("Tu cuenta no tiene un tipo de usuario válido.");
     } catch (error) {
         console.error("Error inesperado al iniciar sesión:", error);
