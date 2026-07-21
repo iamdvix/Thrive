@@ -1,381 +1,271 @@
 <script setup>
-// Catálogo principal del cliente; reúne perfil, productos, filtros, seguimiento y detalle de cada publicación.
+// Panel principal del emprendedor; centraliza perfil, productos, seguidores y vistas de administración.
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
 import {
-    uploadProfileImage,
-    deleteImage,
-    getStoragePathFromPublicUrl
+    uploadEntrepreneurLogo,
+    uploadProductImages,
+    deleteImage
 } from "../lib/storage";
+import NovedadesEmprendedor from "../components/emprendedor/NovedadesEmprendedor.vue";
 const router = useRouter();
-// Datos y controles del perfil del cliente conectado.
-// Información real del cliente conectado.
-const clientProfile = ref(null);
-const profileLoading = ref(false);
+// Estados principales utilizados por el dashboard.
+const entrepreneur = ref(null);
+const products = ref([]);
+const loading = ref(true);
+const loadError = ref("");
 const profileSaving = ref(false);
-// Controla la ventana del perfil.
-const showClientProfile = ref(false);
-// Información editable.
+const productSaving = ref(false);
+const logoutLoading = ref(false);
+// Controla la sección visible del dashboard.
+const activeSection = ref("inicio");
+// Control de ventanas.
+const showProfileEditor = ref(false);
+const showProductEditor = ref(false);
+const showFollowersModal = ref(false);
+// Datos y controles relacionados con los seguidores.
+// Guarda la cantidad total y los datos públicos de quienes siguen al emprendimiento.
+const followerCount = ref(0);
+const followers = ref([]);
+const followersLoading = ref(false);
+// Datos y controles utilizados para editar el perfil del emprendimiento.
 const profileForm = ref({
-    fullName: "",
-    phone: ""
+    businessName: "",
+    phone: "",
+    description: "",
+    department: "",
+    district: ""
 });
-// Archivo real de la nueva fotografía.
-const profilePhotoFile = ref(null);
-// Imagen que mostramos como vista previa.
-const profilePhotoPreview = ref("");
-
-// Campos opcionales para cambiar la contraseña desde el perfil.
+const profileLogoFile = ref(null);
+const profileLogoPreview = ref("");
+// Campos utilizados cuando el emprendedor desea cambiar su contraseña.
 const currentPassword = ref("");
 const newPassword = ref("");
 const confirmNewPassword = ref("");
+const showCurrentPassword = ref(false);
+const showNewPassword = ref(false);
+const showConfirmPassword = ref(false);
 // Datos y controles utilizados para mostrar los productos.
-// Productos reales provenientes de Supabase.
-const products = ref([]);
-const loadingProducts = ref(false);
-const productsError = ref("");
-// Controles de búsqueda.
-const searchText = ref("");
-const selectedDepartment = ref("Todos");
-// Seguimientos.
-// Por ahora continúan siendo locales hasta crear la tabla follows.
-// Emprendimientos que el cliente sigue realmente en Supabase.
-const followedEntrepreneurs = ref([]);
-// Evita múltiples clics mientras se guarda o elimina un follow.
-const followLoading = ref([]);
-// Carga la información del perfil del cliente conectado.
-async function loadClientProfile() {
-    profileLoading.value = true;
+const productEditorMode = ref("add");
+const selectedProduct = ref(null);
+const productForm = ref({
+    name: "",
+    description: "",
+    categories: [],
+    price: 0,
+    stock: 0
+});
+// Aquí mantenemos juntas las imágenes actuales y las nuevas.
+// Esto permite cambiar el orden y elegir fácilmente la portada.
+const editorImages = ref([]);
+// Conserva las imágenes originales para saber cuáles
+// fueron eliminadas durante una edición.
+const originalProductImages = ref([]);
+const showCategoryDropdown = ref(false);
+// 12 categorías principales utilizadas dentro de Thrive.
+const productCategories = [
+    "Alimentos y bebidas",
+    "Repostería y dulces",
+    "Artesanías",
+    "Moda y ropa",
+    "Accesorios y joyería",
+    "Belleza y cuidado personal",
+    "Hogar y decoración",
+    "Arte y diseño",
+    "Papelería y personalizados",
+    "Tecnología y accesorios",
+    "Plantas y jardinería",
+    "Productos para mascotas"
+];
+// Datos generales y listas utilizadas en esta pantalla.
+const departments = [
+    "Ahuachapán",
+    "Cabañas",
+    "Chalatenango",
+    "Cuscatlán",
+    "La Libertad",
+    "La Paz",
+    "La Unión",
+    "Morazán",
+    "San Miguel",
+    "San Salvador",
+    "San Vicente",
+    "Santa Ana",
+    "Sonsonate",
+    "Usulután"
+];
+// Valores calculados automáticamente a partir del estado actual.
+const entrepreneurInitials = computed(function () {
+    const name = entrepreneur.value?.businessName || "Thrive";
+    return name
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map(function (word) {
+            return word.charAt(0).toUpperCase();
+        })
+        .join("");
+});
+const productCountText = computed(function () {
+    const total = products.value.length;
+    return total === 1 ? "1 producto" : `${total} productos`;
+});
+const productEditorTitle = computed(function () {
+    return productEditorMode.value === "add"
+        ? "Añadir producto"
+        : "Editar producto";
+});
+const followerCountText = computed(function () {
+    return followerCount.value === 1
+        ? "1 seguidor"
+        : `${followerCount.value} seguidores`;
+});
+// Funciones pequeñas reutilizadas en distintas partes de la vista.
+function formatPrice(price) {
+    return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD"
+    }).format(Number(price) || 0);
+}
+// Devuelve las clases visuales correspondientes al nivel de existencias.
+function stockClasses(stock) {
+    const amount = Number(stock) || 0;
+    if (amount > 10) {
+        return "bg-green-100 text-green-700";
+    }
+    if (amount >= 5) {
+        return "bg-yellow-100 text-yellow-700";
+    }
+    return "bg-red-100 text-red-700";
+}
+// Devuelve el texto que describe el estado actual del inventario.
+function stockText(stock) {
+    const amount = Number(stock) || 0;
+    if (amount === 0) return "Sin stock";
+    if (amount === 1) return "1 unidad";
+    return `${amount} unidades`;
+}
+// Cambia la sección visible o abre las herramientas que tienen su propia página.
+function changeSection(section) {
+    // Inventario tiene su propia vista para gestionar stock y pedidos.
+    if (section === "inventario") {
+        router.push({ name: "Inventario" });
+        return;
+    }
+
+    // La calculadora también funciona como una vista independiente.
+    if (section === "calculadora") {
+        router.push({ name: "Calculadora" });
+        return;
+    }
+
+    activeSection.value = section;
+    window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+    });
+}
+// Cierra la sesión actual y vuelve a la pantalla de autenticación.
+async function logout() {
+    if (logoutLoading.value) return;
+    logoutLoading.value = true;
     try {
-        // Obtenemos el usuario actualmente autenticado.
+        const { error } = await supabase.auth.signOut({
+            scope: "local"
+        });
+        if (error) {
+            throw error;
+        }
+        // Cerramos cualquier ventana antes de cambiar de pantalla.
+        showProfileEditor.value = false;
+        showProductEditor.value = false;
+        showFollowersModal.value = false;
+        document.body.style.overflow = "";
+        router.replace("/auth");
+    } catch (error) {
+        console.error("Error al cerrar sesión:", error);
+        alert("No fue posible cerrar la sesión. Intenta nuevamente.");
+    } finally {
+        logoutLoading.value = false;
+    }
+}
+// Carga la información necesaria para mostrar el dashboard.
+async function loadDashboard() {
+    loading.value = true;
+    loadError.value = "";
+    try {
         const {
             data: { user },
             error: userError
         } = await supabase.auth.getUser();
         if (userError || !user) {
-            console.error(
-                "No se encontró una sesión activa:",
-                userError
-            );
-            router.replace("/auth");
+            loadError.value =
+                "No se encontró una sesión activa. Inicia sesión nuevamente.";
             return;
         }
-        /*
-            Buscamos el perfil utilizando el mismo UUID
-            del usuario de Supabase Authentication.
-        */
-        const { data, error } = await supabase
-            .from("profiles")
-            .select(`
-                id,
-                full_name,
-                phone,
-                user_type,
-                avatar_url
-            `)
-            .eq("id", user.id)
-            .single();
-        if (error) {
-            console.error(
-                "No se pudo cargar el perfil:",
-                error
-            );
-            return;
-        }
-        clientProfile.value = {
-            id: data.id,
-            fullName: data.full_name || "",
-            phone: data.phone || "",
-            avatarUrl: data.avatar_url || "",
-            email: user.email || ""
-        };
-    } catch (error) {
-        console.error(
-            "Error inesperado al cargar el perfil:",
-            error
-        );
-    } finally {
-        profileLoading.value = false;
-    }
-}
-// Limpia los campos sensibles cada vez que abrimos o cerramos el perfil.
-function clearPasswordFields() {
-    currentPassword.value = "";
-    newPassword.value = "";
-    confirmNewPassword.value = "";
-}
-
-// Abre y prepara la ventana del perfil del cliente.
-function openClientProfile() {
-    if (!clientProfile.value) return;
-    // Copiamos los datos actuales al formulario.
-    profileForm.value = {
-        fullName:
-            clientProfile.value.fullName || "",
-        phone:
-            clientProfile.value.phone || ""
-    };
-    // Mostramos inicialmente la fotografía actual.
-    profilePhotoPreview.value =
-        clientProfile.value.avatarUrl || "";
-    // No existe una nueva fotografía hasta que se seleccione.
-    profilePhotoFile.value = null;
-    clearPasswordFields();
-    showClientProfile.value = true;
-    document.body.style.overflow = "hidden";
-}
-// Cierra la ventana del perfil.
-function closeClientProfile() {
-    showClientProfile.value = false;
-    profilePhotoFile.value = null;
-    profilePhotoPreview.value = "";
-    clearPasswordFields();
-    document.body.style.overflow = "";
-}
-// Maneja la selección y vista previa de la foto del cliente.
-function handleProfilePhoto(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    // Solo permitimos imágenes.
-    if (!file.type.startsWith("image/")) {
-        alert(
-            "Selecciona un archivo de imagen válido."
-        );
-        event.target.value = "";
-        return;
-    }
-    // Limitamos también a 5 MB desde la interfaz.
-    if (file.size > 5 * 1024 * 1024) {
-        alert(
-            "La fotografía no puede superar los 5 MB."
-        );
-        event.target.value = "";
-        return;
-    }
-    // Guardamos el archivo verdadero.
-    profilePhotoFile.value = file;
-    // Creamos la vista previa.
-    const reader = new FileReader();
-    reader.onload = function (loadEvent) {
-        profilePhotoPreview.value =
-            loadEvent.target.result;
-    };
-    reader.readAsDataURL(file);
-}
-// Guarda los cambios realizados en el perfil.
-// Actualiza los datos y la fotografía del cliente.
-async function saveClientProfile() {
-    if (
-        !clientProfile.value ||
-        profileSaving.value
-    ) {
-        return;
-    }
-
-    if (!profileForm.value.fullName.trim()) {
-        alert("Escribe tu nombre antes de guardar.");
-        return;
-    }
-
-    profileSaving.value = true;
-
-    try {
-        const {
-            data: { user },
-            error: userError
-        } = await supabase.auth.getUser();
-
-        if (userError || !user?.email) {
-            alert("No fue posible verificar tu sesión.");
-            return;
-        }
-
-        const wantsPasswordChange =
-            currentPassword.value.length > 0 ||
-            newPassword.value.length > 0 ||
-            confirmNewPassword.value.length > 0;
-
-        if (wantsPasswordChange) {
-            if (
-                !currentPassword.value ||
-                !newPassword.value ||
-                !confirmNewPassword.value
-            ) {
-                alert("Para cambiar la contraseña debes completar los tres campos.");
-                return;
-            }
-
-            if (newPassword.value.length < 8) {
-                alert("La nueva contraseña debe tener al menos 8 caracteres.");
-                return;
-            }
-
-            if (newPassword.value !== confirmNewPassword.value) {
-                alert("Las nuevas contraseñas no coinciden.");
-                return;
-            }
-
-            // Comprobamos la contraseña actual antes de cambiar información sensible.
-            const { error: passwordCheckError } =
-                await supabase.auth.signInWithPassword({
-                    email: user.email,
-                    password: currentPassword.value
-                });
-
-            if (passwordCheckError) {
-                alert("La contraseña actual es incorrecta.");
-                return;
-            }
-        }
-
-        const oldAvatarUrl =
-            clientProfile.value.avatarUrl || null;
-
-        const oldAvatarPath =
-            getStoragePathFromPublicUrl(oldAvatarUrl);
-
-        let avatarUrl = oldAvatarUrl;
-        let uploadedPhoto = null;
-
-        // Subimos una nueva foto únicamente cuando el cliente la seleccionó.
-        if (profilePhotoFile.value) {
-            uploadedPhoto =
-                await uploadProfileImage(
-                    user.id,
-                    profilePhotoFile.value
-                );
-
-            avatarUrl =
-                uploadedPhoto.publicUrl;
-        }
-
-        const { data, error } =
+        // Primero cargamos la información del emprendimiento.
+        const { data: entrepreneurData, error: entrepreneurError } =
             await supabase
-                .from("profiles")
-                .update({
-                    full_name:
-                        profileForm.value.fullName.trim(),
-                    phone:
-                        profileForm.value.phone.trim(),
-                    avatar_url:
-                        avatarUrl
-                })
-                .eq("id", user.id)
+                .from("entrepreneurs")
                 .select(`
                     id,
-                    full_name,
-                    phone,
-                    avatar_url
+                    business_name,
+                    description,
+                    department,
+                    district,
+                    logo_url
                 `)
+                .eq("id", user.id)
                 .single();
-
-        if (error) {
-            // Si la foto nueva se subió pero el perfil falló, limpiamos ese archivo.
-            if (uploadedPhoto?.path) {
-                try {
-                    await deleteImage(uploadedPhoto.path);
-                } catch (cleanupError) {
-                    console.warn(
-                        "No se pudo limpiar la foto nueva:",
-                        cleanupError
-                    );
-                }
-            }
-
-            throw error;
-        }
-
-        // Eliminamos la foto anterior solo cuando la nueva URL ya quedó guardada.
-        if (
-            uploadedPhoto?.path &&
-            oldAvatarPath &&
-            oldAvatarPath !== uploadedPhoto.path
-        ) {
-            try {
-                await deleteImage(oldAvatarPath);
-            } catch (deleteError) {
-                console.warn(
-                    "La foto nueva se guardó, pero no se pudo eliminar la anterior:",
-                    deleteError
-                );
-            }
-        }
-
-        clientProfile.value = {
-            ...clientProfile.value,
-            fullName:
-                data.full_name || "",
-            phone:
-                data.phone || "",
-            avatarUrl:
-                data.avatar_url || ""
-        };
-
-        // La contraseña se cambia al final, cuando el resto del perfil ya se guardó.
-        if (wantsPasswordChange) {
-            const { error: passwordError } =
-                await supabase.auth.updateUser({
-                    password: newPassword.value
-                });
-
-            if (passwordError) {
-                alert(
-                    "El perfil se actualizó, pero no fue posible cambiar la contraseña: " +
-                    passwordError.message
-                );
-                return;
-            }
-        }
-
-        alert("Tu perfil fue actualizado correctamente.");
-        closeClientProfile();
-    } catch (error) {
-        console.error("Error al guardar el perfil:", error);
-        alert(
-            "No fue posible guardar los cambios: " +
-            (error.message || "Error inesperado")
-        );
-    } finally {
-        profileSaving.value = false;
-    }
-}
-
-// Cierra la sesión actual y redirige al usuario.
-async function logout() {
-    try {
-        /*
-            Cerramos únicamente la sesión actual.
-            Después enviamos al usuario directamente
-            a la pantalla de autenticación.
-        */
-        const { error } =
-            await supabase.auth.signOut({
-                scope: "local"
-            });
-        if (error) {
+        if (entrepreneurError || !entrepreneurData) {
             console.error(
-                "Error al cerrar sesión:",
-                error
+                "Error al cargar el emprendimiento:",
+                entrepreneurError
             );
-            alert(
-                "No fue posible cerrar la sesión."
-            );
+            loadError.value =
+                "No fue posible cargar la información del emprendimiento.";
             return;
         }
-        closeClientProfile();
-        router.replace("/auth");
+        // El teléfono pertenece al perfil general de la cuenta.
+        const { data: accountData, error: accountError } =
+            await supabase
+                .from("profiles")
+                .select("phone")
+                .eq("id", user.id)
+                .single();
+
+        if (accountError) {
+            console.warn(
+                "No se pudo cargar el teléfono del perfil:",
+                accountError
+            );
+        }
+
+        entrepreneur.value = {
+            id: entrepreneurData.id,
+            businessName: entrepreneurData.business_name,
+            phone: accountData?.phone || "",
+            email: user.email || "",
+            description: entrepreneurData.description,
+            department: entrepreneurData.department,
+            district: entrepreneurData.district,
+            avatar: entrepreneurData.logo_url
+        };
+        // Cargamos productos y seguidores reales desde Supabase.
+        await Promise.all([
+            loadProducts(user.id),
+            loadFollowers()
+        ]);
     } catch (error) {
-        console.error(
-            "Error inesperado al cerrar sesión:",
-            error
-        );
-        alert(
-            "Ocurrió un problema al cerrar la sesión."
-        );
+        console.error("Error al cargar el dashboard:", error);
+        loadError.value =
+            "Ocurrió un problema inesperado al cargar el dashboard.";
+    } finally {
+        loading.value = false;
     }
 }
-// Obtiene el promedio y cantidad de reseñas de todos los productos cargados.
+// Obtiene el promedio de reseñas de los productos del emprendedor.
 async function loadReviewSummary(productIds) {
     if (!productIds.length) return {};
     const { data, error } = await supabase
@@ -383,7 +273,7 @@ async function loadReviewSummary(productIds) {
         .select("product_id, rating")
         .in("product_id", productIds);
     if (error) {
-        console.error("No se pudieron cargar los promedios:", error);
+        console.error("No se pudieron cargar las reseñas:", error);
         return {};
     }
     const summary = {};
@@ -400,351 +290,843 @@ async function loadReviewSummary(productIds) {
     return summary;
 }
 
-// Obtiene el número público de WhatsApp de cada emprendimiento.
-async function loadWhatsappNumbers(entrepreneurIds) {
-    const uniqueIds = [...new Set(entrepreneurIds.filter(Boolean))];
-    const entries = await Promise.all(
-        uniqueIds.map(async function (id) {
-            try {
-                const { data, error } = await supabase.rpc(
-                    "get_entrepreneur_public_contact",
-                    {
-                        target_entrepreneur_id: id
-                    }
-                );
-                if (error) throw error;
-                return [
-                    id,
-                    data?.[0]?.phone || ""
-                ];
-            } catch (error) {
-                console.warn("No se pudo cargar el WhatsApp del emprendimiento:", error);
-                return [id, ""];
-            }
-        })
-    );
-    return Object.fromEntries(entries);
-}
+// Carga todos los productos pertenecientes al emprendedor.
+async function loadProducts(userId) {
+    const { data: productRows, error: productError } = await supabase
+        .from("products")
+        .select(`
+            id,
+            entrepreneur_id,
+            name,
+            description,
+            categories,
+            price,
+            stock,
+            featured,
+            active,
+            created_at,
+            updated_at
+        `)
+        .eq("entrepreneur_id", userId)
+        .order("created_at", {
+            ascending: false
+        });
 
-// Carga los productos guardados en la base de datos.
-async function loadProducts() {
-    loadingProducts.value = true;
-    productsError.value = "";
-    try {
-        const { data, error } = await supabase
-            .from("products")
+    if (productError) {
+        console.error("Error al cargar los productos:", productError);
+        throw productError;
+    }
+
+    if (!productRows?.length) {
+        products.value = [];
+        return;
+    }
+
+    const productIds = productRows.map(function (product) {
+        return product.id;
+    });
+
+    const [
+        { data: imageRows, error: imageError },
+        reviewSummary
+    ] = await Promise.all([
+        supabase
+            .from("product_images")
             .select(`
                 id,
-                entrepreneur_id,
-                name,
-                description,
-                categories,
-                price,
-                stock,
-                featured,
-                active,
-                created_at,
-                entrepreneurs (
-                    id,
-                    business_name,
-                    department,
-                    district,
-                    logo_url
-                ),
-                product_images (
-                    id,
-                    image_url,
-                    storage_path,
-                    sort_order
-                )
+                product_id,
+                image_url,
+                storage_path,
+                sort_order
             `)
-            .eq("active", true)
-            .order("created_at", {
-                ascending: false
+            .in("product_id", productIds)
+            .order("sort_order", {
+                ascending: true
+            }),
+        loadReviewSummary(productIds)
+    ]);
+
+    if (imageError) {
+        console.error("Error al cargar imágenes:", imageError);
+        throw imageError;
+    }
+
+    products.value = productRows.map(function (product) {
+        const productImages = (imageRows || [])
+            .filter(function (image) {
+                return image.product_id === product.id;
+            })
+            .sort(function (a, b) {
+                return a.sort_order - b.sort_order;
+            })
+            .map(function (image) {
+                return {
+                    id: image.id,
+                    imageUrl: image.image_url,
+                    storagePath: image.storage_path,
+                    sortOrder: image.sort_order
+                };
             });
-        if (error) throw error;
 
-        const mappedProducts = (data || []).map(function (product) {
-            const images = (product.product_images || [])
-                .slice()
-                .sort(function (a, b) {
-                    return a.sort_order - b.sort_order;
-                })
-                .map(function (image) {
-                    return image.image_url;
-                });
-            const store = product.entrepreneurs;
+        const reviews = reviewSummary[product.id];
+
+        return {
+            id: product.id,
+            entrepreneurId: product.entrepreneur_id,
+            name: product.name,
+            description: product.description || "",
+            categories: product.categories || [],
+            price: Number(product.price) || 0,
+            stock: Number(product.stock) || 0,
+            featured: product.featured,
+            active: product.active,
+            imageRecords: productImages,
+            images: productImages.map(function (image) {
+                return image.imageUrl;
+            }),
+            image: productImages[0]?.imageUrl || null,
+            averageRating:
+                reviews?.count
+                    ? reviews.total / reviews.count
+                    : 0,
+            reviewCount:
+                reviews?.count || 0,
+            createdAt: product.created_at
+        };
+    });
+}
+// Carga y prepara la lista de seguidores del emprendimiento.
+async function loadFollowers() {
+    followersLoading.value = true;
+    try {
+        /*
+            Esta función RPC devuelve solamente los seguidores
+            del emprendimiento que tiene la sesión iniciada.
+            Así evitamos abrir profiles públicamente y evitamos
+            políticas RLS que se consulten entre sí.
+        */
+        const { data, error } = await supabase.rpc(
+            "get_my_followers"
+        );
+        if (error) {
+            throw error;
+        }
+        const rows = data || [];
+        followerCount.value = rows.length;
+        followers.value = rows.map(function (follower) {
             return {
-                id: product.id,
-                entrepreneurId: product.entrepreneur_id,
-                name: product.name,
-                description: product.description || "",
-                categories: product.categories || [],
-                price: Number(product.price) || 0,
-                stock: Number(product.stock) || 0,
-                featured: product.featured,
-                image: images[0] || null,
-                images,
-                store: store?.business_name || "Emprendimiento",
-                storeAvatar: store?.logo_url || "",
-                department: store?.department || "",
-                district: store?.district || "",
-                averageRating: 0,
-                reviewCount: 0,
-                whatsapp: ""
-            };
-        });
-
-        const productIds = mappedProducts.map(function (product) {
-            return product.id;
-        });
-        const entrepreneurIds = mappedProducts.map(function (product) {
-            return product.entrepreneurId;
-        });
-
-        const [reviewSummary, whatsappNumbers] = await Promise.all([
-            loadReviewSummary(productIds),
-            loadWhatsappNumbers(entrepreneurIds)
-        ]);
-
-        products.value = mappedProducts.map(function (product) {
-            const reviews = reviewSummary[product.id];
-            return {
-                ...product,
-                averageRating:
-                    reviews?.count
-                        ? reviews.total / reviews.count
-                        : 0,
-                reviewCount:
-                    reviews?.count || 0,
-                whatsapp:
-                    whatsappNumbers[product.entrepreneurId] || ""
+                id: follower.id,
+                fullName:
+                    follower.full_name ||
+                    "Usuario de Thrive",
+                avatarUrl:
+                    follower.avatar_url || "",
+                followedAt:
+                    follower.created_at
             };
         });
     } catch (error) {
-        console.error("No se pudieron cargar los productos:", error);
-        productsError.value = "No fue posible cargar los productos.";
+        console.error(
+            "Error al cargar seguidores:",
+            error
+        );
+        followerCount.value = 0;
+        followers.value = [];
     } finally {
-        loadingProducts.value = false;
+        followersLoading.value = false;
     }
 }
-// Estados y opciones utilizados para filtrar el catálogo.
-const departments = computed(function () {
-    const availableDepartments =
-        products.value
-            .map(function (product) {
-                return product.department;
-            })
-            .filter(Boolean);
-    return [
-        "Todos",
-        ...new Set(availableDepartments)
-    ];
-});
-const filteredProducts = computed(function () {
-    const search =
-        searchText.value
-            .toLowerCase()
-            .trim();
-    return products.value.filter(
-        function (product) {
-            /*
-                Ahora buscamos también dentro
-                de todas las categorías.
-            */
-            const searchableText = [
-                product.name,
-                product.store,
-                ...(product.categories || [])
-            ]
-                .filter(Boolean)
-                .join(" ")
-                .toLowerCase();
-            const matchesSearch =
-                !search ||
-                searchableText.includes(search);
-            const matchesDepartment =
-                selectedDepartment.value ===
-                    "Todos" ||
-                product.department ===
-                    selectedDepartment.value;
-            return (
-                matchesSearch &&
-                matchesDepartment
-            );
-        }
-    );
-});
-const featuredProducts = computed(function () {
-    return products.value.filter(
-        function (product) {
-            return product.featured;
-        }
-    );
-});
-const productCountText = computed(function () {
-    const total =
-        filteredProducts.value.length;
-    return total === 1
-        ? "1 producto encontrado"
-        : `${total} productos encontrados`;
-});
-// Muestra la foto del cliente o sus iniciales cuando no tiene imagen.
-const clientInitials = computed(function () {
-    const name =
-        clientProfile.value?.fullName ||
-        "Cliente";
+// Genera las iniciales que se muestran cuando un seguidor no tiene foto.
+function followerInitials(name) {
+    if (!name) return "TH";
     return name
         .trim()
         .split(/\s+/)
         .slice(0, 2)
         .map(function (word) {
-            return word
-                .charAt(0)
-                .toUpperCase();
-        })
-        .join("");
-});
-// Funciones pequeñas reutilizadas en distintas partes de la vista.
-function getInitials(store) {
-    if (!store) return "TH";
-    return store
-        .trim()
-        .split(/\s+/)
-        .slice(0, 2)
-        .map(function (word) {
-            return word
-                .charAt(0)
-                .toUpperCase();
+            return word.charAt(0).toUpperCase();
         })
         .join("");
 }
-// Convierte la calificación numérica en un texto fácil de mostrar.
-function ratingText(rating) {
-    const value = Math.max(
-        0,
-        Math.min(
-            5,
-            Math.round(
-                Number(rating) || 0
-            )
-        )
-    );
-    return (
-        "★".repeat(value) +
-        "☆".repeat(5 - value)
-    );
+// Abre la ventana con la lista de seguidores.
+async function openFollowersModal() {
+    if (!entrepreneur.value) return;
+    showFollowersModal.value = true;
+    document.body.style.overflow = "hidden";
+    // Actualizamos la lista cada vez que se abre.
+    await loadFollowers();
 }
-// Da formato al precio para mostrar siempre dos decimales.
-function formatPrice(price) {
-    return new Intl.NumberFormat(
-        "en-US",
-        {
-            style: "currency",
-            currency: "USD"
-        }
-    ).format(Number(price) || 0);
+// Cierra la ventana de seguidores.
+function closeFollowersModal() {
+    showFollowersModal.value = false;
+    document.body.style.overflow = "";
 }
-// Controla el seguimiento de emprendimientos.
-// Carga los emprendimientos que sigue el cliente conectado.
-async function loadFollows() {
-    try {
-        const {
-            data: { user },
-            error: userError
-        } = await supabase.auth.getUser();
-        if (userError || !user) {
-            followedEntrepreneurs.value = [];
-            return;
-        }
-        const { data, error } = await supabase
-            .from("follows")
-            .select("entrepreneur_id")
-            .eq("follower_id", user.id);
-        if (error) {
-            throw error;
-        }
-        followedEntrepreneurs.value = (data || []).map(function (row) {
-            return row.entrepreneur_id;
-        });
-    } catch (error) {
-        console.error("Error al cargar follows:", error);
-        followedEntrepreneurs.value = [];
+// Funciones utilizadas para abrir, editar y guardar el perfil.
+function openProfileEditor() {
+    if (!entrepreneur.value) return;
+    profileForm.value = {
+        businessName: entrepreneur.value.businessName || "",
+        phone: entrepreneur.value.phone || "",
+        description: entrepreneur.value.description || "",
+        department: entrepreneur.value.department || "",
+        district: entrepreneur.value.district || ""
+    };
+    profileLogoPreview.value =
+        entrepreneur.value.avatar || "";
+    profileLogoFile.value = null;
+    clearPasswordFields();
+    showProfileEditor.value = true;
+    document.body.style.overflow = "hidden";
+}
+// Prepara la vista previa del nuevo logo antes de guardarlo.
+function handleProfileLogo(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+        alert("Selecciona un archivo de imagen válido.");
+        event.target.value = "";
+        return;
     }
+    profileLogoFile.value = file;
+    const reader = new FileReader();
+    reader.onload = function (loadEvent) {
+        profileLogoPreview.value =
+            loadEvent.target.result;
+    };
+    reader.readAsDataURL(file);
 }
-// Comprueba si el cliente ya sigue a este emprendimiento.
-function isFollowing(entrepreneurId) {
-    return followedEntrepreneurs.value.includes(entrepreneurId);
+// Limpia los campos de contraseña para evitar conservar datos anteriores.
+function clearPasswordFields() {
+    currentPassword.value = "";
+    newPassword.value = "";
+    confirmNewPassword.value = "";
+    showCurrentPassword.value = false;
+    showNewPassword.value = false;
+    showConfirmPassword.value = false;
 }
-// Indica si una acción de seguimiento sigue en proceso.
-function isFollowLoading(entrepreneurId) {
-    return followLoading.value.includes(entrepreneurId);
+// Cierra el editor de perfil y limpia sus estados temporales.
+function closeProfileEditor() {
+    showProfileEditor.value = false;
+    profileLogoFile.value = null;
+    clearPasswordFields();
+    document.body.style.overflow = "";
 }
-// Sigue o deja de seguir un emprendimiento y guarda el cambio en Supabase.
-async function toggleFollow(entrepreneurId) {
-    if (!entrepreneurId || isFollowLoading(entrepreneurId)) return;
-    followLoading.value.push(entrepreneurId);
+// Valida y guarda los cambios realizados en el perfil del emprendimiento.
+async function saveProfile() {
+    if (!entrepreneur.value || profileSaving.value) return;
+    profileSaving.value = true;
     try {
-        const {
-            data: { user },
-            error: userError
-        } = await supabase.auth.getUser();
-        if (userError || !user) {
-            router.replace("/auth");
-            return;
-        }
-        if (isFollowing(entrepreneurId)) {
-            const { error } = await supabase
-                .from("follows")
-                .delete()
-                .eq("follower_id", user.id)
-                .eq("entrepreneur_id", entrepreneurId);
-            if (error) {
-                throw error;
-            }
-            followedEntrepreneurs.value =
-                followedEntrepreneurs.value.filter(function (id) {
-                    return id !== entrepreneurId;
-                });
-            return;
-        }
-        const { error } = await supabase
-            .from("follows")
-            .insert({
-                follower_id: user.id,
-                entrepreneur_id: entrepreneurId
-            });
-        if (error) {
-            // Si ya existía el follow, recargamos el estado y no mostramos error.
-            if (error.code === "23505") {
-                await loadFollows();
+        const wantsPasswordChange =
+            currentPassword.value.length > 0 ||
+            newPassword.value.length > 0 ||
+            confirmNewPassword.value.length > 0;
+        if (wantsPasswordChange) {
+            if (
+                !currentPassword.value ||
+                !newPassword.value ||
+                !confirmNewPassword.value
+            ) {
+                alert(
+                    "Para cambiar la contraseña debes completar los tres campos."
+                );
                 return;
             }
-            throw error;
+            if (newPassword.value.length < 8) {
+                alert(
+                    "La nueva contraseña debe tener al menos 8 caracteres."
+                );
+                return;
+            }
+            if (
+                newPassword.value !==
+                confirmNewPassword.value
+            ) {
+                alert(
+                    "Las nuevas contraseñas no coinciden."
+                );
+                return;
+            }
         }
-        followedEntrepreneurs.value.push(entrepreneurId);
+        let logoUrl =
+            entrepreneur.value.avatar || null;
+        // Si existe una nueva imagen, se sube primero a Storage.
+        if (profileLogoFile.value) {
+            const uploadedLogo =
+                await uploadEntrepreneurLogo(
+                    entrepreneur.value.id,
+                    profileLogoFile.value
+                );
+            logoUrl = uploadedLogo.publicUrl;
+        }
+        // Verificamos la contraseña actual antes de cambiarla.
+        if (wantsPasswordChange) {
+            const {
+                data: { user },
+                error: userError
+            } = await supabase.auth.getUser();
+            if (userError || !user?.email) {
+                alert(
+                    "No fue posible verificar tu cuenta."
+                );
+                return;
+            }
+            const { error: passwordCheckError } =
+                await supabase.auth.signInWithPassword({
+                    email: user.email,
+                    password: currentPassword.value
+                });
+            if (passwordCheckError) {
+                alert(
+                    "La contraseña actual es incorrecta."
+                );
+                return;
+            }
+        }
+        const { data, error } = await supabase
+            .from("entrepreneurs")
+            .update({
+                business_name:
+                    profileForm.value.businessName.trim(),
+                description:
+                    profileForm.value.description.trim(),
+                department:
+                    profileForm.value.department,
+                district:
+                    profileForm.value.district.trim(),
+                logo_url:
+                    logoUrl
+            })
+            .eq(
+                "id",
+                entrepreneur.value.id
+            )
+            .select()
+            .single();
+        if (error) {
+            alert(
+                "No fue posible actualizar el perfil: " +
+                error.message
+            );
+            return;
+        }
+
+        // El teléfono se guarda en profiles, igual que en la cuenta del cliente.
+        const { error: accountUpdateError } =
+            await supabase
+                .from("profiles")
+                .update({
+                    phone:
+                        profileForm.value.phone.trim()
+                })
+                .eq(
+                    "id",
+                    entrepreneur.value.id
+                );
+
+        if (accountUpdateError) {
+            alert(
+                "El emprendimiento se actualizó, pero no fue posible guardar el teléfono: " +
+                accountUpdateError.message
+            );
+            return;
+        }
+
+        entrepreneur.value = {
+            id: data.id,
+            businessName: data.business_name,
+            phone: profileForm.value.phone.trim(),
+            email: entrepreneur.value.email || "",
+            description: data.description,
+            department: data.department,
+            district: data.district,
+            avatar: data.logo_url
+        };
+        if (wantsPasswordChange) {
+            const { error: passwordError } =
+                await supabase.auth.updateUser({
+                    password: newPassword.value
+                });
+            if (passwordError) {
+                alert(
+                    "El perfil se actualizó, pero no fue posible cambiar la contraseña: " +
+                    passwordError.message
+                );
+                return;
+            }
+        }
+        alert("Perfil actualizado correctamente.");
+        closeProfileEditor();
     } catch (error) {
-        console.error("Error al actualizar follow:", error);
-        alert("No fue posible actualizar el seguimiento.");
+        console.error(
+            "Error al guardar el perfil:",
+            error
+        );
+        alert(
+            "Ocurrió un problema al guardar los cambios."
+        );
     } finally {
-        followLoading.value =
-            followLoading.value.filter(function (id) {
-                return id !== entrepreneurId;
-            });
+        profileSaving.value = false;
     }
 }
-// Abre el perfil público del emprendimiento seleccionado.
-function openEntrepreneurProfile(
-    entrepreneurId
-) {
-    router.push({
-        name: "PerfilEmprendedor",
-        params: {
-            id: entrepreneurId
-        }
+// Controla la selección de categorías del emprendimiento o producto.
+function toggleCategory(category) {
+    const categories =
+        productForm.value.categories;
+    const index =
+        categories.indexOf(category);
+    if (index === -1) {
+        categories.push(category);
+    } else {
+        categories.splice(index, 1);
+    }
+}
+// Comprueba si una categoría ya está seleccionada.
+function isCategorySelected(category) {
+    return productForm.value.categories.includes(
+        category
+    );
+}
+// Prepara el formulario para registrar un producto nuevo.
+function openAddProduct() {
+    productEditorMode.value = "add";
+    selectedProduct.value = null;
+    productForm.value = {
+        name: "",
+        description: "",
+        categories: [],
+        price: 0,
+        stock: 0
+    };
+    editorImages.value = [];
+    originalProductImages.value = [];
+    showCategoryDropdown.value = false;
+    showProductEditor.value = true;
+    document.body.style.overflow = "hidden";
+}
+// Carga un producto existente dentro del formulario de edición.
+function openProductEditor(product) {
+    productEditorMode.value = "edit";
+    selectedProduct.value = product;
+    productForm.value = {
+        name: product.name || "",
+        description: product.description || "",
+        categories: [
+            ...(product.categories || [])
+        ],
+        price: Number(product.price) || 0,
+        stock: Number(product.stock) || 0
+    };
+    /*
+        Las imágenes existentes conservan su ID y ruta.
+        Así podemos identificar cuáles se mantienen o eliminan.
+    */
+    editorImages.value = (
+        product.imageRecords || []
+    ).map(function (image) {
+        return {
+            kind: "existing",
+            id: image.id,
+            imageUrl: image.imageUrl,
+            storagePath: image.storagePath,
+            preview: image.imageUrl
+        };
+    });
+    originalProductImages.value =
+        editorImages.value.map(function (image) {
+            return {
+                ...image
+            };
+        });
+    showCategoryDropdown.value = false;
+    showProductEditor.value = true;
+    document.body.style.overflow = "hidden";
+}
+// Convierte un archivo en una vista previa.
+function fileToPreview(file) {
+    return new Promise(function (resolve, reject) {
+        const reader = new FileReader();
+        reader.onload = function (event) {
+            resolve(event.target.result);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
     });
 }
-// Abre el detalle del producto en su propia pantalla.
+// Permite añadir varias fotografías sin borrar las anteriores.
+async function handleProductImages(event) {
+    const files = Array.from(
+        event.target.files || []
+    );
+    if (!files.length) return;
+    const validFiles = [];
+    for (const file of files) {
+        if (!file.type.startsWith("image/")) {
+            continue;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            alert(
+                `${file.name} supera el límite de 5 MB.`
+            );
+            continue;
+        }
+        validFiles.push(file);
+    }
+    const newImages =
+        await Promise.all(
+            validFiles.map(
+                async function (file, index) {
+                    const preview =
+                        await fileToPreview(file);
+                    return {
+                        kind: "new",
+                        key:
+                            `${Date.now()}-${index}-${file.name}`,
+                        file,
+                        preview
+                    };
+                }
+            )
+        );
+    editorImages.value.push(...newImages);
+    // Permite seleccionar nuevamente los mismos archivos.
+    event.target.value = "";
+}
+// Elimina una imagen únicamente del formulario.
+// La eliminación real ocurre cuando se guardan los cambios.
+function removeProductImage(index) {
+    editorImages.value.splice(index, 1);
+}
+// Convierte cualquier fotografía en la portada.
+function makeProductImageCover(index) {
+    if (index === 0) return;
+    const [image] =
+        editorImages.value.splice(index, 1);
+    editorImages.value.unshift(image);
+}
+// Cierra el formulario de producto y limpia los datos temporales.
+function closeProductEditor() {
+    showProductEditor.value = false;
+    selectedProduct.value = null;
+    editorImages.value = [];
+    originalProductImages.value = [];
+    showCategoryDropdown.value = false;
+    document.body.style.overflow = "";
+}
+// Guarda un producto nuevo o actualiza uno existente.
+async function saveProduct() {
+    if (productSaving.value) return;
+    if (!productForm.value.categories.length) {
+        alert(
+            "Selecciona al menos una categoría."
+        );
+        return;
+    }
+    productSaving.value = true;
+    try {
+        const {
+            data: { user },
+            error: userError
+        } = await supabase.auth.getUser();
+        if (userError || !user) {
+            alert(
+                "No se encontró una sesión activa."
+            );
+            return;
+        }
+        if (productEditorMode.value === "add") {
+            await createProduct(user);
+        } else {
+            await updateProduct(user);
+        }
+        await loadProducts(user.id);
+        alert(
+            productEditorMode.value === "add"
+                ? "Producto publicado correctamente."
+                : "Producto actualizado correctamente."
+        );
+        closeProductEditor();
+    } catch (error) {
+        console.error(
+            "Error al guardar el producto:",
+            error
+        );
+        alert(
+            "No fue posible guardar el producto: " +
+            error.message
+        );
+    } finally {
+        productSaving.value = false;
+    }
+}
+// Crea el registro principal y después almacena sus fotografías.
+async function createProduct(user) {
+    const { data: newProduct, error: productError } =
+        await supabase
+            .from("products")
+            .insert({
+                entrepreneur_id: user.id,
+                name: productForm.value.name.trim(),
+                description: productForm.value.description.trim(),
+                categories: productForm.value.categories,
+                price: Number(productForm.value.price) || 0,
+                stock: Number(productForm.value.stock) || 0,
+                featured: false,
+                active: true
+            })
+            .select()
+            .single();
+    if (productError) {
+        throw productError;
+    }
+    const newImages = editorImages.value.filter(function (image) {
+        return image.kind === "new";
+    });
+    if (!newImages.length) {
+        return;
+    }
+    let uploadedImages = [];
+    try {
+        // Subimos todas las imágenes al Storage del producto.
+        uploadedImages = await uploadProductImages(
+            user.id,
+            newProduct.id,
+            newImages.map(function (image) {
+                return image.file;
+            })
+        );
+        const imageRows = uploadedImages.map(function (image, index) {
+            return {
+                product_id: newProduct.id,
+                image_url: image.publicUrl,
+                storage_path: image.path,
+                sort_order: index
+            };
+        });
+        const { error: imageError } = await supabase
+            .from("product_images")
+            .insert(imageRows);
+        if (imageError) {
+            throw imageError;
+        }
+    } catch (error) {
+        /*
+            Si algo falla después de subir fotografías, limpiamos
+            los archivos nuevos para no dejar imágenes huérfanas.
+        */
+        for (const image of uploadedImages) {
+            try {
+                await deleteImage(image.path);
+            } catch (cleanupError) {
+                console.warn(
+                    "No se pudo limpiar una imagen subida:",
+                    cleanupError
+                );
+            }
+        }
+        /*
+            Como el producto todavía no terminó de crearse correctamente,
+            eliminamos también su registro. product_images se elimina en
+            cascada si ya se alcanzó a insertar alguna fila.
+        */
+        try {
+            await supabase
+                .from("products")
+                .delete()
+                .eq("id", newProduct.id);
+        } catch (cleanupError) {
+            console.warn(
+                "No se pudo limpiar el producto incompleto:",
+                cleanupError
+            );
+        }
+        throw error;
+    }
+}
+// Actualiza el producto y sincroniza por completo sus fotografías.
+async function updateProduct(user) {
+    if (!selectedProduct.value) {
+        throw new Error(
+            "No se encontró el producto seleccionado."
+        );
+    }
+    const productId = selectedProduct.value.id;
+    // Actualizamos primero la información principal del producto.
+    const { error: updateError } = await supabase
+        .from("products")
+        .update({
+            name: productForm.value.name.trim(),
+            description: productForm.value.description.trim(),
+            categories: productForm.value.categories,
+            price: Number(productForm.value.price) || 0,
+            stock: Number(productForm.value.stock) || 0,
+            updated_at: new Date().toISOString()
+        })
+        .eq("id", productId);
+    if (updateError) {
+        throw updateError;
+    }
+    /*
+        Comparamos las imágenes que existían al abrir el editor
+        con las que todavía siguen presentes cuando el usuario guarda.
+    */
+    const currentExistingIds = editorImages.value
+        .filter(function (image) {
+            return image.kind === "existing";
+        })
+        .map(function (image) {
+            return image.id;
+        });
+    const removedImages = originalProductImages.value.filter(
+        function (image) {
+            return !currentExistingIds.includes(image.id);
+        }
+    );
+    const newImages = editorImages.value.filter(function (image) {
+        return image.kind === "new";
+    });
+    let uploadedImages = [];
+    let insertedImageIds = [];
+    try {
+        // 1. Subimos primero las fotografías nuevas.
+        if (newImages.length) {
+            uploadedImages = await uploadProductImages(
+                user.id,
+                productId,
+                newImages.map(function (image) {
+                    return image.file;
+                })
+            );
+        }
+        /*
+            2. Construimos las filas nuevas respetando exactamente
+            el orden visual del editor. La posición 0 será la portada.
+        */
+        let uploadedIndex = 0;
+        const newImageRows = [];
+        for (
+            let index = 0;
+            index < editorImages.value.length;
+            index++
+        ) {
+            const image = editorImages.value[index];
+            if (image.kind === "new") {
+                const uploaded = uploadedImages[uploadedIndex];
+                if (uploaded) {
+                    newImageRows.push({
+                        product_id: productId,
+                        image_url: uploaded.publicUrl,
+                        storage_path: uploaded.path,
+                        sort_order: index
+                    });
+                }
+                uploadedIndex++;
+            }
+        }
+        // 3. Registramos las imágenes nuevas en product_images.
+        if (newImageRows.length) {
+            const { data: insertedRows, error: insertError } =
+                await supabase
+                    .from("product_images")
+                    .insert(newImageRows)
+                    .select("id");
+            if (insertError) {
+                throw insertError;
+            }
+            insertedImageIds = (insertedRows || []).map(function (row) {
+                return row.id;
+            });
+        }
+        /*
+            4. Actualizamos el orden de las fotografías que ya existían.
+            Esto también permite cambiar cuál imagen es la portada.
+        */
+        for (
+            let index = 0;
+            index < editorImages.value.length;
+            index++
+        ) {
+            const image = editorImages.value[index];
+            if (image.kind !== "existing") {
+                continue;
+            }
+            const { error: orderError } = await supabase
+                .from("product_images")
+                .update({
+                    sort_order: index
+                })
+                .eq("id", image.id);
+            if (orderError) {
+                throw orderError;
+            }
+        }
+        /*
+            5. Las fotografías quitadas del editor se eliminan
+            definitivamente de la tabla product_images.
+        */
+        if (removedImages.length) {
+            const removedIds = removedImages.map(function (image) {
+                return image.id;
+            });
+            const { error: deleteRowsError } = await supabase
+                .from("product_images")
+                .delete()
+                .in("id", removedIds);
+            if (deleteRowsError) {
+                throw deleteRowsError;
+            }
+            /*
+                6. Después de eliminar sus filas, borramos también
+                los archivos físicos del bucket thrive-images.
+            */
+            for (const image of removedImages) {
+                try {
+                    await deleteImage(image.storagePath);
+                } catch (storageDeleteError) {
+                    /*
+                        La fila ya se eliminó de la base de datos.
+                        Si Storage falla, dejamos una advertencia en consola
+                        sin romper la actualización completa del producto.
+                    */
+                    console.warn(
+                        "La imagen se eliminó de la base de datos, pero no del Storage:",
+                        storageDeleteError
+                    );
+                }
+            }
+        }
+    } catch (error) {
+        /*
+            Si las fotografías nuevas se subieron pero la sincronización
+            de la base de datos falla, intentamos retirar esas nuevas
+            fotografías y sus filas para evitar archivos duplicados.
+        */
+        if (insertedImageIds.length) {
+            try {
+                await supabase
+                    .from("product_images")
+                    .delete()
+                    .in("id", insertedImageIds);
+            } catch (cleanupError) {
+                console.warn(
+                    "No se pudieron limpiar las filas nuevas:",
+                    cleanupError
+                );
+            }
+        }
+        for (const image of uploadedImages) {
+            try {
+                await deleteImage(image.path);
+            } catch (cleanupError) {
+                console.warn(
+                    "No se pudo limpiar una imagen nueva:",
+                    cleanupError
+                );
+            }
+        }
+        throw error;
+    }
+}
+// Abre el producto en la pantalla independiente de detalle.
 function openProductDetail(product) {
     if (!product?.id) return;
     router.push({
@@ -754,48 +1136,30 @@ function openProductDetail(product) {
         }
     });
 }
-// Prepara el contacto del producto por WhatsApp.
-function contactWhatsApp(product) {
-    const message =
-        encodeURIComponent(
-            `Hola, estoy interesado/a en "${product.name}" de ${product.store}. Quisiera obtener más información sobre el producto.`
-        );
-    const rawWhatsapp =
-        String(
-            product.whatsapp || ""
-        ).replace(/\D/g, "");
-    const whatsapp =
-        rawWhatsapp.length === 8
-            ? `503${rawWhatsapp}`
-            : rawWhatsapp;
-    const url =
-        whatsapp
-            ? `https://wa.me/${whatsapp}?text=${message}`
-            : `https://wa.me/?text=${message}`;
-    window.open(
-        url,
-        "_blank",
-        "noopener,noreferrer"
-    );
-}
 // Maneja accesos rápidos del teclado para cerrar ventanas.
 function handleEscape(event) {
     if (event.key !== "Escape") return;
-    if (showClientProfile.value) {
-        closeClientProfile();
+    if (showFollowersModal.value) {
+        closeFollowersModal();
+        return;
+    }
+    if (showProductEditor.value) {
+        closeProductEditor();
+        return;
+    }
+    if (showProfileEditor.value) {
+        closeProfileEditor();
     }
 }
-// Carga inicial de los datos necesarios para mostrar la página.
-onMounted(async function () {
-    /*
-        Cargamos perfil y productos al mismo tiempo
-        para que el catálogo aparezca más rápido.
-    */
-    await Promise.all([
-        loadClientProfile(),
-        loadProducts(),
-        loadFollows()
-    ]);
+onMounted(function () {
+    // Al regresar desde Inventario o Calculadora podemos volver directamente a Inicio o Novedades.
+    const pendingSection = sessionStorage.getItem("thriveDashboardSection");
+    if (["inicio", "novedades"].includes(pendingSection)) {
+        activeSection.value = pendingSection;
+        sessionStorage.removeItem("thriveDashboardSection");
+    }
+
+    loadDashboard();
     document.addEventListener(
         "keydown",
         handleEscape
@@ -810,704 +1174,146 @@ onBeforeUnmount(function () {
 });
 </script>
 <template>
-<div class="min-h-screen bg-white pb-[72px] text-gray-700 lg:pb-0">
-    <!-- Cabecera. -->
-    <header class="sticky top-0 z-40 border-b border-gray-100 bg-white">
+<div class="min-h-screen bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-0">
+    <!-- Cabecera. En móvil conserva la vista original y en laptop funciona como navegación principal. -->
+    <header class="sticky top-0 z-40 bg-[#F8FBFC]">
         <div class="mx-auto max-w-[1450px] px-2 pt-2 sm:px-5 lg:px-8 lg:pt-4">
-            <!-- Isla superior -->
-            <div class="flex items-center gap-1 rounded-[24px] bg-[#00B4D8] p-1.5 sm:gap-2 sm:p-2">
-                <!-- Buscador -->
-                <div class="flex min-w-0 flex-1 items-center rounded-full bg-white px-3 py-2">
-                    <svg
-                        class="mr-2 h-5 w-5 shrink-0 text-gray-400"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        viewBox="0 0 24 24"
-                    >
-                        <circle
-                            cx="11"
-                            cy="11"
-                            r="7"
-                        ></circle>
-                        <path
-                            stroke-linecap="round"
-                            d="m20 20-3.5-3.5"
-                        ></path>
-                    </svg>
-                    <input
-                        v-model="searchText"
-                        type="text"
-                        placeholder="Buscar productos o tiendas"
-                        class="min-w-0 flex-1 bg-transparent text-sm text-gray-700 outline-none placeholder:text-gray-400"
-                    >
-                </div>
-                <!-- Perfil del cliente -->
-                <button
-                    type="button"
-                    aria-label="Mi perfil"
-                    class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full text-white transition hover:bg-white/20"
-                    @click="openClientProfile"
-                >
-                    <!-- Foto real -->
-                    <img
-                        v-if="clientProfile?.avatarUrl"
-                        :src="clientProfile.avatarUrl"
-                        :alt="clientProfile.fullName"
-                        class="h-8 w-8 rounded-full border-2 border-white/70 object-cover"
-                    >
-                    <!-- Iniciales -->
-                    <span
-                        v-else-if="clientProfile"
-                        class="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-[10px] font-black text-white"
-                    >
-                        {{ clientInitials }}
+            <!-- Cabecera móvil: mantiene el nombre y los accesos rápidos de la aplicación. -->
+            <div class="flex items-center gap-1 rounded-[24px] bg-[#00B4D8] p-1.5 shadow-sm sm:gap-2 sm:p-2 lg:hidden">
+                <div class="flex min-w-0 flex-1 items-center px-3">
+                    <span class="truncate text-sm font-bold text-white sm:text-base">
+                        {{ entrepreneur?.businessName || "Thrive" }}
                     </span>
-                    <!-- Icono mientras carga -->
-                    <svg
-                        v-else
-                        class="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                        viewBox="0 0 24 24"
-                    >
-                        <circle
-                            cx="12"
-                            cy="8"
-                            r="4"
-                        ></circle>
-                        <path
-                            stroke-linecap="round"
-                            d="M4 21a8 8 0 0116 0"
-                        ></path>
-                    </svg>
-                </button>
-                <!-- Mensajes -->
-                <button
-                    type="button"
-                    aria-label="Mensajes"
-                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white hover:bg-white/20"
-                >
-                    <svg
-                        class="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                        viewBox="0 0 24 24"
-                    >
-                        <path
-                            stroke-linejoin="round"
-                            d="M4 5h16v12H8l-4 3V5z"
-                        ></path>
-                        <path
-                            stroke-linecap="round"
-                            d="M8 9h8M8 13h5"
-                        ></path>
-                    </svg>
-                </button>
-                <!-- Notificaciones -->
-                <button
-                    type="button"
-                    aria-label="Notificaciones"
-                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white hover:bg-white/20"
-                >
-                    <svg
-                        class="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                        viewBox="0 0 24 24"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"
-                        ></path>
-                    </svg>
-                </button>
-            </div>
-            <!-- Departamentos -->
-            <div class="mt-2 flex gap-2 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <button
-                    v-for="department in departments"
-                    :key="department"
-                    type="button"
-                    class="whitespace-nowrap rounded-full px-4 py-1.5 text-xs font-semibold transition sm:text-sm"
-                    :class="
-                        selectedDepartment === department
-                            ? 'bg-[#00B4D8] text-white'
-                            : 'bg-[#CAF0F8] text-[#0077B6] hover:bg-[#90E0EF]'
-                    "
-                    @click="selectedDepartment = department"
-                >
-                    {{ department }}
-                </button>
-            </div>
-            <!-- Navegación computadora -->
-            <nav class="hidden items-center justify-between border-t border-gray-100 py-3 lg:flex">
-                <div class="flex items-center gap-6">
-                    <RouterLink
-                        to="/catalogo"
-                        class="font-bold text-[#0077B6]"
-                    >
-                        Inicio
-                    </RouterLink>
-                    <a
-                        href="#productos"
-                        class="text-sm font-semibold text-gray-500 hover:text-[#0077B6]"
-                    >
-                        Explorar
-                    </a>
-                    <a
-                        href="#"
-                        class="text-sm font-semibold text-gray-500 hover:text-[#0077B6]"
-                    >
-                        Bandeja
-                    </a>
-                    <!-- Perfil -->
-                    <button
-                        type="button"
-                        class="text-sm font-semibold text-gray-500 hover:text-[#0077B6]"
-                        @click="openClientProfile"
-                    >
-                        Mi perfil
-                    </button>
                 </div>
-                <p class="text-sm text-gray-400">
-                    Descubre productos de emprendimientos salvadoreños
-                </p>
+                <button type="button" aria-label="Mensajes" class="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/20">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                        <path stroke-linejoin="round" d="M4 5h16v12H8l-4 3V5z"></path>
+                        <path stroke-linecap="round" d="M8 9h8M8 13h5"></path>
+                    </svg>
+                </button>
+                <button type="button" aria-label="Notificaciones" class="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/20">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Navbar principal para laptop. La antigua isla azul ahora sí se utiliza para navegar. -->
+            <nav class="hidden items-center justify-center gap-2 rounded-[24px] bg-[#00B4D8] p-2 shadow-sm lg:flex">
+                <button
+                    v-for="item in [
+                        ['inicio', 'Inicio'],
+                        ['inventario', 'Inventario'],
+                        ['novedades', 'Novedades'],
+                        ['calculadora', 'Calculadora']
+                    ]"
+                    :key="item[0]"
+                    type="button"
+                    class="rounded-full px-6 py-2.5 text-sm font-bold transition"
+                    :class="activeSection === item[0] ? 'bg-white text-[#0077B6] shadow-sm' : 'text-white/85 hover:bg-white/15 hover:text-white'"
+                    @click="changeSection(item[0])"
+                >
+                    {{ item[1] }}
+                </button>
             </nav>
         </div>
     </header>
-    <!-- Catálogo. -->
+    <!-- Cargando. -->
     <main
-        id="productos"
-        class="mx-auto max-w-[1450px] px-1.5 pb-6 pt-3 sm:px-5 sm:pt-5 lg:px-8"
+        v-if="loading"
+        class="mx-auto max-w-[1450px] px-5 py-24 text-center"
     >
-        <!-- Destacados -->
-        <section
-            v-if="featuredProducts.length"
-            class="mb-7"
-        >
-            <div class="mb-3 flex items-end justify-between px-1">
-                <div>
-                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                        Recomendados para ti
-                    </p>
-                    <h1 class="mt-0.5 text-xl font-black text-gray-700 sm:text-2xl">
-                        Productos destacados
-                    </h1>
-                </div>
-            </div>
-            <div class="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <div class="flex w-max gap-3 pb-2 sm:gap-4">
-                    <article
-                        v-for="product in featuredProducts"
-                        :key="`featured-${product.id}`"
-                        class="w-[165px] shrink-0 cursor-pointer overflow-hidden rounded-2xl border border-[#90E0EF]/50 bg-white p-2 sm:w-[215px]"
-                        @click="openProductDetail(product)"
-                    >
-                        <!-- Emprendimiento -->
-                        <button
-                            type="button"
-                            class="mb-2 flex min-w-0 items-center gap-2 text-left"
-                            @click.stop="openEntrepreneurProfile(product.entrepreneurId)"
-                        >
-                            <img
-                                v-if="product.storeAvatar"
-                                :src="product.storeAvatar"
-                                :alt="product.store"
-                                class="h-8 w-8 shrink-0 rounded-full border border-gray-100 object-cover"
-                            >
-                            <div
-                                v-else
-                                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#CAF0F8] text-[10px] font-bold text-[#0077B6]"
-                            >
-                                {{ getInitials(product.store) }}
-                            </div>
-                            <span class="truncate text-xs font-semibold text-gray-500">
-                                {{ product.store }}
-                            </span>
-                        </button>
-                        <!-- Imagen -->
-                        <div class="overflow-hidden rounded-xl bg-gray-100">
-                            <img
-                                v-if="product.image"
-                                :src="product.image"
-                                :alt="product.name"
-                                class="aspect-square w-full object-cover"
-                            >
-                            <div
-                                v-else
-                                class="flex aspect-square items-center justify-center text-xs font-bold text-gray-400"
-                            >
-                                Sin imagen
-                            </div>
-                        </div>
-                        <!-- Información -->
-                        <div class="pt-2">
-                            <h3 class="truncate text-[11px] font-medium text-gray-500 sm:text-sm">
-                                {{ product.name }}
-                            </h3>
-                            <div class="mt-1 flex items-center gap-1 text-[10px] sm:text-xs">
-                                <span class="text-amber-500">★</span>
-                                <span class="font-bold text-gray-600">
-                                    {{ Number(product.averageRating).toFixed(1) }}
-                                </span>
-                                <span class="text-gray-400">
-                                    ({{ product.reviewCount }})
-                                </span>
-                            </div>
-                            <div class="mt-1 flex items-center justify-between gap-2">
-                                <span class="font-extrabold text-[#4F7180]">
-                                    {{ formatPrice(product.price) }}
-                                </span>
-                                <button
-                                    type="button"
-                                    :disabled="isFollowLoading(product.entrepreneurId)"
-                                    class="rounded-full border px-2 py-1 text-[9px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-                                    :class="
-                                        isFollowing(product.entrepreneurId)
-                                            ? 'border-[#00B4D8] bg-[#CAF0F8] text-[#0077B6]'
-                                            : 'border-gray-300 text-gray-500'
-                                    "
-                                    @click.stop="toggleFollow(product.entrepreneurId)"
-                                >
-                                    {{
-                                        isFollowLoading(product.entrepreneurId)
-                                            ? "..."
-                                            : isFollowing(product.entrepreneurId)
-                                                ? "Siguiendo"
-                                                : "Seguir +"
-                                    }}
-                                </button>
-                            </div>
-                        </div>
-                    </article>
-                </div>
-            </div>
-        </section>
-        <!-- Encabezado -->
-        <div class="mb-5 flex items-end justify-between border-t border-gray-100 pt-5">
-            <div>
-                <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                    Explorar
-                </p>
-                <h2 class="mt-0.5 text-xl font-black text-gray-700 sm:text-2xl">
-                    Todos los productos
-                </h2>
-            </div>
-            <span class="hidden text-sm text-gray-400 sm:block">
-                {{ productCountText }}
-            </span>
+        <div class="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div>
+        <p class="mt-4 text-sm font-semibold text-gray-400">
+            Cargando tu emprendimiento...
+        </p>
+    </main>
+    <!-- Error. -->
+    <main
+        v-else-if="loadError"
+        class="mx-auto max-w-[1450px] px-5 py-24 text-center"
+    >
+        <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100 font-black text-red-600">
+            !
         </div>
-        <!-- Cargando -->
-        <div
-            v-if="loadingProducts"
-            class="py-20 text-center"
+        <p class="mt-4 font-black text-gray-700">
+            No pudimos cargar el dashboard
+        </p>
+        <p class="mt-2 text-sm text-gray-400">
+            {{ loadError }}
+        </p>
+        <button
+            type="button"
+            class="mt-5 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white"
+            @click="loadDashboard"
         >
-            <div class="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div>
-            <p class="mt-4 text-sm font-semibold text-gray-400">
-                Cargando productos...
-            </p>
-        </div>
-        <!-- Error -->
-        <div
-            v-else-if="productsError"
-            class="py-20 text-center"
-        >
-            <p class="font-bold text-gray-700">
-                No pudimos cargar los productos
-            </p>
-            <p class="mt-1 text-sm text-gray-400">
-                {{ productsError }}
-            </p>
-            <button
-                type="button"
-                class="mt-4 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white"
-                @click="loadProducts"
-            >
-                Intentar nuevamente
-            </button>
-        </div>
-        <!-- Sin resultados -->
-        <div
-            v-else-if="!filteredProducts.length"
-            class="py-20 text-center"
-        >
-            <p class="font-bold text-gray-700">
-                No encontramos productos
-            </p>
-            <p class="mt-1 text-sm text-gray-400">
-                Prueba otra búsqueda o departamento.
-            </p>
-        </div>
-        <!-- Productos -->
-        <section
-            v-else
-            class="grid grid-cols-2 gap-x-2 gap-y-5 sm:gap-4 md:grid-cols-3 xl:grid-cols-4"
-        >
-            <article
-                v-for="product in filteredProducts"
-                :key="product.id"
-                class="min-w-0 cursor-pointer overflow-hidden bg-white sm:rounded-2xl sm:border sm:border-gray-100 sm:p-2"
-                @click="openProductDetail(product)"
-            >
-                <!-- Emprendedor -->
-                <div class="mb-1.5 flex items-center justify-between gap-1">
-                    <button
-                        type="button"
-                        class="flex min-w-0 items-center gap-1.5 text-left"
-                        @click.stop="openEntrepreneurProfile(product.entrepreneurId)"
-                    >
+            Intentar nuevamente
+        </button>
+    </main>
+    <!-- Contenido. -->
+    <main
+        v-else-if="entrepreneur"
+        class="mx-auto max-w-[1450px] px-3 pb-10 pt-3 sm:px-5 lg:px-8"
+    >
+        <!-- INICIO -->
+        <section v-if="activeSection === 'inicio'">
+            <!-- Perfil -->
+            <section class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
+                <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                    <div class="flex flex-col items-center gap-5 text-center sm:flex-row sm:text-left">
                         <img
-                            v-if="product.storeAvatar"
-                            :src="product.storeAvatar"
-                            :alt="product.store"
-                            class="h-7 w-7 shrink-0 rounded-full border border-gray-200 object-cover sm:h-9 sm:w-9"
+                            v-if="entrepreneur.avatar"
+                            :src="entrepreneur.avatar"
+                            :alt="entrepreneur.businessName"
+                            class="h-24 w-24 rounded-full border-4 border-[#CAF0F8] object-cover sm:h-28 sm:w-28"
                         >
                         <div
                             v-else
-                            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#CAF0F8] text-[9px] font-bold text-[#0077B6] sm:h-9 sm:w-9"
+                            class="flex h-24 w-24 items-center justify-center rounded-full border-4 border-[#CAF0F8] bg-[#EAF9FC] text-2xl font-black text-[#0077B6] sm:h-28 sm:w-28"
                         >
-                            {{ getInitials(product.store) }}
+                            {{ entrepreneurInitials }}
                         </div>
-                        <span class="truncate text-[10px] font-medium text-gray-500 sm:text-sm">
-                            {{ product.store }}
-                        </span>
-                    </button>
-                    <button
-                        type="button"
-                        :disabled="isFollowLoading(product.entrepreneurId)"
-                        class="shrink-0 rounded-full border px-2 py-1 text-[9px] font-medium disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-xs"
-                        :class="
-                            isFollowing(product.entrepreneurId)
-                                ? 'border-[#00B4D8] bg-[#CAF0F8] text-[#0077B6]'
-                                : 'border-gray-300 text-gray-500'
-                        "
-                        @click.stop="toggleFollow(product.entrepreneurId)"
-                    >
-                        {{
-                            isFollowLoading(product.entrepreneurId)
-                                ? "..."
-                                : isFollowing(product.entrepreneurId)
-                                    ? "Siguiendo"
-                                    : "Seguir +"
-                        }}
-                    </button>
-                </div>
-                <!-- Portada -->
-                <div class="overflow-hidden rounded-xl bg-gray-100 sm:rounded-2xl">
-                    <img
-                        v-if="product.image"
-                        :src="product.image"
-                        :alt="product.name"
-                        class="aspect-square w-full object-cover"
-                    >
-                    <div
-                        v-else
-                        class="flex aspect-square items-center justify-center text-xs font-bold text-gray-400"
-                    >
-                        Sin imagen
+                        <div>
+                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
+                                Mi emprendimiento
+                            </p>
+                            <h1 class="mt-1 text-2xl font-black text-gray-700 sm:text-3xl">
+                                {{ entrepreneur.businessName }}
+                            </h1>
+                            <p class="mt-1 text-sm text-gray-400">
+                                {{ entrepreneur.district }},
+                                {{ entrepreneur.department }}
+                            </p>
+                            <p class="mt-3 max-w-2xl text-sm leading-6 text-gray-500">
+                                {{ entrepreneur.description }}
+                            </p>
+                            <!-- Seguidores -->
+                            <button
+                                type="button"
+                                class="mt-4 inline-flex items-center gap-2 rounded-full bg-[#EAF9FC] px-4 py-2 text-left transition hover:bg-[#CAF0F8]"
+                                @click="openFollowersModal"
+                            >
+                                <span class="text-base font-black text-[#0077B6]">
+                                    {{ followerCount }}
+                                </span>
+                                <span class="text-xs font-bold text-[#4F7180]">
+                                    {{ followerCount === 1 ? "seguidor" : "seguidores" }}
+                                </span>
+                            </button>
+                        </div>
                     </div>
-                </div>
-                <!-- Información -->
-                <div class="pt-1.5 sm:px-1 sm:pt-3">
-                    <div class="mb-1 flex flex-wrap gap-1">
-                        <span
-                            v-for="category in product.categories.slice(0, 1)"
-                            :key="category"
-                            class="text-[9px] font-bold uppercase text-[#00B4D8]"
-                        >
-                            {{ category }}
-                        </span>
-                    </div>
-                    <h2 class="min-h-[30px] text-[11px] font-medium leading-tight text-gray-500 sm:min-h-[40px] sm:text-sm">
-                        {{ product.name }}
-                    </h2>
-                    <div class="mt-1 flex items-center gap-1 text-[10px] sm:text-xs">
-                        <span class="text-amber-500">★</span>
-                        <span class="font-bold text-gray-600">
-                            {{ Number(product.averageRating).toFixed(1) }}
-                        </span>
-                        <span class="text-gray-400">
-                            {{ product.reviewCount }} reseñas
-                        </span>
-                    </div>
-                    <div class="mt-1 flex items-end justify-between gap-2">
-                        <span class="text-base font-extrabold text-[#4F7180] sm:text-xl">
-                            {{ formatPrice(product.price) }}
-                        </span>
+                    <div class="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
                         <button
                             type="button"
-                            aria-label="Consultar por WhatsApp"
-                            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#25D366] text-white sm:h-10 sm:w-10"
-                            @click.stop="contactWhatsApp(product)"
+                            class="w-full rounded-xl border border-[#00B4D8] px-5 py-3 text-sm font-bold text-[#0077B6] transition hover:bg-[#CAF0F8] lg:w-auto"
+                            @click="openProfileEditor"
                         >
-                            <svg
-                                class="h-5 w-5 sm:h-6 sm:w-6"
-                                viewBox="0 0 24 24"
-                                fill="currentColor"
-                                aria-hidden="true"
-                            >
-                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.009-.371-.011-.57-.011-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479s1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.262.489 1.693.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347M12.05 21.785h-.003a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.885 9.887-9.885 2.64 0 5.122 1.03 6.988 2.897a9.825 9.825 0 012.895 6.993c-.003 5.45-4.437 9.887-9.887 9.887"></path>
-                            </svg>
+                            Editar perfil
                         </button>
-                    </div>
-                </div>
-            </article>
-        </section>
-    </main>
-    <!-- Menú móvil. -->
-    <nav class="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] border-t border-white/20 bg-[#00B4D8] px-2 shadow-[0_-6px_20px_rgba(0,0,0,0.12)] lg:hidden">
-        <div class="mx-auto grid max-w-md grid-cols-4">
-            <RouterLink
-                to="/catalogo"
-                class="flex flex-col items-center gap-0.5 py-2 text-white"
-            >
-                <svg
-                    class="h-6 w-6"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.8"
-                    viewBox="0 0 24 24"
-                >
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M3 10.5L12 3l9 7.5M5 9.5V21h14V9.5"
-                    ></path>
-                </svg>
-                <span class="border-b-2 border-white text-[10px] font-bold">
-                    Inicio
-                </span>
-            </RouterLink>
-            <a
-                href="#productos"
-                class="flex flex-col items-center gap-0.5 py-2 text-white/90"
-            >
-                <svg
-                    class="h-6 w-6"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.8"
-                    viewBox="0 0 24 24"
-                >
-                    <circle
-                        cx="11"
-                        cy="11"
-                        r="6"
-                    ></circle>
-                    <path
-                        stroke-linecap="round"
-                        d="m20 20-4.5-4.5"
-                    ></path>
-                </svg>
-                <span class="text-[10px] font-bold">
-                    Explorar
-                </span>
-            </a>
-            <button
-                type="button"
-                class="flex flex-col items-center gap-0.5 py-2 text-white/90"
-            >
-                <svg
-                    class="h-6 w-6"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.8"
-                    viewBox="0 0 24 24"
-                >
-                    <path
-                        stroke-linejoin="round"
-                        d="M4 5h16v12H8l-4 3V5z"
-                    ></path>
-                </svg>
-                <span class="text-[10px] font-bold">
-                    Bandeja
-                </span>
-            </button>
-            <!-- Abre el perfil -->
-            <button
-                type="button"
-                class="flex flex-col items-center gap-0.5 py-2 text-white/90"
-                @click="openClientProfile"
-            >
-                <svg
-                    class="h-6 w-6"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.8"
-                    viewBox="0 0 24 24"
-                >
-                    <circle
-                        cx="12"
-                        cy="8"
-                        r="4"
-                    ></circle>
-                    <path
-                        stroke-linecap="round"
-                        d="M4 21a8 8 0 0116 0"
-                    ></path>
-                </svg>
-                <span class="text-[10px] font-bold">
-                    Perfil
-                </span>
-            </button>
-        </div>
-    </nav>
-    <!-- Perfil del cliente. -->
-    <Teleport to="body">
-        <div
-            v-if="showClientProfile"
-            class="fixed inset-0 z-[110] flex items-end justify-center bg-black/50 sm:items-center sm:p-5"
-            @click.self="closeClientProfile"
-        >
-            <section class="max-h-[94vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[600px] sm:rounded-[28px]">
-                <!-- Cabecera -->
-                <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
-                    <div>
-                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                            Mi cuenta
-                        </p>
-                        <h2 class="text-lg font-black text-gray-700">
-                            Mi perfil
-                        </h2>
-                    </div>
-                    <button
-                        type="button"
-                        class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
-                        @click="closeClientProfile"
-                    >
-                        ×
-                    </button>
-                </div>
-                <form
-                    class="space-y-5 p-5 sm:p-7"
-                    @submit.prevent="saveClientProfile"
-                >
-                    <!-- Foto. -->
-                    <div class="flex flex-col items-center text-center">
-                        <div class="relative">
-                            <img
-                                v-if="profilePhotoPreview"
-                                :src="profilePhotoPreview"
-                                alt="Foto de perfil"
-                                class="h-28 w-28 rounded-full border-4 border-[#CAF0F8] object-cover shadow-sm"
-                            >
-                            <div
-                                v-else
-                                class="flex h-28 w-28 items-center justify-center rounded-full border-4 border-[#CAF0F8] bg-[#EAF9FC] text-2xl font-black text-[#0077B6]"
-                            >
-                                {{ clientInitials }}
-                            </div>
-                        </div>
-                        <label class="mt-4 cursor-pointer rounded-xl border border-[#00B4D8] px-5 py-2.5 text-sm font-bold text-[#0077B6] transition hover:bg-[#CAF0F8]">
-                            Cambiar foto
-                            <input
-                                type="file"
-                                accept="image/*"
-                                class="hidden"
-                                @change="handleProfilePhoto"
-                            >
-                        </label>
-                        <p
-                            v-if="profilePhotoFile"
-                            class="mt-2 max-w-full truncate text-xs text-gray-400"
-                        >
-                            {{ profilePhotoFile.name }}
-                        </p>
-                    </div>
-                    <!-- Información. -->
-                    <div>
-                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                            Nombre completo
-                        </label>
-                        <input
-                            v-model="profileForm.fullName"
-                            required
-                            type="text"
-                            autocomplete="name"
-                            class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-[#00B4D8]"
-                        >
-                    </div>
-                    <div>
-                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                            Correo electrónico
-                        </label>
-                        <!-- El correo viene de Supabase Authentication -->
-                        <input
-                            :value="clientProfile?.email"
-                            disabled
-                            type="email"
-                            class="w-full cursor-not-allowed rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-gray-400 outline-none"
-                        >
-                        <p class="mt-1 text-xs text-gray-400">
-                            El correo pertenece a tu cuenta de acceso.
-                        </p>
-                    </div>
-                    <div>
-                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                            Teléfono
-                        </label>
-                        <input
-                            v-model="profileForm.phone"
-                            type="tel"
-                            autocomplete="tel"
-                            placeholder="0000 0000"
-                            class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-[#00B4D8]"
-                        >
-                    </div>
-                    <!-- La contraseña es opcional; si no se llena, no se modifica. -->
-                    <div class="border-t border-gray-100 pt-5">
-                        <h3 class="font-black text-gray-700">
-                            Cambiar contraseña
-                        </h3>
-                        <p class="mt-1 text-xs text-gray-400">
-                            Deja estos campos vacíos si no deseas cambiarla.
-                        </p>
-
-                        <div class="mt-4 space-y-3">
-                            <input
-                                v-model="currentPassword"
-                                type="password"
-                                autocomplete="current-password"
-                                placeholder="Contraseña actual"
-                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                            >
-                            <input
-                                v-model="newPassword"
-                                type="password"
-                                autocomplete="new-password"
-                                placeholder="Nueva contraseña"
-                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                            >
-                            <input
-                                v-model="confirmNewPassword"
-                                type="password"
-                                autocomplete="new-password"
-                                placeholder="Confirmar nueva contraseña"
-                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                            >
-                        </div>
-                    </div>
-                    <!-- Guardar -->
-                    <button
-                        type="submit"
-                        :disabled="profileSaving"
-                        class="w-full rounded-xl bg-[#00B4D8] px-5 py-3.5 font-bold text-white transition hover:bg-[#009CC0] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        {{
-                            profileSaving
-                                ? "Guardando cambios..."
-                                : "Guardar cambios"
-                        }}
-                    </button>
-                    <!-- Cerrar sesión. -->
-                    <div class="border-t border-gray-100 pt-5">
                         <button
                             type="button"
-                            class="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-3.5 font-bold text-red-600 transition hover:bg-red-100"
+                            :disabled="logoutLoading"
+                            class="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-bold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
                             @click="logout"
                         >
                             <svg
@@ -1523,12 +1329,746 @@ onBeforeUnmount(function () {
                                     d="M10 17l5-5-5-5M15 12H3M14 4h5a2 2 0 012 2v12a2 2 0 01-2 2h-5"
                                 ></path>
                             </svg>
-                            Cerrar sesión
+                            {{ logoutLoading ? "Cerrando..." : "Cerrar sesión" }}
                         </button>
                     </div>
+                </div>
+            </section>
+            <!-- Productos -->
+            <section class="mt-7">
+                <div class="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
+                            Mi catálogo
+                        </p>
+                        <h2 class="mt-1 text-2xl font-black text-gray-700">
+                            Mis productos
+                        </h2>
+                        <p class="mt-1 text-sm text-gray-400">
+                            {{ productCountText }}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        class="flex w-full items-center justify-center gap-2 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#009CC0] sm:w-auto"
+                        @click="openAddProduct"
+                    >
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M12 5v14M5 12h14"></path>
+                        </svg>
+                        Añadir producto
+                    </button>
+                </div>
+                <!-- Productos con el mismo estilo limpio del catálogo -->
+                <div
+                    v-if="products.length"
+                    class="grid grid-cols-2 gap-x-2 gap-y-5 sm:gap-4 md:grid-cols-3 xl:grid-cols-4"
+                >
+                    <article
+                        v-for="product in products"
+                        :key="product.id"
+                        class="min-w-0 overflow-hidden bg-transparent"
+                    >
+                        <button
+                            type="button"
+                            class="block w-full overflow-hidden rounded-xl bg-gray-100 sm:rounded-2xl"
+                            @click="openProductDetail(product)"
+                        >
+                            <img
+                                v-if="product.image"
+                                :src="product.image"
+                                :alt="product.name"
+                                class="aspect-square w-full object-cover"
+                            >
+                            <div
+                                v-else
+                                class="flex aspect-square items-center justify-center text-xs font-bold text-gray-400"
+                            >
+                                Sin fotografía
+                            </div>
+                        </button>
+                        <div class="pt-1.5 sm:px-1 sm:pt-3">
+                            <div class="mb-1 flex flex-wrap gap-1">
+                                <span
+                                    v-for="category in product.categories.slice(0, 1)"
+                                    :key="category"
+                                    class="text-[9px] font-bold uppercase text-[#00B4D8]"
+                                >
+                                    {{ category }}
+                                </span>
+                                <span
+                                    v-if="product.categories.length > 1"
+                                    class="text-[9px] font-bold text-gray-400"
+                                >
+                                    +{{ product.categories.length - 1 }}
+                                </span>
+                            </div>
+                            <h3 class="line-clamp-2 min-h-[34px] text-xs font-bold leading-tight text-gray-600 sm:min-h-[40px] sm:text-sm">
+                                {{ product.name }}
+                            </h3>
+                            <div class="mt-1 flex items-center gap-1 text-[10px] sm:text-xs">
+                                <span class="text-amber-500">★</span>
+                                <span class="font-bold text-gray-600">
+                                    {{ Number(product.averageRating).toFixed(1) }}
+                                </span>
+                                <span class="text-gray-400">
+                                    {{ product.reviewCount }} reseñas
+                                </span>
+                            </div>
+                            <div class="mt-2 flex items-center justify-between gap-2">
+                                <p class="text-base font-black text-[#4F7180] sm:text-xl">
+                                    {{ formatPrice(product.price) }}
+                                </p>
+                                <span
+                                    class="rounded-full px-2 py-1 text-[9px] font-bold sm:text-[10px]"
+                                    :class="stockClasses(product.stock)"
+                                >
+                                    {{ stockText(product.stock) }}
+                                </span>
+                            </div>
+                            <div class="mt-3 grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    class="rounded-xl border border-gray-200 px-2 py-2 text-[10px] font-bold text-gray-500 sm:text-xs"
+                                    @click="openProductDetail(product)"
+                                >
+                                    Ver detalle
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded-xl bg-[#CAF0F8] px-2 py-2 text-[10px] font-bold text-[#0077B6] sm:text-xs"
+                                    @click="openProductEditor(product)"
+                                >
+                                    Editar
+                                </button>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+                <!-- Sin productos -->
+                <div
+                    v-else
+                    class="rounded-[24px] border border-dashed border-[#90E0EF] bg-white px-5 py-16 text-center"
+                >
+                    <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#CAF0F8] text-[#0077B6]">
+                        <svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                            <path d="M4 7l8-4 8 4-8 4-8-4z"></path>
+                            <path d="M4 7v10l8 4 8-4V7"></path>
+                            <path d="M12 11v10"></path>
+                        </svg>
+                    </div>
+                    <h3 class="mt-4 font-black text-gray-700">
+                        Tu catálogo está vacío
+                    </h3>
+                    <p class="mt-1 text-sm text-gray-400">
+                        Publica tu primer producto para comenzar.
+                    </p>
+                    <button
+                        type="button"
+                        class="mt-5 rounded-xl bg-[#00B4D8] px-6 py-3 text-sm font-bold text-white"
+                        @click="openAddProduct"
+                    >
+                        Añadir mi primer producto
+                    </button>
+                </div>
+            </section>
+        </section>
+        <!-- Las novedades institucionales viven en un componente independiente. -->
+        <NovedadesEmprendedor
+            v-else-if="activeSection === 'novedades'"
+        />
+    </main>
+    <!-- Menú móvil. -->
+    <nav class="fixed rounded-t-[28px] inset-x-0 bottom-0 z-50 border-t border-white/20 bg-[#00B4D8] shadow-[0_-6px_20px_rgba(0,0,0,0.12)] lg:hidden">
+        <div class="mx-auto grid max-w-lg grid-cols-4">
+            <!-- Inicio -->
+            <button
+                type="button"
+                class="flex flex-col items-center gap-1 py-2 text-white"
+                :class="activeSection === 'inicio' ? 'bg-white/15' : 'text-white/75'"
+                @click="changeSection('inicio')"
+            >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M3 11l9-8 9 8"></path>
+                    <path d="M5 10v10h14V10"></path>
+                </svg>
+                <span class="text-[9px] font-bold">
+                    Inicio
+                </span>
+            </button>
+            <!-- Inventario -->
+            <button
+                type="button"
+                class="flex flex-col items-center gap-1 py-2 text-white"
+                :class="activeSection === 'inventario' ? 'bg-white/15' : 'text-white/75'"
+                @click="changeSection('inventario')"
+            >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M4 7l8-4 8 4-8 4-8-4z"></path>
+                    <path d="M4 7v10l8 4 8-4V7"></path>
+                </svg>
+                <span class="text-[9px] font-bold">
+                    Inventario
+                </span>
+            </button>
+            <!-- Novedades -->
+            <button
+                type="button"
+                class="flex flex-col items-center gap-1 py-2 text-white"
+                :class="activeSection === 'novedades' ? 'bg-white/15' : 'text-white/75'"
+                @click="changeSection('novedades')"
+            >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path>
+                </svg>
+                <span class="text-[9px] font-bold">
+                    Novedades
+                </span>
+            </button>
+            <!-- Calculadora -->
+            <button
+                type="button"
+                class="flex flex-col items-center gap-1 py-2 text-white"
+                :class="activeSection === 'calculadora' ? 'bg-white/15' : 'text-white/75'"
+                @click="changeSection('calculadora')"
+            >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <rect x="5" y="3" width="14" height="18" rx="2"></rect>
+                    <path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"></path>
+                </svg>
+                <span class="text-[9px] font-bold">
+                    Calculadora
+                </span>
+            </button>
+        </div>
+    </nav>
+    <!-- Seguidores. -->
+    <Teleport to="body">
+        <div
+            v-if="showFollowersModal"
+            class="fixed inset-0 z-[130] flex items-end justify-center bg-black/50 sm:items-center sm:p-5"
+            @click.self="closeFollowersModal"
+        >
+            <section class="max-h-[85vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[520px] sm:rounded-[28px]">
+                <!-- Cabecera -->
+                <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
+                            Comunidad
+                        </p>
+                        <h2 class="text-lg font-black text-gray-700">
+                            Seguidores
+                        </h2>
+                        <p class="mt-0.5 text-xs text-gray-400">
+                            {{ followerCountText }}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
+                        @click="closeFollowersModal"
+                    >
+                        ×
+                    </button>
+                </div>
+                <!-- Cargando -->
+                <div
+                    v-if="followersLoading"
+                    class="px-5 py-14 text-center"
+                >
+                    <div class="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div>
+                    <p class="mt-3 text-sm font-semibold text-gray-400">
+                        Cargando seguidores...
+                    </p>
+                </div>
+                <!-- Sin seguidores -->
+                <div
+                    v-else-if="!followers.length"
+                    class="px-5 py-14 text-center"
+                >
+                    <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#CAF0F8] text-[#0077B6]">
+                        <svg
+                            class="h-7 w-7"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.8"
+                            viewBox="0 0 24 24"
+                        >
+                            <circle cx="9" cy="8" r="3"></circle>
+                            <circle cx="17" cy="9" r="2"></circle>
+                            <path stroke-linecap="round" d="M3 20a6 6 0 0112 0M14 20a4 4 0 018 0"></path>
+                        </svg>
+                    </div>
+                    <h3 class="mt-4 font-black text-gray-700">
+                        Aún no tienes seguidores
+                    </h3>
+                    <p class="mt-1 text-sm text-gray-400">
+                        Aquí aparecerán las personas que sigan tu emprendimiento.
+                    </p>
+                </div>
+                <!-- Lista de seguidores -->
+                <div
+                    v-else
+                    class="divide-y divide-gray-100 px-5 py-2"
+                >
+                    <div
+                        v-for="follower in followers"
+                        :key="follower.id"
+                        class="flex items-center gap-3 py-3"
+                    >
+                        <img
+                            v-if="follower.avatarUrl"
+                            :src="follower.avatarUrl"
+                            :alt="follower.fullName"
+                            class="h-11 w-11 shrink-0 rounded-full border border-gray-100 object-cover"
+                        >
+                        <div
+                            v-else
+                            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#CAF0F8] text-xs font-black text-[#0077B6]"
+                        >
+                            {{ followerInitials(follower.fullName) }}
+                        </div>
+                        <div class="min-w-0">
+                            <p class="truncate text-sm font-bold text-gray-700">
+                                {{ follower.fullName }}
+                            </p>
+                            <p class="text-xs text-gray-400">
+                                Sigue tu emprendimiento
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </Teleport>
+    <!-- Editar perfil. -->
+    <Teleport to="body">
+        <div
+            v-if="showProfileEditor"
+            class="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 sm:items-center sm:p-5"
+            @click.self="closeProfileEditor"
+        >
+            <section class="max-h-[92vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[620px] sm:rounded-[28px]">
+                <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
+                            Mi emprendimiento
+                        </p>
+                        <h2 class="text-lg font-black text-gray-700">
+                            Editar perfil
+                        </h2>
+                    </div>
+                    <button
+                        type="button"
+                        class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
+                        @click="closeProfileEditor"
+                    >
+                        ×
+                    </button>
+                </div>
+                <form
+                    class="space-y-5 p-5 sm:p-7"
+                    @submit.prevent="saveProfile"
+                >
+                    <!-- Foto -->
+                    <div>
+                        <label class="mb-3 block text-sm font-bold text-gray-600">
+                            Foto del emprendimiento
+                        </label>
+                        <div class="flex flex-col items-center gap-4 sm:flex-row">
+                            <img
+                                v-if="profileLogoPreview"
+                                :src="profileLogoPreview"
+                                alt="Foto del emprendimiento"
+                                class="h-24 w-24 rounded-full border-4 border-[#CAF0F8] object-cover"
+                            >
+                            <div
+                                v-else
+                                class="flex h-24 w-24 items-center justify-center rounded-full bg-[#CAF0F8] text-xl font-black text-[#0077B6]"
+                            >
+                                {{ entrepreneurInitials }}
+                            </div>
+                            <label class="cursor-pointer rounded-xl border border-[#00B4D8] px-4 py-2.5 text-sm font-bold text-[#0077B6] hover:bg-[#CAF0F8]">
+                                Cambiar foto
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    class="hidden"
+                                    @change="handleProfileLogo"
+                                >
+                            </label>
+                        </div>
+                    </div>
+                    <!-- Nombre -->
+                    <div>
+                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                            Nombre del emprendimiento
+                        </label>
+                        <input
+                            v-model="profileForm.businessName"
+                            required
+                            type="text"
+                            class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                        >
+                    </div>
+                    <!-- Datos generales de la cuenta, iguales al perfil del cliente. -->
+                    <div>
+                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                            Correo electrónico
+                        </label>
+                        <input
+                            :value="entrepreneur?.email"
+                            disabled
+                            type="email"
+                            class="w-full cursor-not-allowed rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-gray-400 outline-none"
+                        >
+                        <p class="mt-1 text-xs text-gray-400">
+                            El correo pertenece a tu cuenta de acceso.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                            Teléfono
+                        </label>
+                        <input
+                            v-model="profileForm.phone"
+                            type="tel"
+                            autocomplete="tel"
+                            placeholder="0000 0000"
+                            class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                        >
+                    </div>
+                    <!-- Descripción -->
+                    <div>
+                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                            Descripción
+                        </label>
+                        <textarea
+                            v-model="profileForm.description"
+                            required
+                            rows="4"
+                            class="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                        ></textarea>
+                    </div>
+                    <!-- Ubicación -->
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                                Departamento
+                            </label>
+                            <select
+                                v-model="profileForm.department"
+                                required
+                                class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 outline-none focus:border-[#00B4D8]"
+                            >
+                                <option
+                                    v-for="department in departments"
+                                    :key="department"
+                                    :value="department"
+                                >
+                                    {{ department }}
+                                </option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                                Distrito
+                            </label>
+                            <input
+                                v-model="profileForm.district"
+                                required
+                                type="text"
+                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                            >
+                        </div>
+                    </div>
+                    <!-- Contraseña -->
+                    <div class="border-t border-gray-100 pt-5">
+                        <h3 class="font-black text-gray-700">
+                            Cambiar contraseña
+                        </h3>
+                        <p class="mt-1 text-xs text-gray-400">
+                            Deja estos campos vacíos si no deseas cambiarla.
+                        </p>
+                        <div class="mt-4 space-y-3">
+                            <input
+                                v-model="currentPassword"
+                                :type="showCurrentPassword ? 'text' : 'password'"
+                                autocomplete="current-password"
+                                placeholder="Contraseña actual"
+                                class="password-field w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                            >
+                            <input
+                                v-model="newPassword"
+                                :type="showNewPassword ? 'text' : 'password'"
+                                autocomplete="new-password"
+                                placeholder="Nueva contraseña"
+                                class="password-field w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                            >
+                            <input
+                                v-model="confirmNewPassword"
+                                :type="showConfirmPassword ? 'text' : 'password'"
+                                autocomplete="new-password"
+                                placeholder="Confirmar nueva contraseña"
+                                class="password-field w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                            >
+                        </div>
+                    </div>
+                    <button
+                        type="submit"
+                        :disabled="profileSaving"
+                        class="w-full rounded-xl bg-[#00B4D8] px-5 py-3 font-bold text-white disabled:opacity-50"
+                    >
+                        {{ profileSaving ? "Guardando..." : "Guardar cambios" }}
+                    </button>
+                </form>
+            </section>
+        </div>
+    </Teleport>
+    <!-- Crear / editar producto. -->
+    <Teleport to="body">
+        <div
+            v-if="showProductEditor"
+            class="fixed inset-0 z-[110] flex items-end justify-center bg-black/50 sm:items-center sm:p-5"
+            @click.self="closeProductEditor"
+        >
+            <section class="max-h-[94vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[700px] sm:rounded-[28px]">
+                <div class="sticky top-0 z-20 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
+                            Mi catálogo
+                        </p>
+                        <h2 class="text-lg font-black text-gray-700">
+                            {{ productEditorTitle }}
+                        </h2>
+                    </div>
+                    <button
+                        type="button"
+                        class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
+                        @click="closeProductEditor"
+                    >
+                        ×
+                    </button>
+                </div>
+                <form
+                    class="space-y-5 p-5 sm:p-7"
+                    @submit.prevent="saveProduct"
+                >
+                    <!-- Fotografías -->
+                    <div>
+                        <label class="block text-sm font-bold text-gray-600">
+                            Fotografías
+                        </label>
+                        <p class="mt-1 text-xs text-gray-400">
+                            La primera fotografía será la portada del producto.
+                        </p>
+                        <div
+                            v-if="editorImages.length"
+                            class="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4"
+                        >
+                            <div
+                                v-for="(image, index) in editorImages"
+                                :key="image.id || image.key"
+                                class="relative overflow-hidden rounded-xl bg-gray-100"
+                            >
+                                <img
+                                    :src="image.preview"
+                                    alt="Producto"
+                                    class="aspect-square w-full object-cover"
+                                >
+                                <span
+                                    v-if="index === 0"
+                                    class="absolute bottom-1 left-1 rounded-full bg-[#00B4D8] px-2 py-1 text-[9px] font-bold text-white"
+                                >
+                                    Portada
+                                </span>
+                                <div class="absolute right-1 top-1 flex gap-1">
+                                    <button
+                                        v-if="index !== 0"
+                                        type="button"
+                                        title="Hacer portada"
+                                        class="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-[#0077B6] shadow"
+                                        @click="makeProductImageCover(index)"
+                                    >
+                                        ★
+                                    </button>
+                                    <button
+                                        type="button"
+                                        title="Eliminar"
+                                        class="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white"
+                                        @click="removeProductImage(index)"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <label class="mt-4 flex cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-[#90E0EF] bg-[#F7FCFD] px-4 py-5 text-sm font-bold text-[#0077B6] transition hover:bg-[#CAF0F8]">
+                            Añadir fotografías
+                            <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                class="hidden"
+                                @change="handleProductImages"
+                            >
+                        </label>
+                    </div>
+                    <!-- Nombre -->
+                    <div>
+                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                            Nombre del producto
+                        </label>
+                        <input
+                            v-model="productForm.name"
+                            required
+                            type="text"
+                            placeholder="Ejemplo: Muñeco tejido personalizado"
+                            class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                        >
+                    </div>
+                    <!-- Categorías múltiples -->
+                    <div class="relative">
+                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                            Categorías
+                        </label>
+                        <button
+                            type="button"
+                            class="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 text-left text-sm outline-none hover:border-[#00B4D8]"
+                            @click="showCategoryDropdown = !showCategoryDropdown"
+                        >
+                            <span
+                                :class="
+                                    productForm.categories.length
+                                        ? 'text-gray-600'
+                                        : 'text-gray-400'
+                                "
+                            >
+                                {{
+                                    productForm.categories.length
+                                        ? `${productForm.categories.length} categorías seleccionadas`
+                                        : "Seleccionar categorías"
+                                }}
+                            </span>
+                            <span class="text-gray-400">
+                                ▼
+                            </span>
+                        </button>
+                        <div
+                            v-if="showCategoryDropdown"
+                            class="absolute left-0 right-0 z-30 mt-2 max-h-64 overflow-y-auto rounded-2xl border border-gray-100 bg-white p-2 shadow-xl"
+                        >
+                            <button
+                                v-for="category in productCategories"
+                                :key="category"
+                                type="button"
+                                class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition hover:bg-[#F1FAFC]"
+                                @click="toggleCategory(category)"
+                            >
+                                <span
+                                    class="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border"
+                                    :class="
+                                        isCategorySelected(category)
+                                            ? 'border-[#00B4D8] bg-[#00B4D8] text-white'
+                                            : 'border-gray-300'
+                                    "
+                                >
+                                    <span v-if="isCategorySelected(category)">
+                                        ✓
+                                    </span>
+                                </span>
+                                {{ category }}
+                            </button>
+                        </div>
+                        <!-- Categorías seleccionadas -->
+                        <div
+                            v-if="productForm.categories.length"
+                            class="mt-3 flex flex-wrap gap-2"
+                        >
+                            <button
+                                v-for="category in productForm.categories"
+                                :key="category"
+                                type="button"
+                                class="rounded-full bg-[#CAF0F8] px-3 py-1.5 text-xs font-bold text-[#0077B6]"
+                                @click="toggleCategory(category)"
+                            >
+                                {{ category }} ×
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Precio y stock -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                                Precio
+                            </label>
+                            <input
+                                v-model.number="productForm.price"
+                                required
+                                min="0"
+                                step="0.01"
+                                type="number"
+                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                            >
+                        </div>
+                        <div>
+                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                                Stock
+                            </label>
+                            <input
+                                v-model.number="productForm.stock"
+                                required
+                                min="0"
+                                type="number"
+                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                            >
+                        </div>
+                    </div>
+                    <!-- Descripción -->
+                    <div>
+                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                            Descripción
+                        </label>
+                        <textarea
+                            v-model="productForm.description"
+                            rows="4"
+                            placeholder="Describe tu producto..."
+                            class="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                        ></textarea>
+                    </div>
+                    <button
+                        type="submit"
+                        :disabled="productSaving"
+                        class="w-full rounded-xl bg-[#00B4D8] px-5 py-3.5 font-bold text-white transition hover:bg-[#009CC0] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        {{
+                            productSaving
+                                ? "Guardando producto..."
+                                : productEditorMode === "add"
+                                    ? "Publicar producto"
+                                    : "Guardar cambios"
+                        }}
+                    </button>
                 </form>
             </section>
         </div>
     </Teleport>
 </div>
 </template>
+<style scoped>
+.password-field::-ms-reveal,
+.password-field::-ms-clear {
+    display: none;
+    width: 0;
+    height: 0;
+}
+/* Evita que el texto largo desborde las tarjetas. */
+.line-clamp-2 {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+}
+</style>

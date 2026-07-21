@@ -1,211 +1,173 @@
 <script setup>
-// Inventario del emprendedor: administra stock y pedidos registrados manualmente.
-import { ref, computed, onMounted, onBeforeUnmount } from "vue";
+// Calculadora financiera del emprendedor; usa directamente el precio y stock de sus productos en Supabase.
+import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
 
 const router = useRouter();
 
-// Información principal.
+// Información cargada desde la cuenta actual.
 const entrepreneur = ref(null);
 const products = ref([]);
-const orders = ref([]);
 const loading = ref(true);
 const loadError = ref("");
+const selectedProductId = ref("");
 
-// Control de pestañas, búsquedas y filtros.
-const activeTab = ref("stock");
-const productSearch = ref("");
-const stockFilter = ref("all");
-const orderSearch = ref("");
-const orderFilter = ref("all");
+// Datos editables utilizados para realizar cada estimación.
+const costPerUnit = ref(0);
+const variableCostPerUnit = ref(0);
+const unitsToCalculate = ref(0);
+const advertisingCost = ref(0);
+const otherFixedCosts = ref(0);
+const taxRate = ref(0);
+const calculated = ref(false);
 
-// Evita guardar varias veces la misma información.
-const savingStockIds = ref([]);
-const savingOrderIds = ref([]);
-const deletingOrderId = ref("");
-const orderSaving = ref(false);
-
-// Ventana para modificar el stock exacto.
-const showStockModal = ref(false);
-const stockProduct = ref(null);
-const stockValue = ref(0);
-
-// Ventana para crear o editar pedidos.
-const showOrderEditor = ref(false);
-const orderEditorMode = ref("add");
-const selectedOrder = ref(null);
-
-const orderForm = ref({
-    customerName: "",
-    customerPhone: "",
-    status: "pendiente",
-    notes: "",
-    items: []
+// Producto que se está analizando actualmente.
+const selectedProduct = computed(function () {
+    return products.value.find(function (product) {
+        return product.id === selectedProductId.value;
+    }) || null;
 });
 
-// Estados disponibles para los pedidos.
-const orderStatuses = [
-    {
-        value: "pendiente",
-        label: "Pendiente"
-    },
-    {
-        value: "en_preparacion",
-        label: "En preparación"
-    },
-    {
-        value: "listo",
-        label: "Listo"
-    },
-    {
-        value: "entregado",
-        label: "Entregado"
-    },
-    {
-        value: "cancelado",
-        label: "Cancelado"
-    }
-];
-
-// Resumen general del inventario.
-const totalProducts = computed(function () {
-    return products.value.length;
+const salePrice = computed(function () {
+    return Number(selectedProduct.value?.price) || 0;
 });
 
-const totalUnits = computed(function () {
-    return products.value.reduce(function (total, product) {
-        return total + product.stock;
-    }, 0);
+const currentStock = computed(function () {
+    return Number(selectedProduct.value?.stock) || 0;
 });
 
-const lowStockCount = computed(function () {
-    return products.value.filter(function (product) {
-        return product.stock > 0 && product.stock <= 5;
-    }).length;
+// Nunca se permite calcular una cantidad mayor al stock disponible.
+const calculatedUnits = computed(function () {
+    const units = Math.max(Number(unitsToCalculate.value) || 0, 0);
+    return Math.min(units, currentStock.value);
 });
 
-const outOfStockCount = computed(function () {
-    return products.value.filter(function (product) {
-        return product.stock === 0;
-    }).length;
+const income = computed(function () {
+    return salePrice.value * calculatedUnits.value;
+});
+
+const unitVariableCost = computed(function () {
+    return (Number(costPerUnit.value) || 0) + (Number(variableCostPerUnit.value) || 0);
+});
+
+const totalVariableCosts = computed(function () {
+    return unitVariableCost.value * calculatedUnits.value;
+});
+
+const totalFixedCosts = computed(function () {
+    return (Number(advertisingCost.value) || 0) + (Number(otherFixedCosts.value) || 0);
+});
+
+const totalTax = computed(function () {
+    return income.value * ((Number(taxRate.value) || 0) / 100);
+});
+
+const totalCosts = computed(function () {
+    return totalVariableCosts.value + totalFixedCosts.value + totalTax.value;
+});
+
+const estimatedProfit = computed(function () {
+    return income.value - totalCosts.value;
+});
+
+// Ganancia de contribución de una unidad antes de repartir los costos fijos.
+const profitPerUnit = computed(function () {
+    const taxPerUnit = salePrice.value * ((Number(taxRate.value) || 0) / 100);
+    return salePrice.value - unitVariableCost.value - taxPerUnit;
+});
+
+// El margen mostrado toma en cuenta todos los costos del cálculo, incluidos los costos fijos.
+const profitMargin = computed(function () {
+    if (income.value <= 0) return 0;
+    return (estimatedProfit.value / income.value) * 100;
+});
+
+// Rentabilidad aproximada sobre el dinero utilizado para cubrir todos los costos.
+const profitability = computed(function () {
+    if (totalCosts.value <= 0) return estimatedProfit.value > 0 ? 100 : 0;
+    return (estimatedProfit.value / totalCosts.value) * 100;
+});
+
+const costPercentage = computed(function () {
+    if (income.value <= 0) return 0;
+    return (totalCosts.value / income.value) * 100;
+});
+
+// Cantidad mínima de unidades necesarias para cubrir los costos fijos.
+const breakEvenUnits = computed(function () {
+    if (profitPerUnit.value <= 0) return 0;
+    return Math.ceil(totalFixedCosts.value / profitPerUnit.value);
+});
+
+const breakEvenProgress = computed(function () {
+    if (breakEvenUnits.value <= 0) return 0;
+    return Math.min((calculatedUnits.value / breakEvenUnits.value) * 100, 100);
 });
 
 const inventoryValue = computed(function () {
-    return products.value.reduce(function (total, product) {
-        return total + product.price * product.stock;
-    }, 0);
+    return salePrice.value * currentStock.value;
 });
 
-// Coloca primero los productos que requieren atención.
-const attentionProducts = computed(function () {
-    return products.value
-        .filter(function (product) {
-            return product.stock <= 5;
-        })
-        .sort(function (a, b) {
-            return a.stock - b.stock;
-        });
+// Proyección si se vendiera todo el inventario con los mismos costos utilizados en el cálculo.
+const fullStockProfit = computed(function () {
+    const stockIncome = salePrice.value * currentStock.value;
+    const stockVariables = unitVariableCost.value * currentStock.value;
+    const stockTax = stockIncome * ((Number(taxRate.value) || 0) / 100);
+    return stockIncome - stockVariables - totalFixedCosts.value - stockTax;
 });
 
-// Filtra los productos según el buscador y el estado del stock.
-const filteredProducts = computed(function () {
-    const text = productSearch.value.toLowerCase().trim();
-
-    return products.value.filter(function (product) {
-        const categories = product.categories.join(" ").toLowerCase();
-
-        const matchesText =
-            product.name.toLowerCase().includes(text) ||
-            categories.includes(text);
-
-        let matchesFilter = true;
-
-        if (stockFilter.value === "available") {
-            matchesFilter = product.stock > 5;
-        }
-
-        if (stockFilter.value === "low") {
-            matchesFilter =
-                product.stock > 0 &&
-                product.stock <= 5;
-        }
-
-        if (stockFilter.value === "out") {
-            matchesFilter = product.stock === 0;
-        }
-
-        return matchesText && matchesFilter;
-    });
+// La recomendación analiza primero pérdidas, punto de equilibrio y después el margen neto real.
+const recommendation = computed(function () {
+    if (!calculated.value) {
+        return {
+            title: "Calcula tu producto",
+            text: "Selecciona un producto, agrega sus costos y descubre una estimación de su rentabilidad.",
+            classes: "border-[#90E0EF] bg-[#EAF9FC] text-[#0077B6]"
+        };
+    }
+    if (profitPerUnit.value <= 0) {
+        return {
+            title: "El producto genera pérdidas por unidad",
+            text: "El precio actual no cubre correctamente los costos asociados a cada unidad. Revisa el costo de fabricación, los costos variables o el precio de venta.",
+            classes: "border-red-200 bg-red-50 text-red-700"
+        };
+    }
+    if (estimatedProfit.value < 0) {
+        return {
+            title: "Aún no cubres todos tus costos",
+            text: `Cada unidad deja un margen positivo antes de costos fijos, pero con ${calculatedUnits.value} unidades todavía tendrías una pérdida aproximada de ${formatPrice(Math.abs(estimatedProfit.value))}. Necesitas vender aproximadamente ${breakEvenUnits.value} unidades para cubrir los costos fijos ingresados.`,
+            classes: "border-red-200 bg-red-50 text-red-700"
+        };
+    }
+    if (breakEvenUnits.value > 0 && currentStock.value < breakEvenUnits.value) {
+        return {
+            title: "Tu stock no alcanza el punto de equilibrio",
+            text: `Actualmente tienes ${currentStock.value} unidades disponibles, pero necesitas vender aproximadamente ${breakEvenUnits.value} para cubrir los costos fijos. Revisa tu inventario, tus gastos o el precio del producto.`,
+            classes: "border-orange-200 bg-orange-50 text-orange-700"
+        };
+    }
+    if (profitMargin.value < 20) {
+        return {
+            title: "Rentabilidad reducida",
+            text: `Después de considerar todos los costos, el margen neto estimado es de ${profitMargin.value.toFixed(1)}%. Revisa tus gastos para encontrar oportunidades de mejorar la rentabilidad.`,
+            classes: "border-orange-200 bg-orange-50 text-orange-700"
+        };
+    }
+    if (profitMargin.value < 40) {
+        return {
+            title: "Buena rentabilidad",
+            text: `El producto presenta un margen neto estimado de ${profitMargin.value.toFixed(1)}%. Los ingresos cubren los costos considerados y todavía generan una ganancia positiva.`,
+            classes: "border-yellow-200 bg-yellow-50 text-yellow-700"
+        };
+    }
+    return {
+        title: "Rentabilidad saludable",
+        text: `Según esta estimación, el producto genera una ganancia positiva y un margen neto aproximado de ${profitMargin.value.toFixed(1)}%. Continúa controlando los costos y el movimiento del inventario para mantener estos resultados.`,
+        classes: "border-green-200 bg-green-50 text-green-700"
+    };
 });
 
-// Cantidad de pedidos según su estado.
-const pendingOrders = computed(function () {
-    return orders.value.filter(function (order) {
-        return order.status === "pendiente";
-    }).length;
-});
-
-const preparationOrders = computed(function () {
-    return orders.value.filter(function (order) {
-        return order.status === "en_preparacion";
-    }).length;
-});
-
-const readyOrders = computed(function () {
-    return orders.value.filter(function (order) {
-        return order.status === "listo";
-    }).length;
-});
-
-const deliveredOrders = computed(function () {
-    return orders.value.filter(function (order) {
-        return order.status === "entregado";
-    }).length;
-});
-
-// Filtra los pedidos por nombre, teléfono, producto o estado.
-const filteredOrders = computed(function () {
-    const text = orderSearch.value.toLowerCase().trim();
-
-    return orders.value.filter(function (order) {
-        const productNames = order.items
-            .map(function (item) {
-                return item.productName;
-            })
-            .join(" ")
-            .toLowerCase();
-
-        const matchesText =
-            order.id.toLowerCase().includes(text) ||
-            order.customerName.toLowerCase().includes(text) ||
-            order.customerPhone.toLowerCase().includes(text) ||
-            productNames.includes(text);
-
-        const matchesStatus =
-            orderFilter.value === "all" ||
-            order.status === orderFilter.value;
-
-        return matchesText && matchesStatus;
-    });
-});
-
-// Suma automáticamente el total del pedido que se está creando.
-const orderFormTotal = computed(function () {
-    return orderForm.value.items.reduce(function (total, item) {
-        const quantity = Math.max(
-            Number(item.quantity) || 0,
-            0
-        );
-
-        const unitPrice =
-            Number(item.unitPrice) || 0;
-
-        return total + quantity * unitPrice;
-    }, 0);
-});
-
-// Formatea valores monetarios.
 function formatPrice(value) {
     return new Intl.NumberFormat("en-US", {
         style: "currency",
@@ -213,2417 +175,456 @@ function formatPrice(value) {
     }).format(Number(value) || 0);
 }
 
-// Muestra la fecha de manera más sencilla.
-function formatDate(value) {
-    if (!value) return "Sin fecha";
-
-    return new Intl.DateTimeFormat("es-SV", {
-        day: "numeric",
-        month: "short",
-        year: "numeric"
-    }).format(new Date(value));
+function barWidth(value) {
+    return Math.min(Math.max(Number(value) || 0, 0), 100);
 }
 
-// Acorta el UUID para mostrar un número de pedido legible.
-function shortOrderId(id) {
-    return String(id || "")
-        .slice(0, 8)
-        .toUpperCase();
+// Cambia el producto y utiliza su stock completo como estimación inicial.
+function selectProduct(product) {
+    selectedProductId.value = product.id;
+    unitsToCalculate.value = Number(product.stock) || 0;
+    calculated.value = false;
 }
 
-// Devuelve el texto correspondiente al stock.
-function stockLabel(stock) {
-    if (stock === 0) return "Agotado";
-    if (stock <= 5) return "Stock bajo";
-    return "Disponible";
+function validateUnits() {
+    if (unitsToCalculate.value < 0) unitsToCalculate.value = 0;
+    if (unitsToCalculate.value > currentStock.value) unitsToCalculate.value = currentStock.value;
 }
 
-// Devuelve los colores correspondientes al stock.
-function stockClasses(stock) {
-    if (stock === 0) {
-        return "bg-red-100 text-red-700";
+function calculateResults() {
+    validateUnits();
+    calculated.value = true;
+    if (window.innerWidth < 1024) {
+        setTimeout(function () {
+            document.getElementById("calculatorResults")?.scrollIntoView({
+                behavior: "smooth",
+                block: "start"
+            });
+        }, 50);
     }
-
-    if (stock <= 5) {
-        return "bg-yellow-100 text-yellow-700";
-    }
-
-    return "bg-green-100 text-green-700";
 }
 
-// Busca el nombre visible de un estado.
-function orderStatusLabel(status) {
-    const selectedStatus =
-        orderStatuses.find(function (item) {
-            return item.value === status;
-        });
-
-    return selectedStatus?.label || "Pendiente";
+function resetCalculator() {
+    costPerUnit.value = 0;
+    variableCostPerUnit.value = 0;
+    advertisingCost.value = 0;
+    otherFixedCosts.value = 0;
+    taxRate.value = 0;
+    unitsToCalculate.value = currentStock.value;
+    calculated.value = false;
 }
 
-// Colores suaves para cada estado del pedido.
-function orderStatusClasses(status) {
-    const classes = {
-        pendiente:
-            "bg-yellow-100 text-yellow-700",
+// Mantiene conectadas las tres áreas principales del panel del emprendedor.
+function goDashboardSection(section) {
+    if (section === "calculadora") return;
 
-        en_preparacion:
-            "bg-blue-100 text-blue-700",
-
-        listo:
-            "bg-[#CAF0F8] text-[#0077B6]",
-
-        entregado:
-            "bg-green-100 text-green-700",
-
-        cancelado:
-            "bg-red-100 text-red-700"
-    };
-
-    return (
-        classes[status] ||
-        "bg-gray-100 text-gray-600"
-    );
-}
-
-// Mantiene conectados Dashboard, Inventario y Calculadora.
-function goSection(section) {
+    // Inventario ahora tiene su propia página.
     if (section === "inventario") {
+        router.push({ name: "Inventario" });
         return;
     }
 
-    if (section === "calculadora") {
-        router.push({
-            name: "Calculadora"
-        });
-
-        return;
-    }
-
-    sessionStorage.setItem(
-        "thriveDashboardSection",
-        section
-    );
-
-    router.push({
-        name: "DashboardEmprendedor"
-    });
+    // Inicio y Novedades siguen viviendo dentro del dashboard.
+    sessionStorage.setItem("thriveDashboardSection", section);
+    router.push({ name: "DashboardEmprendedor" });
 }
 
-// Carga los productos del emprendimiento.
-async function loadProducts(userId) {
-    const {
-        data: productRows,
-        error: productError
-    } = await supabase
-        .from("products")
-        .select(`
-            id,
-            entrepreneur_id,
-            name,
-            categories,
-            price,
-            stock,
-            active,
-            created_at
-        `)
-        .eq("entrepreneur_id", userId)
-        .order("created_at", {
-            ascending: false
-        });
-
-    if (productError) {
-        throw productError;
-    }
-
-    if (!productRows?.length) {
-        products.value = [];
-        return;
-    }
-
-    const productIds =
-        productRows.map(function (product) {
-            return product.id;
-        });
-
-    // Se carga la primera fotografía de cada producto.
-    const {
-        data: imageRows,
-        error: imageError
-    } = await supabase
-        .from("product_images")
-        .select(`
-            product_id,
-            image_url,
-            sort_order
-        `)
-        .in("product_id", productIds)
-        .order("sort_order", {
-            ascending: true
-        });
-
-    if (imageError) {
-        throw imageError;
-    }
-
-    products.value =
-        productRows.map(function (product) {
-            const firstImage =
-                (imageRows || []).find(
-                    function (image) {
-                        return (
-                            image.product_id ===
-                            product.id
-                        );
-                    }
-                );
-
-            return {
-                id: product.id,
-                name: product.name,
-                categories:
-                    product.categories || [],
-                price:
-                    Number(product.price) || 0,
-                stock:
-                    Number(product.stock) || 0,
-                active: product.active,
-                image:
-                    firstImage?.image_url || ""
-            };
-        });
-}
-
-// Carga los pedidos creados manualmente por el emprendedor.
-async function loadOrders(userId) {
-    const { data, error } = await supabase
-        .from("orders")
-        .select(`
-            id,
-            customer_id,
-            customer_name,
-            customer_phone,
-            status,
-            total,
-            notes,
-            created_at,
-            updated_at,
-            order_items (
-                id,
-                product_id,
-                product_name,
-                quantity,
-                unit_price
-            )
-        `)
-        .eq("entrepreneur_id", userId)
-        .order("created_at", {
-            ascending: false
-        });
-
-    if (error) {
-        throw error;
-    }
-
-    orders.value =
-        (data || []).map(function (order) {
-            return {
-                id: order.id,
-
-                customerId:
-                    order.customer_id,
-
-                customerName:
-                    order.customer_name ||
-                    "Cliente",
-
-                customerPhone:
-                    order.customer_phone || "",
-
-                status:
-                    order.status ||
-                    "pendiente",
-
-                total:
-                    Number(order.total) || 0,
-
-                notes:
-                    order.notes || "",
-
-                createdAt:
-                    order.created_at,
-
-                updatedAt:
-                    order.updated_at,
-
-                items:
-                    (order.order_items || [])
-                        .map(function (item) {
-                            return {
-                                id: item.id,
-
-                                productId:
-                                    item.product_id,
-
-                                productName:
-                                    item.product_name ||
-                                    "Producto",
-
-                                quantity:
-                                    Number(
-                                        item.quantity
-                                    ) || 1,
-
-                                unitPrice:
-                                    Number(
-                                        item.unit_price
-                                    ) || 0
-                            };
-                        })
-            };
-        });
-}
-
-// Carga toda la pantalla.
-async function loadInventory() {
+async function loadCalculator() {
     loading.value = true;
     loadError.value = "";
-
     try {
-        const {
-            data: { user },
-            error: userError
-        } = await supabase.auth.getUser();
-
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError || !user) {
-            loadError.value =
-                "No se encontró una sesión activa.";
-
+            loadError.value = "No se encontró una sesión activa. Inicia sesión nuevamente.";
             return;
         }
 
-        const {
-            data: business,
-            error: businessError
-        } = await supabase
+        const { data: entrepreneurData, error: entrepreneurError } = await supabase
             .from("entrepreneurs")
-            .select(`
-                id,
-                business_name,
-                logo_url
-            `)
+            .select("id, business_name, logo_url")
             .eq("id", user.id)
             .single();
 
-        if (businessError || !business) {
-            throw (
-                businessError ||
-                new Error(
-                    "No se encontró el emprendimiento."
-                )
-            );
+        if (entrepreneurError || !entrepreneurData) {
+            throw entrepreneurError || new Error("No se encontró el emprendimiento.");
         }
 
         entrepreneur.value = {
-            id: business.id,
-            businessName:
-                business.business_name,
-            avatar:
-                business.logo_url || ""
+            id: entrepreneurData.id,
+            businessName: entrepreneurData.business_name,
+            avatar: entrepreneurData.logo_url
         };
 
-        // Productos y pedidos se cargan al mismo tiempo.
-        await Promise.all([
-            loadProducts(user.id),
-            loadOrders(user.id)
-        ]);
-    } catch (error) {
-        console.error(
-            "Error al cargar inventario:",
-            error
-        );
+        const { data: productRows, error: productError } = await supabase
+            .from("products")
+            .select("id, name, description, categories, price, stock, active, created_at")
+            .eq("entrepreneur_id", user.id)
+            .order("created_at", { ascending: false });
 
-        loadError.value =
-            "No fue posible cargar el inventario.";
+        if (productError) throw productError;
+        if (!productRows?.length) {
+            products.value = [];
+            return;
+        }
+
+        const productIds = productRows.map(function (product) {
+            return product.id;
+        });
+
+        const { data: imageRows, error: imageError } = await supabase
+            .from("product_images")
+            .select("product_id, image_url, sort_order")
+            .in("product_id", productIds)
+            .order("sort_order", { ascending: true });
+
+        if (imageError) throw imageError;
+
+        products.value = productRows.map(function (product) {
+            const firstImage = (imageRows || []).find(function (image) {
+                return image.product_id === product.id;
+            });
+            return {
+                id: product.id,
+                name: product.name,
+                description: product.description || "",
+                categories: product.categories || [],
+                price: Number(product.price) || 0,
+                stock: Number(product.stock) || 0,
+                active: product.active,
+                image: firstImage?.image_url || ""
+            };
+        });
+
+        if (products.value.length) selectProduct(products.value[0]);
+    } catch (error) {
+        console.error("Error al cargar la calculadora:", error);
+        loadError.value = "No fue posible cargar la información de la calculadora.";
     } finally {
         loading.value = false;
     }
 }
 
-// Actualiza el stock de un producto.
-async function updateStock(product, amount) {
-    if (
-        !product ||
-        savingStockIds.value.includes(
-            product.id
-        )
-    ) {
-        return;
-    }
-
-    const newStock = Math.max(
-        Math.floor(Number(amount) || 0),
-        0
-    );
-
-    savingStockIds.value.push(product.id);
-
-    try {
-        const { data, error } =
-            await supabase
-                .from("products")
-                .update({
-                    stock: newStock,
-                    updated_at:
-                        new Date().toISOString()
-                })
-                .eq("id", product.id)
-                .eq(
-                    "entrepreneur_id",
-                    entrepreneur.value.id
-                )
-                .select("id, stock")
-                .single();
-
-        if (error) {
-            throw error;
-        }
-
-        product.stock =
-            Number(data.stock) || 0;
-
-        if (
-            stockProduct.value?.id ===
-            product.id
-        ) {
-            stockValue.value =
-                product.stock;
-        }
-    } catch (error) {
-        console.error(
-            "Error al actualizar stock:",
-            error
-        );
-
-        alert(
-            "No fue posible actualizar el stock."
-        );
-    } finally {
-        savingStockIds.value =
-            savingStockIds.value.filter(
-                function (id) {
-                    return id !== product.id;
-                }
-            );
-    }
-}
-
-// Abre la ventana para escribir el stock exacto.
-function openStockModal(product) {
-    stockProduct.value = product;
-    stockValue.value = product.stock;
-    showStockModal.value = true;
-
-    document.body.style.overflow =
-        "hidden";
-}
-
-function closeStockModal() {
-    showStockModal.value = false;
-    stockProduct.value = null;
-
-    document.body.style.overflow = "";
-}
-
-async function saveExactStock() {
-    if (!stockProduct.value) return;
-
-    const product = stockProduct.value;
-
-    await updateStock(
-        product,
-        stockValue.value
-    );
-
-    if (
-        !savingStockIds.value.includes(
-            product.id
-        )
-    ) {
-        closeStockModal();
-    }
-}
-
-// Crea una fila para agregar un producto al pedido.
-function createOrderItem(product = null) {
-    return {
-        key:
-            `${Date.now()}-${Math.random()}`,
-
-        productId:
-            product?.id || "",
-
-        productName:
-            product?.name || "",
-
-        quantity: 1,
-
-        unitPrice:
-            product?.price || 0
-    };
-}
-
-// Limpia el formulario de pedidos.
-function resetOrderForm() {
-    orderForm.value = {
-        customerName: "",
-        customerPhone: "",
-        status: "pendiente",
-        notes: "",
-        items: [
-            createOrderItem(
-                products.value[0] || null
-            )
-        ]
-    };
-}
-
-// Abre el formulario para crear un pedido nuevo.
-function openAddOrder() {
-    if (!products.value.length) {
-        alert(
-            "Primero debes registrar al menos un producto."
-        );
-
-        return;
-    }
-
-    orderEditorMode.value = "add";
-    selectedOrder.value = null;
-
-    resetOrderForm();
-
-    showOrderEditor.value = true;
-
-    document.body.style.overflow =
-        "hidden";
-}
-
-// Abre un pedido existente para editarlo.
-function openEditOrder(order) {
-    orderEditorMode.value = "edit";
-    selectedOrder.value = order;
-
-    orderForm.value = {
-        customerName:
-            order.customerName,
-
-        customerPhone:
-            order.customerPhone,
-
-        status:
-            order.status,
-
-        notes:
-            order.notes,
-
-        items:
-            order.items.length
-                ? order.items.map(
-                    function (item) {
-                        return {
-                            key:
-                                item.id ||
-                                `${Date.now()}-${Math.random()}`,
-
-                            productId:
-                                item.productId ||
-                                "",
-
-                            productName:
-                                item.productName,
-
-                            quantity:
-                                item.quantity,
-
-                            unitPrice:
-                                item.unitPrice
-                        };
-                    }
-                )
-                : [
-                    createOrderItem(
-                        products.value[0] ||
-                        null
-                    )
-                ]
-    };
-
-    showOrderEditor.value = true;
-
-    document.body.style.overflow =
-        "hidden";
-}
-
-// Cierra el formulario.
-function closeOrderEditor() {
-    showOrderEditor.value = false;
-    selectedOrder.value = null;
-
-    document.body.style.overflow = "";
-}
-
-// Actualiza nombre y precio al elegir un producto.
-function selectOrderProduct(item) {
-    const product =
-        products.value.find(
-            function (product) {
-                return (
-                    product.id ===
-                    item.productId
-                );
-            }
-        );
-
-    if (!product) return;
-
-    item.productName =
-        product.name;
-
-    item.unitPrice =
-        product.price;
-}
-
-// Añade otra línea de producto.
-function addOrderItem() {
-    orderForm.value.items.push(
-        createOrderItem(
-            products.value[0] || null
-        )
-    );
-}
-
-// Elimina una línea del pedido.
-function removeOrderItem(index) {
-    if (
-        orderForm.value.items.length === 1
-    ) {
-        alert(
-            "El pedido debe tener al menos un producto."
-        );
-
-        return;
-    }
-
-    orderForm.value.items.splice(
-        index,
-        1
-    );
-}
-
-// Comprueba que el formulario esté completo.
-function validateOrderForm() {
-    if (
-        !orderForm.value.customerName.trim()
-    ) {
-        alert(
-            "Escribe el nombre del cliente."
-        );
-
-        return false;
-    }
-
-    if (!orderForm.value.items.length) {
-        alert(
-            "Agrega al menos un producto."
-        );
-
-        return false;
-    }
-
-    for (
-        const item of
-        orderForm.value.items
-    ) {
-        if (!item.productId) {
-            alert(
-                "Selecciona un producto en cada fila."
-            );
-
-            return false;
-        }
-
-        if (
-            (Number(item.quantity) || 0) <
-            1
-        ) {
-            alert(
-                "La cantidad debe ser mayor que cero."
-            );
-
-            return false;
-        }
-
-        if (
-            (Number(item.unitPrice) || 0) <
-            0
-        ) {
-            alert(
-                "El precio no puede ser negativo."
-            );
-
-            return false;
-        }
-    }
-
-    return true;
-}
-
-// Prepara las filas que se guardarán en order_items.
-function buildOrderItemRows(orderId) {
-    return orderForm.value.items.map(
-        function (item) {
-            return {
-                order_id: orderId,
-
-                product_id:
-                    item.productId,
-
-                product_name:
-                    item.productName.trim(),
-
-                quantity:
-                    Math.max(
-                        Math.floor(
-                            Number(
-                                item.quantity
-                            ) || 1
-                        ),
-                        1
-                    ),
-
-                unit_price:
-                    Number(
-                        item.unitPrice
-                    ) || 0
-            };
-        }
-    );
-}
-
-// Decide si debe crear o editar el pedido.
-async function saveOrder() {
-    if (
-        orderSaving.value ||
-        !validateOrderForm()
-    ) {
-        return;
-    }
-
-    orderSaving.value = true;
-
-    const editing =
-        orderEditorMode.value === "edit";
-
-    try {
-        if (editing) {
-            await updateOrder();
-        } else {
-            await createOrder();
-        }
-
-        await loadOrders(
-            entrepreneur.value.id
-        );
-
-        closeOrderEditor();
-
-        alert(
-            editing
-                ? "Pedido actualizado correctamente."
-                : "Pedido creado correctamente."
-        );
-    } catch (error) {
-        console.error(
-            "Error al guardar pedido:",
-            error
-        );
-
-        alert(
-            "No fue posible guardar el pedido: " +
-            error.message
-        );
-    } finally {
-        orderSaving.value = false;
-    }
-}
-
-// Crea el pedido principal y después sus productos.
-async function createOrder() {
-    const {
-        data: newOrder,
-        error: orderError
-    } = await supabase
-        .from("orders")
-        .insert({
-            entrepreneur_id:
-                entrepreneur.value.id,
-
-            customer_id: null,
-
-            customer_name:
-                orderForm.value
-                    .customerName
-                    .trim(),
-
-            customer_phone:
-                orderForm.value
-                    .customerPhone
-                    .trim() || null,
-
-            status:
-                orderForm.value.status,
-
-            total:
-                orderFormTotal.value,
-
-            notes:
-                orderForm.value
-                    .notes
-                    .trim() || null
-        })
-        .select("id")
-        .single();
-
-    if (orderError) {
-        throw orderError;
-    }
-
-    const { error: itemsError } =
-        await supabase
-            .from("order_items")
-            .insert(
-                buildOrderItemRows(
-                    newOrder.id
-                )
-            );
-
-    if (!itemsError) return;
-
-    // Evita dejar pedidos incompletos.
-    await supabase
-        .from("orders")
-        .delete()
-        .eq("id", newOrder.id);
-
-    throw itemsError;
-}
-
-// Edita la información general y reemplaza sus productos.
-async function updateOrder() {
-    if (!selectedOrder.value) {
-        throw new Error(
-            "No se encontró el pedido."
-        );
-    }
-
-    const orderId =
-        selectedOrder.value.id;
-
-    const { error: orderError } =
-        await supabase
-            .from("orders")
-            .update({
-                customer_name:
-                    orderForm.value
-                        .customerName
-                        .trim(),
-
-                customer_phone:
-                    orderForm.value
-                        .customerPhone
-                        .trim() || null,
-
-                status:
-                    orderForm.value.status,
-
-                total:
-                    orderFormTotal.value,
-
-                notes:
-                    orderForm.value
-                        .notes
-                        .trim() || null,
-
-                updated_at:
-                    new Date()
-                        .toISOString()
-            })
-            .eq("id", orderId)
-            .eq(
-                "entrepreneur_id",
-                entrepreneur.value.id
-            );
-
-    if (orderError) {
-        throw orderError;
-    }
-
-    // Eliminamos las líneas anteriores y guardamos las nuevas.
-    const { error: deleteError } =
-        await supabase
-            .from("order_items")
-            .delete()
-            .eq("order_id", orderId);
-
-    if (deleteError) {
-        throw deleteError;
-    }
-
-    const { error: insertError } =
-        await supabase
-            .from("order_items")
-            .insert(
-                buildOrderItemRows(
-                    orderId
-                )
-            );
-
-    if (insertError) {
-        throw insertError;
-    }
-}
-
-// Cambia rápidamente el estado desde la tarjeta.
-async function updateOrderStatus(
-    order,
-    newStatus
-) {
-    if (
-        !order ||
-        order.status === newStatus ||
-        savingOrderIds.value.includes(
-            order.id
-        )
-    ) {
-        return;
-    }
-
-    savingOrderIds.value.push(order.id);
-
-    try {
-        const { data, error } =
-            await supabase
-                .from("orders")
-                .update({
-                    status: newStatus,
-                    updated_at:
-                        new Date()
-                            .toISOString()
-                })
-                .eq("id", order.id)
-                .eq(
-                    "entrepreneur_id",
-                    entrepreneur.value.id
-                )
-                .select(`
-                    id,
-                    status,
-                    updated_at
-                `)
-                .single();
-
-        if (error) {
-            throw error;
-        }
-
-        order.status = data.status;
-        order.updatedAt =
-            data.updated_at;
-    } catch (error) {
-        console.error(
-            "Error al cambiar estado:",
-            error
-        );
-
-        alert(
-            "No fue posible cambiar el estado."
-        );
-    } finally {
-        savingOrderIds.value =
-            savingOrderIds.value.filter(
-                function (id) {
-                    return id !== order.id;
-                }
-            );
-    }
-}
-
-// Elimina el pedido; order_items se elimina mediante cascada.
-async function deleteOrder(order) {
-    if (
-        !order ||
-        deletingOrderId.value
-    ) {
-        return;
-    }
-
-    const confirmed =
-        window.confirm(
-            `¿Eliminar el pedido de ${order.customerName}?`
-        );
-
-    if (!confirmed) return;
-
-    deletingOrderId.value = order.id;
-
-    try {
-        const { error } =
-            await supabase
-                .from("orders")
-                .delete()
-                .eq("id", order.id)
-                .eq(
-                    "entrepreneur_id",
-                    entrepreneur.value.id
-                );
-
-        if (error) {
-            throw error;
-        }
-
-        orders.value =
-            orders.value.filter(
-                function (item) {
-                    return (
-                        item.id !== order.id
-                    );
-                }
-            );
-    } catch (error) {
-        console.error(
-            "Error al eliminar pedido:",
-            error
-        );
-
-        alert(
-            "No fue posible eliminar el pedido."
-        );
-    } finally {
-        deletingOrderId.value = "";
-    }
-}
-
-// Abre una conversación de WhatsApp.
-function contactCustomer(order) {
-    const rawPhone =
-        String(
-            order.customerPhone || ""
-        ).replace(/\D/g, "");
-
-    if (!rawPhone) {
-        alert(
-            "Este pedido no tiene teléfono."
-        );
-
-        return;
-    }
-
-    const phone =
-        rawPhone.length === 8
-            ? `503${rawPhone}`
-            : rawPhone;
-
-    const message =
-        encodeURIComponent(
-            `Hola ${order.customerName}, te escribimos de ${entrepreneur.value?.businessName || "Thrive"} sobre tu pedido #${shortOrderId(order.id)}.`
-        );
-
-    window.open(
-        `https://wa.me/${phone}?text=${message}`,
-        "_blank",
-        "noopener,noreferrer"
-    );
-}
-
-// Cierra las ventanas utilizando Escape.
-function handleEscape(event) {
-    if (event.key !== "Escape") return;
-
-    if (showOrderEditor.value) {
-        closeOrderEditor();
-        return;
-    }
-
-    if (showStockModal.value) {
-        closeStockModal();
-    }
-}
-
 onMounted(function () {
-    loadInventory();
-
-    document.addEventListener(
-        "keydown",
-        handleEscape
-    );
-});
-
-onBeforeUnmount(function () {
-    document.removeEventListener(
-        "keydown",
-        handleEscape
-    );
-
-    document.body.style.overflow = "";
+    loadCalculator();
 });
 </script>
 
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-10">
-    <!-- Cabecera móvil y navbar para computadora. -->
+    <!-- Cabecera. En móvil conserva la vista de la aplicación y en laptop funciona como navbar principal. -->
     <header class="sticky top-0 z-40 bg-[#F8FBFC]">
         <div class="mx-auto max-w-[1450px] px-2 pt-2 sm:px-5 lg:px-8 lg:pt-4">
-            <!-- En celular se conserva la cabecera original. -->
-            <div class="flex items-center rounded-[24px] bg-[#00B4D8] p-2 shadow-sm lg:hidden">
-                <div class="min-w-0 flex-1 px-3">
-                    <span class="block truncate text-sm font-bold text-white">
+            <!-- Cabecera móvil -->
+            <div class="flex items-center gap-1 rounded-[24px] bg-[#00B4D8] p-1.5 shadow-sm sm:gap-2 sm:p-2 lg:hidden">
+                <div class="flex min-w-0 flex-1 items-center px-3">
+                    <span class="truncate text-sm font-bold text-white sm:text-base">
                         {{ entrepreneur?.businessName || "Thrive" }}
                     </span>
                 </div>
-
-                <button
-                    type="button"
-                    aria-label="Mensajes"
-                    class="flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-white/20"
-                >
-                    <svg
-                        class="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                        viewBox="0 0 24 24"
-                    >
-                        <path
-                            stroke-linejoin="round"
-                            d="M4 5h16v12H8l-4 3V5z"
-                        ></path>
-                        <path
-                            stroke-linecap="round"
-                            d="M8 9h8M8 13h5"
-                        ></path>
+                <button type="button" aria-label="Mensajes" class="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/20">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                        <path stroke-linejoin="round" d="M4 5h16v12H8l-4 3V5z"></path>
+                        <path stroke-linecap="round" d="M8 9h8M8 13h5"></path>
                     </svg>
                 </button>
-
-                <button
-                    type="button"
-                    aria-label="Notificaciones"
-                    class="flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-white/20"
-                >
-                    <svg
-                        class="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                        viewBox="0 0 24 24"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"
-                        ></path>
+                <button type="button" aria-label="Notificaciones" class="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/20">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"></path>
                     </svg>
                 </button>
             </div>
 
-            <!-- Navbar principal para laptop. -->
+            <!-- Navbar principal para laptop -->
             <nav class="hidden items-center justify-center gap-2 rounded-[24px] bg-[#00B4D8] p-2 shadow-sm lg:flex">
-                <button
-                    type="button"
-                    class="rounded-full px-6 py-2.5 text-sm font-bold text-white/85 hover:bg-white/15 hover:text-white"
-                    @click="goSection('inicio')"
-                >
+                <button type="button" class="rounded-full px-6 py-2.5 text-sm font-bold text-white/85 transition hover:bg-white/15 hover:text-white" @click="goDashboardSection('inicio')">
                     Inicio
                 </button>
-
-                <button
-                    type="button"
-                    class="rounded-full bg-white px-6 py-2.5 text-sm font-bold text-[#0077B6] shadow-sm"
-                >
+                <button type="button" class="rounded-full px-6 py-2.5 text-sm font-bold text-white/85 transition hover:bg-white/15 hover:text-white" @click="goDashboardSection('inventario')">
                     Inventario
                 </button>
-
-                <button
-                    type="button"
-                    class="rounded-full px-6 py-2.5 text-sm font-bold text-white/85 hover:bg-white/15 hover:text-white"
-                    @click="goSection('novedades')"
-                >
+                <button type="button" class="rounded-full px-6 py-2.5 text-sm font-bold text-white/85 transition hover:bg-white/15 hover:text-white" @click="goDashboardSection('novedades')">
                     Novedades
                 </button>
-
-                <button
-                    type="button"
-                    class="rounded-full px-6 py-2.5 text-sm font-bold text-white/85 hover:bg-white/15 hover:text-white"
-                    @click="goSection('calculadora')"
-                >
+                <button type="button" class="rounded-full bg-white px-6 py-2.5 text-sm font-bold text-[#0077B6] shadow-sm">
                     Calculadora
                 </button>
             </nav>
         </div>
     </header>
 
-    <!-- Estado de carga. -->
-    <main
-        v-if="loading"
-        class="mx-auto max-w-[1450px] px-5 py-24 text-center"
-    >
+    <!-- Estado de carga -->
+    <main v-if="loading" class="mx-auto max-w-[1450px] px-5 py-24 text-center">
         <div class="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div>
-
-        <p class="mt-4 text-sm font-semibold text-gray-400">
-            Cargando inventario...
-        </p>
+        <p class="mt-4 text-sm font-semibold text-gray-400">Cargando tus productos...</p>
     </main>
 
-    <!-- Error general. -->
-    <main
-        v-else-if="loadError"
-        class="mx-auto max-w-[1450px] px-5 py-24 text-center"
-    >
-        <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100 font-black text-red-600">
-            !
-        </div>
-
-        <p class="mt-4 font-black text-gray-700">
-            No pudimos cargar el inventario
-        </p>
-
-        <p class="mt-2 text-sm text-gray-400">
-            {{ loadError }}
-        </p>
-
-        <button
-            type="button"
-            class="mt-5 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white"
-            @click="loadInventory"
-        >
+    <!-- Error al cargar -->
+    <main v-else-if="loadError" class="mx-auto max-w-[1450px] px-5 py-24 text-center">
+        <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100 font-black text-red-600">!</div>
+        <p class="mt-4 font-black text-gray-700">No pudimos cargar la calculadora</p>
+        <p class="mt-2 text-sm text-gray-400">{{ loadError }}</p>
+        <button type="button" class="mt-5 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white" @click="loadCalculator">
             Intentar nuevamente
         </button>
     </main>
 
-    <!-- Contenido principal. -->
-    <main
-        v-else
-        class="mx-auto max-w-[1450px] px-3 pb-10 pt-4 sm:px-5 lg:px-8 lg:pt-6"
-    >
-        <!-- Encabezado y cambio de pestaña. -->
-        <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-                <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                    Gestión del emprendimiento
-                </p>
-
-                <h1 class="mt-1 text-2xl font-black text-gray-700 sm:text-3xl">
-                    Inventario
-                </h1>
-
-                <p class="mt-2 max-w-2xl text-sm text-gray-400">
-                    Controla tus existencias y registra los pedidos que recibes por WhatsApp, redes sociales o en persona.
-                </p>
-            </div>
-
-            <div class="grid grid-cols-2 rounded-2xl bg-white p-1 shadow-sm">
-                <button
-                    type="button"
-                    class="rounded-xl px-5 py-2.5 text-sm font-bold"
-                    :class="
-                        activeTab === 'stock'
-                            ? 'bg-[#00B4D8] text-white'
-                            : 'text-gray-400'
-                    "
-                    @click="activeTab = 'stock'"
-                >
-                    Stock
-                </button>
-
-                <button
-                    type="button"
-                    class="rounded-xl px-5 py-2.5 text-sm font-bold"
-                    :class="
-                        activeTab === 'orders'
-                            ? 'bg-[#00B4D8] text-white'
-                            : 'text-gray-400'
-                    "
-                    @click="activeTab = 'orders'"
-                >
-                    Pedidos
-
-                    <span
-                        v-if="pendingOrders"
-                        class="ml-1 rounded-full bg-white/20 px-1.5 py-0.5 text-[10px]"
-                    >
-                        {{ pendingOrders }}
-                    </span>
-                </button>
-            </div>
+    <!-- Contenido principal -->
+    <main v-else class="mx-auto max-w-[1450px] px-3 pb-10 pt-4 sm:px-5 lg:px-8 lg:pt-6">
+        <section class="mb-6">
+            <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">Herramientas para tu negocio</p>
+            <h1 class="mt-1 text-2xl font-black text-gray-700 sm:text-3xl">Calculadora de ganancias</h1>
+            <p class="mt-2 max-w-2xl text-sm leading-relaxed text-gray-400">
+                Selecciona uno de tus productos y calcula una estimación utilizando su precio y stock actuales.
+            </p>
         </section>
 
-        <!-- STOCK -->
-        <template v-if="activeTab === 'stock'">
-            <!-- Resumen del inventario. -->
-            <section class="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <article class="rounded-[22px] bg-white p-5 shadow-sm">
-                    <p class="text-xs font-bold text-gray-400">
-                        Productos
-                    </p>
+        <!-- Se muestra cuando todavía no hay productos registrados -->
+        <section v-if="!products.length" class="rounded-[24px] bg-white px-5 py-16 text-center shadow-sm">
+            <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#EAF9FC] text-[#00B4D8]">
+                <svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" d="M4 7h16M5 7l1 13h12l1-13M9 11v5M15 11v5M9 4h6l1 3H8l1-3z"></path>
+                </svg>
+            </div>
+            <h2 class="mt-4 text-lg font-black text-gray-700">Todavía no tienes productos</h2>
+            <p class="mx-auto mt-2 max-w-md text-sm leading-relaxed text-gray-400">
+                Crea tu primer producto desde el dashboard para comenzar a calcular sus posibles ganancias.
+            </p>
+        </section>
 
-                    <p class="mt-2 text-2xl font-black text-gray-700">
-                        {{ totalProducts }}
-                    </p>
-
-                    <p class="mt-1 text-xs text-gray-400">
-                        registrados
-                    </p>
-                </article>
-
-                <article class="rounded-[22px] bg-white p-5 shadow-sm">
-                    <p class="text-xs font-bold text-gray-400">
-                        Unidades
-                    </p>
-
-                    <p class="mt-2 text-2xl font-black text-gray-700">
-                        {{ totalUnits }}
-                    </p>
-
-                    <p class="mt-1 text-xs text-gray-400">
-                        disponibles
-                    </p>
-                </article>
-
-                <article class="rounded-[22px] bg-white p-5 shadow-sm">
-                    <p class="text-xs font-bold text-gray-400">
-                        Necesitan atención
-                    </p>
-
-                    <p class="mt-2 text-2xl font-black text-[#0077B6]">
-                        {{
-                            lowStockCount +
-                            outOfStockCount
-                        }}
-                    </p>
-
-                    <p class="mt-1 text-xs text-gray-400">
-                        {{ lowStockCount }} bajos ·
-                        {{ outOfStockCount }} agotados
-                    </p>
-                </article>
-
-                <article class="rounded-[22px] bg-white p-5 shadow-sm">
-                    <p class="text-xs font-bold text-gray-400">
-                        Valor potencial
-                    </p>
-
-                    <p class="mt-2 text-2xl font-black text-black">
-                        {{ formatPrice(inventoryValue) }}
-                    </p>
-
-                    <p class="mt-1 text-xs text-gray-400">
-                        precio × stock
-                    </p>
-                </article>
-            </section>
-
-            <!-- Productos con pocas existencias. -->
-            <section
-                v-if="attentionProducts.length"
-                class="mb-6 rounded-[24px] bg-white p-5 shadow-sm sm:p-6"
-            >
-                <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                    Necesitan atención
-                </p>
-
-                <h2 class="mt-1 text-lg font-black text-gray-700">
-                    Revisa estos productos
-                </h2>
-
-                <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    <article
-                        v-for="product in attentionProducts"
-                        :key="product.id"
-                        class="flex items-center gap-3 rounded-2xl bg-[#F8FBFC] p-3"
-                    >
-                        <img
-                            v-if="product.image"
-                            :src="product.image"
-                            :alt="product.name"
-                            class="h-14 w-14 shrink-0 rounded-xl object-cover"
-                        >
-
-                        <div
-                            v-else
-                            class="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-xs font-bold text-gray-400"
-                        >
-                            Sin foto
-                        </div>
-
-                        <div class="min-w-0 flex-1">
-                            <p class="truncate text-sm font-bold text-gray-600">
-                                {{ product.name }}
-                            </p>
-
-                            <p
-                                class="mt-0.5 text-xs"
-                                :class="
-                                    product.stock === 0
-                                        ? 'text-red-500'
-                                        : 'text-yellow-600'
-                                "
-                            >
-                                {{
-                                    product.stock === 0
-                                        ? "Producto agotado"
-                                        : `${product.stock} unidades restantes`
-                                }}
-                            </p>
-                        </div>
-
-                        <button
-                            type="button"
-                            class="rounded-xl bg-white px-3 py-2 text-xs font-bold text-[#0077B6] shadow-sm"
-                            @click="openStockModal(product)"
-                        >
-                            Actualizar
-                        </button>
-                    </article>
-                </div>
-            </section>
-
-            <!-- Buscador y filtros. -->
-            <section class="mb-5 rounded-[24px] bg-white p-4 shadow-sm sm:p-5">
-                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <div class="flex flex-1 items-center rounded-xl bg-[#F8FBFC] px-4 py-3 lg:max-w-md">
-                        <svg
-                            class="mr-2 h-5 w-5 text-gray-400"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            viewBox="0 0 24 24"
-                        >
-                            <circle
-                                cx="11"
-                                cy="11"
-                                r="7"
-                            ></circle>
-
-                            <path
-                                stroke-linecap="round"
-                                d="m20 20-3.5-3.5"
-                            ></path>
-                        </svg>
-
-                        <input
-                            v-model="productSearch"
-                            type="text"
-                            placeholder="Buscar producto"
-                            class="w-full bg-transparent text-sm text-gray-600 outline-none placeholder:text-gray-400"
-                        >
-                    </div>
-
-                    <div class="flex gap-2 overflow-x-auto">
-                        <button
-                            type="button"
-                            class="whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold"
-                            :class="
-                                stockFilter === 'all'
-                                    ? 'bg-[#00B4D8] text-white'
-                                    : 'bg-[#F8FBFC] text-gray-400'
-                            "
-                            @click="stockFilter = 'all'"
-                        >
-                            Todos
-                        </button>
-
-                        <button
-                            type="button"
-                            class="whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold"
-                            :class="
-                                stockFilter === 'available'
-                                    ? 'bg-[#00B4D8] text-white'
-                                    : 'bg-[#F8FBFC] text-gray-400'
-                            "
-                            @click="stockFilter = 'available'"
-                        >
-                            Disponibles
-                        </button>
-
-                        <button
-                            type="button"
-                            class="whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold"
-                            :class="
-                                stockFilter === 'low'
-                                    ? 'bg-[#00B4D8] text-white'
-                                    : 'bg-[#F8FBFC] text-gray-400'
-                            "
-                            @click="stockFilter = 'low'"
-                        >
-                            Stock bajo
-                        </button>
-
-                        <button
-                            type="button"
-                            class="whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold"
-                            :class="
-                                stockFilter === 'out'
-                                    ? 'bg-[#00B4D8] text-white'
-                                    : 'bg-[#F8FBFC] text-gray-400'
-                            "
-                            @click="stockFilter = 'out'"
-                        >
-                            Agotados
-                        </button>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Productos del inventario. -->
-            <section
-                v-if="filteredProducts.length"
-                class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-            >
-                <article
-                    v-for="product in filteredProducts"
-                    :key="product.id"
-                    class="rounded-[24px] bg-white p-4 shadow-sm"
-                >
-                    <div class="flex gap-4">
-                        <img
-                            v-if="product.image"
-                            :src="product.image"
-                            :alt="product.name"
-                            class="h-20 w-20 shrink-0 rounded-2xl object-cover"
-                        >
-
-                        <div
-                            v-else
-                            class="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-gray-100 text-xs font-bold text-gray-400"
-                        >
-                            Sin foto
-                        </div>
-
-                        <div class="min-w-0 flex-1">
-                            <div class="flex items-start justify-between gap-2">
-                                <div class="min-w-0">
-                                    <h2 class="truncate text-sm font-black text-gray-600">
-                                        {{ product.name }}
-                                    </h2>
-
-                                    <p class="mt-1 font-black text-black">
-                                        {{ formatPrice(product.price) }}
-                                    </p>
-                                </div>
-
-                                <span
-                                    class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold"
-                                    :class="stockClasses(product.stock)"
-                                >
-                                    {{ stockLabel(product.stock) }}
-                                </span>
-                            </div>
-
-                            <p class="mt-2 truncate text-xs text-gray-400">
-                                {{
-                                    product.categories.join(" · ") ||
-                                    "Sin categoría"
-                                }}
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Botones rápidos de stock. -->
-                    <div class="mt-4 rounded-2xl bg-[#F8FBFC] p-3">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <p class="text-xs font-bold text-gray-400">
-                                    Stock actual
-                                </p>
-
-                                <p class="mt-0.5 text-sm font-black text-gray-600">
-                                    {{ product.stock }} unidades
-                                </p>
-                            </div>
-
-                            <div class="flex items-center gap-2">
-                                <button
-                                    type="button"
-                                    :disabled="
-                                        product.stock <= 0 ||
-                                        savingStockIds.includes(product.id)
-                                    "
-                                    class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-lg font-bold text-gray-500 shadow-sm disabled:opacity-40"
-                                    @click="
-                                        updateStock(
-                                            product,
-                                            product.stock - 1
-                                        )
-                                    "
-                                >
-                                    −
-                                </button>
-
-                                <span class="min-w-8 text-center font-black text-gray-700">
-                                    {{ product.stock }}
-                                </span>
-
-                                <button
-                                    type="button"
-                                    :disabled="
-                                        savingStockIds.includes(product.id)
-                                    "
-                                    class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-lg font-bold text-[#0077B6] shadow-sm disabled:opacity-40"
-                                    @click="
-                                        updateStock(
-                                            product,
-                                            product.stock + 1
-                                        )
-                                    "
-                                >
-                                    +
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mt-3 flex items-center justify-between">
-                        <div>
-                            <p class="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-400">
-                                Valor disponible
-                            </p>
-
-                            <p class="text-sm font-black text-gray-700">
-                                {{
-                                    formatPrice(
-                                        product.price *
-                                        product.stock
-                                    )
-                                }}
-                            </p>
-                        </div>
-
-                        <button
-                            type="button"
-                            class="rounded-xl border border-gray-200 px-4 py-2.5 text-xs font-bold text-gray-500"
-                            @click="openStockModal(product)"
-                        >
-                            Actualizar stock
-                        </button>
-                    </div>
-                </article>
-            </section>
-
-            <section
-                v-else
-                class="rounded-[24px] bg-white px-5 py-16 text-center shadow-sm"
-            >
-                <p class="font-black text-gray-700">
-                    No encontramos productos
-                </p>
-
-                <p class="mt-2 text-sm text-gray-400">
-                    Prueba con otro filtro o búsqueda.
-                </p>
-            </section>
-        </template>
-
-        <!-- PEDIDOS -->
         <template v-else>
-            <!-- AQUÍ ESTÁ EL BOTÓN PARA CREAR PEDIDOS. -->
-            <section class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                        Agenda de pedidos
-                    </p>
-
-                    <h2 class="mt-1 text-2xl font-black text-gray-700">
-                        Pedidos registrados
-                    </h2>
-
-                    <p class="mt-1 text-sm text-gray-400">
-                        Registra y organiza los pedidos que recibes fuera de Thrive.
-                    </p>
-                </div>
-
-                <button
-                    type="button"
-                    class="flex items-center justify-center gap-2 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#009CC0]"
-                    @click="openAddOrder"
-                >
-                    <svg
-                        class="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        viewBox="0 0 24 24"
+            <!-- Selector de productos -->
+            <section class="mb-6 rounded-[24px] bg-white p-5 shadow-sm sm:p-6">
+                <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">Mis productos</p>
+                <h2 class="mt-1 text-lg font-black text-gray-700">Selecciona el producto que quieres analizar</h2>
+                <div class="mt-4 flex gap-3 overflow-x-auto pb-2">
+                    <button
+                        v-for="product in products"
+                        :key="product.id"
+                        type="button"
+                        class="flex w-[230px] shrink-0 items-center gap-3 rounded-2xl border p-3 text-left transition"
+                        :class="selectedProductId === product.id ? 'border-[#00B4D8] bg-[#EAF9FC]' : 'border-gray-100 bg-white'"
+                        @click="selectProduct(product)"
                     >
-                        <path
-                            stroke-linecap="round"
-                            d="M12 5v14M5 12h14"
-                        ></path>
-                    </svg>
-
-                    Nuevo pedido
-                </button>
-            </section>
-
-            <!-- Resumen de pedidos. -->
-            <section class="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <article class="rounded-[22px] bg-white p-5 shadow-sm">
-                    <p class="text-xs font-bold text-gray-400">
-                        Pendientes
-                    </p>
-
-                    <p class="mt-2 text-2xl font-black text-yellow-600">
-                        {{ pendingOrders }}
-                    </p>
-                </article>
-
-                <article class="rounded-[22px] bg-white p-5 shadow-sm">
-                    <p class="text-xs font-bold text-gray-400">
-                        En preparación
-                    </p>
-
-                    <p class="mt-2 text-2xl font-black text-blue-600">
-                        {{ preparationOrders }}
-                    </p>
-                </article>
-
-                <article class="rounded-[22px] bg-white p-5 shadow-sm">
-                    <p class="text-xs font-bold text-gray-400">
-                        Listos
-                    </p>
-
-                    <p class="mt-2 text-2xl font-black text-[#0077B6]">
-                        {{ readyOrders }}
-                    </p>
-                </article>
-
-                <article class="rounded-[22px] bg-white p-5 shadow-sm">
-                    <p class="text-xs font-bold text-gray-400">
-                        Entregados
-                    </p>
-
-                    <p class="mt-2 text-2xl font-black text-green-600">
-                        {{ deliveredOrders }}
-                    </p>
-                </article>
-            </section>
-
-            <!-- Búsqueda y filtro de pedidos. -->
-            <section class="mb-5 rounded-[24px] bg-white p-4 shadow-sm sm:p-5">
-                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <div class="flex flex-1 items-center rounded-xl bg-[#F8FBFC] px-4 py-3 lg:max-w-md">
-                        <svg
-                            class="mr-2 h-5 w-5 text-gray-400"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            viewBox="0 0 24 24"
-                        >
-                            <circle
-                                cx="11"
-                                cy="11"
-                                r="7"
-                            ></circle>
-
-                            <path
-                                stroke-linecap="round"
-                                d="m20 20-3.5-3.5"
-                            ></path>
-                        </svg>
-
-                        <input
-                            v-model="orderSearch"
-                            type="text"
-                            placeholder="Buscar cliente, teléfono o producto"
-                            class="w-full bg-transparent text-sm text-gray-600 outline-none placeholder:text-gray-400"
-                        >
-                    </div>
-
-                    <select
-                        v-model="orderFilter"
-                        class="rounded-xl border border-gray-100 bg-[#F8FBFC] px-4 py-3 text-sm font-bold text-gray-500 outline-none"
-                    >
-                        <option value="all">
-                            Todos los estados
-                        </option>
-
-                        <option
-                            v-for="status in orderStatuses"
-                            :key="status.value"
-                            :value="status.value"
-                        >
-                            {{ status.label }}
-                        </option>
-                    </select>
+                        <img v-if="product.image" :src="product.image" :alt="product.name" class="h-14 w-14 shrink-0 rounded-xl object-cover">
+                        <div v-else class="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-xs font-bold text-gray-400">Sin foto</div>
+                        <div class="min-w-0">
+                            <p class="truncate text-sm font-bold text-gray-600">{{ product.name }}</p>
+                            <p class="mt-1 text-sm font-black text-black">{{ formatPrice(product.price) }}</p>
+                            <p class="text-xs text-gray-400">{{ product.stock }} en stock</p>
+                        </div>
+                    </button>
                 </div>
             </section>
 
-            <!-- Tarjetas de pedidos. -->
-            <section
-                v-if="filteredOrders.length"
-                class="space-y-4"
-            >
-                <article
-                    v-for="order in filteredOrders"
-                    :key="order.id"
-                    class="rounded-[24px] bg-white p-5 shadow-sm sm:p-6"
-                >
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div>
-                            <div class="flex flex-wrap items-center gap-2">
-                                <h3 class="font-black text-gray-700">
-                                    Pedido #{{ shortOrderId(order.id) }}
-                                </h3>
+            <!-- Resumen rápido del producto seleccionado -->
+            <section v-if="selectedProduct" class="mb-6 grid gap-4 sm:grid-cols-3">
+                <div class="rounded-[22px] bg-white p-5 shadow-sm">
+                    <p class="text-xs font-bold uppercase tracking-[0.1em] text-gray-400">Precio de venta</p>
+                    <p class="mt-2 text-2xl font-black text-black">{{ formatPrice(salePrice) }}</p>
+                    <p class="mt-1 text-xs text-gray-400">Precio actual del producto</p>
+                </div>
+                <div class="rounded-[22px] bg-white p-5 shadow-sm">
+                    <p class="text-xs font-bold uppercase tracking-[0.1em] text-gray-400">Stock disponible</p>
+                    <p class="mt-2 text-2xl font-black text-gray-700">{{ currentStock }}</p>
+                    <p class="mt-1 text-xs text-gray-400">unidades disponibles</p>
+                </div>
+                <div class="rounded-[22px] bg-white p-5 shadow-sm">
+                    <p class="text-xs font-bold uppercase tracking-[0.1em] text-gray-400">Valor del inventario</p>
+                    <p class="mt-2 text-2xl font-black text-[#0077B6]">{{ formatPrice(inventoryValue) }}</p>
+                    <p class="mt-1 text-xs text-gray-400">Si vendieras todo al precio actual</p>
+                </div>
+            </section>
 
-                                <span
-                                    class="rounded-full px-2.5 py-1 text-[10px] font-bold"
-                                    :class="orderStatusClasses(order.status)"
-                                >
-                                    {{ orderStatusLabel(order.status) }}
-                                </span>
+            <div class="grid gap-6 lg:grid-cols-[380px_1fr]">
+                <!-- Formulario de costos -->
+                <section class="h-fit rounded-[24px] bg-white p-5 shadow-sm sm:p-6 lg:sticky lg:top-[88px]">
+                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">Costos</p>
+                    <h2 class="mt-1 text-xl font-black text-gray-700">Datos del cálculo</h2>
+                    <p class="mt-1 text-sm text-gray-400">Completa únicamente los costos relacionados con este producto.</p>
+
+                    <div class="mt-6 space-y-5">
+                        <label class="block">
+                            <span class="text-sm font-bold text-gray-600">Costo de fabricación por unidad</span>
+                            <div class="relative mt-2">
+                                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                                <input v-model.number="costPerUnit" type="number" min="0" step="0.01" class="w-full rounded-xl border border-gray-200 bg-white py-3 pl-9 pr-4 text-sm text-gray-700 outline-none focus:border-[#00B4D8]" placeholder="0.00">
                             </div>
+                        </label>
 
-                            <p class="mt-1 text-xs text-gray-400">
-                                {{ formatDate(order.createdAt) }}
+                        <label class="block">
+                            <span class="text-sm font-bold text-gray-600">Otros costos por unidad</span>
+                            <div class="relative mt-2">
+                                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                                <input v-model.number="variableCostPerUnit" type="number" min="0" step="0.01" class="w-full rounded-xl border border-gray-200 bg-white py-3 pl-9 pr-4 text-sm text-gray-700 outline-none focus:border-[#00B4D8]" placeholder="Empaque, materiales...">
+                            </div>
+                        </label>
+
+                        <label class="block">
+                            <div class="flex items-center justify-between gap-3">
+                                <span class="text-sm font-bold text-gray-600">Unidades a calcular</span>
+                                <span class="text-xs text-gray-400">Máx. {{ currentStock }}</span>
+                            </div>
+                            <input v-model.number="unitsToCalculate" type="number" min="0" :max="currentStock" class="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-700 outline-none focus:border-[#00B4D8]" @input="validateUnits">
+                            <p class="mt-2 text-xs leading-relaxed text-gray-400">Por defecto utilizamos todo tu stock actual para mostrar el potencial del producto.</p>
+                        </label>
+
+                        <label class="block">
+                            <span class="text-sm font-bold text-gray-600">Publicidad</span>
+                            <div class="relative mt-2">
+                                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                                <input v-model.number="advertisingCost" type="number" min="0" step="0.01" class="w-full rounded-xl border border-gray-200 bg-white py-3 pl-9 pr-4 text-sm text-gray-700 outline-none focus:border-[#00B4D8]" placeholder="0.00">
+                            </div>
+                        </label>
+
+                        <label class="block">
+                            <span class="text-sm font-bold text-gray-600">Otros gastos</span>
+                            <div class="relative mt-2">
+                                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                                <input v-model.number="otherFixedCosts" type="number" min="0" step="0.01" class="w-full rounded-xl border border-gray-200 bg-white py-3 pl-9 pr-4 text-sm text-gray-700 outline-none focus:border-[#00B4D8]" placeholder="0.00">
+                            </div>
+                        </label>
+
+                        <label class="block">
+                            <span class="text-sm font-bold text-gray-600">Impuestos o comisiones (%)</span>
+                            <input v-model.number="taxRate" type="number" min="0" max="100" step="0.1" class="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-700 outline-none focus:border-[#00B4D8]">
+                        </label>
+                    </div>
+
+                    <div class="mt-6 grid gap-2">
+                        <button type="button" class="rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#0077B6]" @click="calculateResults">
+                            Calcular resultados
+                        </button>
+                        <button type="button" class="rounded-xl border border-gray-200 px-5 py-3 text-sm font-bold text-gray-400" @click="resetCalculator">
+                            Limpiar datos
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Resultados financieros -->
+                <section id="calculatorResults" class="space-y-5 scroll-mt-24">
+                    <div class="rounded-[24px] bg-[#0077B6] p-6 text-white shadow-sm sm:p-8">
+                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#CAF0F8]">Ganancia estimada</p>
+                        <h2 class="mt-3 text-4xl font-black sm:text-5xl">{{ calculated ? formatPrice(estimatedProfit) : "$0.00" }}</h2>
+                        <p class="mt-3 max-w-xl text-sm leading-relaxed text-white/75">
+                            Estimación basada en {{ calculatedUnits }} unidades de {{ selectedProduct.name }}.
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                        <div class="rounded-[22px] bg-white p-5 shadow-sm">
+                            <p class="text-xs font-bold text-gray-400">Ganancia por unidad</p>
+                            <p class="mt-2 text-xl font-black text-black">{{ calculated ? formatPrice(profitPerUnit) : "$0.00" }}</p>
+                        </div>
+                        <div class="rounded-[22px] bg-white p-5 shadow-sm">
+                            <p class="text-xs font-bold text-gray-400">Margen neto estimado</p>
+                            <p class="mt-2 text-xl font-black" :class="profitMargin >= 0 ? 'text-[#0077B6]' : 'text-red-600'">
+                                {{ calculated ? profitMargin.toFixed(1) : "0.0" }}%
                             </p>
                         </div>
-
-                        <div class="flex flex-wrap gap-2">
-                            <select
-                                :value="order.status"
-                                :disabled="
-                                    savingOrderIds.includes(order.id)
-                                "
-                                class="rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-bold text-gray-600 outline-none disabled:opacity-50"
-                                @change="
-                                    updateOrderStatus(
-                                        order,
-                                        $event.target.value
-                                    )
-                                "
-                            >
-                                <option
-                                    v-for="status in orderStatuses"
-                                    :key="status.value"
-                                    :value="status.value"
-                                >
-                                    {{ status.label }}
-                                </option>
-                            </select>
-
-                            <button
-                                v-if="order.customerPhone"
-                                type="button"
-                                class="rounded-xl bg-[#25D366] px-4 py-2.5 text-sm font-bold text-white"
-                                @click="contactCustomer(order)"
-                            >
-                                WhatsApp
-                            </button>
-
-                            <button
-                                type="button"
-                                class="rounded-xl bg-[#CAF0F8] px-4 py-2.5 text-sm font-bold text-[#0077B6]"
-                                @click="openEditOrder(order)"
-                            >
-                                Editar
-                            </button>
-
-                            <button
-                                type="button"
-                                :disabled="
-                                    deletingOrderId === order.id
-                                "
-                                class="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-600 disabled:opacity-50"
-                                @click="deleteOrder(order)"
-                            >
-                                {{
-                                    deletingOrderId === order.id
-                                        ? "Eliminando..."
-                                        : "Eliminar"
-                                }}
-                            </button>
+                        <div class="rounded-[22px] bg-white p-5 shadow-sm">
+                            <p class="text-xs font-bold text-gray-400">Ingresos posibles</p>
+                            <p class="mt-2 text-xl font-black text-gray-700">{{ calculated ? formatPrice(income) : "$0.00" }}</p>
+                        </div>
+                        <div class="rounded-[22px] bg-white p-5 shadow-sm">
+                            <p class="text-xs font-bold text-gray-400">Costos totales</p>
+                            <p class="mt-2 text-xl font-black text-gray-700">{{ calculated ? formatPrice(totalCosts) : "$0.00" }}</p>
                         </div>
                     </div>
 
-                    <div class="mt-5 grid gap-4 lg:grid-cols-[220px_1fr_150px]">
-                        <!-- Cliente -->
-                        <div class="rounded-2xl bg-[#F8FBFC] p-4">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-400">
-                                Cliente
-                            </p>
-
-                            <p class="mt-1 text-sm font-black text-gray-600">
-                                {{ order.customerName }}
-                            </p>
-
-                            <p class="mt-1 text-xs text-gray-400">
-                                {{
-                                    order.customerPhone ||
-                                    "Sin teléfono"
-                                }}
-                            </p>
+                    <!-- Desglose completo -->
+                    <div class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
+                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">Resumen</p>
+                        <h2 class="mt-1 text-xl font-black text-gray-700">Desglose financiero</h2>
+                        <div class="mt-6 divide-y divide-gray-100">
+                            <div class="flex items-center justify-between gap-4 py-3"><span class="text-sm text-gray-400">Ingresos estimados</span><span class="font-black text-gray-700">{{ calculated ? formatPrice(income) : "$0.00" }}</span></div>
+                            <div class="flex items-center justify-between gap-4 py-3"><span class="text-sm text-gray-400">Costos variables</span><span class="font-black text-gray-700">{{ calculated ? formatPrice(totalVariableCosts) : "$0.00" }}</span></div>
+                            <div class="flex items-center justify-between gap-4 py-3"><span class="text-sm text-gray-400">Costos fijos</span><span class="font-black text-gray-700">{{ calculated ? formatPrice(totalFixedCosts) : "$0.00" }}</span></div>
+                            <div class="flex items-center justify-between gap-4 py-3"><span class="text-sm text-gray-400">Impuestos o comisiones</span><span class="font-black text-gray-700">{{ calculated ? formatPrice(totalTax) : "$0.00" }}</span></div>
+                            <div class="flex items-center justify-between gap-4 py-4">
+                                <span class="font-bold text-gray-600">Ganancia estimada</span>
+                                <span class="text-xl font-black" :class="estimatedProfit >= 0 ? 'text-[#0077B6]' : 'text-red-600'">{{ calculated ? formatPrice(estimatedProfit) : "$0.00" }}</span>
+                            </div>
                         </div>
+                    </div>
 
-                        <!-- Productos -->
-                        <div class="rounded-2xl bg-[#F8FBFC] p-4">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-400">
-                                Productos
-                            </p>
-
-                            <div
-                                v-if="order.items.length"
-                                class="mt-2 space-y-2"
-                            >
-                                <div
-                                    v-for="item in order.items"
-                                    :key="item.id"
-                                    class="flex items-center justify-between gap-3 text-sm"
-                                >
-                                    <span class="min-w-0 truncate text-gray-500">
-                                        {{ item.quantity }} ×
-                                        {{ item.productName }}
-                                    </span>
-
-                                    <span class="shrink-0 font-bold text-gray-600">
-                                        {{
-                                            formatPrice(
-                                                item.quantity *
-                                                item.unitPrice
-                                            )
-                                        }}
-                                    </span>
+                    <!-- Indicadores visuales -->
+                    <div class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
+                        <h2 class="text-xl font-black text-gray-700">Indicadores</h2>
+                        <div class="mt-6 space-y-6">
+                            <div>
+                                <div class="mb-2 flex items-center justify-between text-sm">
+                                    <span class="font-bold text-gray-500">Rentabilidad sobre costos</span>
+                                    <span class="font-black" :class="profitability >= 0 ? 'text-gray-700' : 'text-red-600'">{{ calculated ? profitability.toFixed(1) : "0.0" }}%</span>
+                                </div>
+                                <div class="h-3 overflow-hidden rounded-full bg-gray-100">
+                                    <div class="h-full rounded-full bg-[#00B4D8]" :style="{ width: calculated ? barWidth(profitability) + '%' : '0%' }"></div>
                                 </div>
                             </div>
-
-                            <p
-                                v-else
-                                class="mt-2 text-sm text-gray-400"
-                            >
-                                Sin productos registrados.
-                            </p>
+                            <div>
+                                <div class="mb-2 flex items-center justify-between text-sm">
+                                    <span class="font-bold text-gray-500">Costos sobre ingresos</span>
+                                    <span class="font-black text-gray-700">{{ calculated ? costPercentage.toFixed(1) : "0.0" }}%</span>
+                                </div>
+                                <div class="h-3 overflow-hidden rounded-full bg-gray-100">
+                                    <div class="h-full rounded-full bg-[#90E0EF]" :style="{ width: calculated ? barWidth(costPercentage) + '%' : '0%' }"></div>
+                                </div>
+                            </div>
                         </div>
+                    </div>
 
-                        <!-- Total -->
-                        <div class="rounded-2xl bg-[#EAF9FC] p-4">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.08em] text-[#0077B6]">
-                                Total
-                            </p>
-
-                            <p class="mt-2 text-2xl font-black text-black">
-                                {{ formatPrice(order.total) }}
+                    <!-- Punto de equilibrio y potencial del inventario -->
+                    <div class="grid gap-5 md:grid-cols-2">
+                        <div class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
+                            <p class="text-xs font-bold uppercase tracking-[0.1em] text-[#00B4D8]">Punto de equilibrio</p>
+                            <p class="mt-3 text-4xl font-black text-gray-700">{{ calculated ? breakEvenUnits : 0 }}</p>
+                            <p class="mt-1 text-sm text-gray-400">unidades necesarias para cubrir los costos fijos</p>
+                            <div class="mt-5 h-3 overflow-hidden rounded-full bg-gray-100">
+                                <div class="h-full rounded-full bg-[#00B4D8]" :style="{ width: calculated ? breakEvenProgress + '%' : '0%' }"></div>
+                            </div>
+                            <p class="mt-2 text-xs text-gray-400">Progreso: {{ calculated ? breakEvenProgress.toFixed(0) : 0 }}%</p>
+                        </div>
+                        <div class="rounded-[24px] bg-[#EAF9FC] p-5 sm:p-7">
+                            <p class="text-xs font-bold uppercase tracking-[0.1em] text-[#0077B6]">Potencial del inventario</p>
+                            <p class="mt-3 text-4xl font-black" :class="fullStockProfit >= 0 ? 'text-[#0077B6]' : 'text-red-600'">{{ calculated ? formatPrice(fullStockProfit) : "$0.00" }}</p>
+                            <p class="mt-2 text-sm leading-relaxed text-gray-500">
+                                Ganancia aproximada si vendieras las {{ currentStock }} unidades disponibles utilizando estos mismos costos.
                             </p>
                         </div>
                     </div>
 
-                    <div
-                        v-if="order.notes"
-                        class="mt-4 border-t border-gray-100 pt-4"
-                    >
-                        <p class="text-xs font-bold text-gray-400">
-                            Nota del pedido
-                        </p>
-
-                        <p class="mt-1 text-sm leading-relaxed text-gray-500">
-                            {{ order.notes }}
-                        </p>
+                    <!-- Recomendación final -->
+                    <div class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
+                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">Recomendaciones Thrive</p>
+                        <div class="mt-4 rounded-2xl border p-5" :class="recommendation.classes">
+                            <h3 class="font-black">{{ recommendation.title }}</h3>
+                            <p class="mt-2 text-sm leading-relaxed opacity-80">{{ recommendation.text }}</p>
+                        </div>
                     </div>
-                </article>
-            </section>
-
-            <!-- Lista vacía con otro botón para crear pedidos. -->
-            <section
-                v-else
-                class="rounded-[24px] bg-white px-5 py-16 text-center shadow-sm"
-            >
-                <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#EAF9FC] text-[#00B4D8]">
-                    <svg
-                        class="h-7 w-7"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                        viewBox="0 0 24 24"
-                    >
-                        <path
-                            stroke-linejoin="round"
-                            d="M4 5h16v14H4z"
-                        ></path>
-
-                        <path
-                            stroke-linecap="round"
-                            d="M8 9h8M8 13h5"
-                        ></path>
-                    </svg>
-                </div>
-
-                <p class="mt-4 font-black text-gray-700">
-                    No hay pedidos registrados
-                </p>
-
-                <p class="mt-2 text-sm text-gray-400">
-                    Crea el primer pedido que hayas recibido.
-                </p>
-
-                <button
-                    type="button"
-                    class="mt-5 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white"
-                    @click="openAddOrder"
-                >
-                    Crear primer pedido
-                </button>
-            </section>
+                </section>
+            </div>
         </template>
     </main>
 
-    <!-- Menú móvil. -->
-    <nav class="fixed inset-x-0 bottom-0 z-50 overflow-hidden rounded-t-[28px] border-t border-white/20 bg-[#00B4D8] shadow-[0_-6px_20px_rgba(0,0,0,0.12)] lg:hidden">
-        <div class="mx-auto grid max-w-md grid-cols-4">
-            <button
-                type="button"
-                class="flex flex-col items-center gap-1 py-2 text-white/75"
-                @click="goSection('inicio')"
-            >
-                <svg
-                    class="h-5 w-5"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                >
-                    <path d="M3 11l9-8 9 8"></path>
-                    <path d="M5 10v10h14V10"></path>
-                </svg>
-
-                <span class="text-[9px] font-bold">
-                    Inicio
-                </span>
+    <!-- Menú móvil: se mantiene igual que en el dashboard. -->
+    <nav class="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] border-t border-white/20 bg-[#00B4D8] shadow-[0_-6px_20px_rgba(0,0,0,0.12)] lg:hidden">
+        <div class="mx-auto grid max-w-lg grid-cols-4">
+            <button type="button" class="flex flex-col items-center gap-1 py-2 text-white/75" @click="goDashboardSection('inicio')">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"></path><path d="M5 10v10h14V10"></path></svg>
+                <span class="text-[9px] font-bold">Inicio</span>
             </button>
-
-            <button
-                type="button"
-                class="flex flex-col items-center gap-1 bg-white/15 py-2 text-white"
-            >
-                <svg
-                    class="h-5 w-5"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                >
-                    <path d="M4 7l8-4 8 4-8 4-8-4z"></path>
-                    <path d="M4 7v10l8 4 8-4V7"></path>
-                </svg>
-
-                <span class="text-[9px] font-bold">
-                    Inventario
-                </span>
+            <button type="button" class="flex flex-col items-center gap-1 py-2 text-white/75" @click="goDashboardSection('inventario')">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 7l8-4 8 4-8 4-8-4z"></path><path d="M4 7v10l8 4 8-4V7"></path></svg>
+                <span class="text-[9px] font-bold">Inventario</span>
             </button>
-
-            <button
-                type="button"
-                class="flex flex-col items-center gap-1 py-2 text-white/75"
-                @click="goSection('novedades')"
-            >
-                <svg
-                    class="h-5 w-5"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                >
-                    <path
-                        stroke-linecap="round"
-                        d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"
-                    ></path>
-                </svg>
-
-                <span class="text-[9px] font-bold">
-                    Novedades
-                </span>
+            <button type="button" class="flex flex-col items-center gap-1 py-2 text-white/75" @click="goDashboardSection('novedades')">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path></svg>
+                <span class="text-[9px] font-bold">Novedades</span>
             </button>
-
-            <button
-                type="button"
-                class="flex flex-col items-center gap-1 py-2 text-white/75"
-                @click="goSection('calculadora')"
-            >
-                <svg
-                    class="h-5 w-5"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                >
-                    <rect
-                        x="5"
-                        y="3"
-                        width="14"
-                        height="18"
-                        rx="2"
-                    ></rect>
-
-                    <path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"></path>
-                </svg>
-
-                <span class="text-[9px] font-bold">
-                    Calculadora
-                </span>
+            <button type="button" class="flex flex-col items-center gap-1 bg-white/15 py-2 text-white">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"></rect><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"></path></svg>
+                <span class="text-[9px] font-bold">Calculadora</span>
             </button>
         </div>
     </nav>
-
-    <!-- Ventana para modificar el stock exacto. -->
-    <Teleport to="body">
-        <div
-            v-if="showStockModal"
-            class="fixed inset-0 z-[130] flex items-end justify-center bg-black/50 sm:items-center sm:p-5"
-            @click.self="closeStockModal"
-        >
-            <section class="w-full rounded-t-[28px] bg-white p-5 sm:max-w-[440px] sm:rounded-[28px] sm:p-6">
-                <div class="flex items-center justify-between gap-4">
-                    <div>
-                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                            Actualizar stock
-                        </p>
-
-                        <h2 class="mt-1 text-lg font-black text-gray-700">
-                            {{ stockProduct?.name }}
-                        </h2>
-                    </div>
-
-                    <button
-                        type="button"
-                        class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
-                        @click="closeStockModal"
-                    >
-                        ×
-                    </button>
-                </div>
-
-                <label class="mt-6 block">
-                    <span class="text-sm font-bold text-gray-600">
-                        Cantidad disponible
-                    </span>
-
-                    <input
-                        v-model.number="stockValue"
-                        type="number"
-                        min="0"
-                        step="1"
-                        class="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-gray-700 outline-none focus:border-[#00B4D8]"
-                    >
-                </label>
-
-                <div class="mt-6 grid grid-cols-2 gap-2">
-                    <button
-                        type="button"
-                        class="rounded-xl border border-gray-200 px-4 py-3 text-sm font-bold text-gray-400"
-                        @click="closeStockModal"
-                    >
-                        Cancelar
-                    </button>
-
-                    <button
-                        type="button"
-                        :disabled="
-                            stockProduct &&
-                            savingStockIds.includes(stockProduct.id)
-                        "
-                        class="rounded-xl bg-[#00B4D8] px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
-                        @click="saveExactStock"
-                    >
-                        Guardar
-                    </button>
-                </div>
-            </section>
-        </div>
-    </Teleport>
-
-    <!-- Formulario completo para crear o editar pedidos. -->
-    <Teleport to="body">
-        <div
-            v-if="showOrderEditor"
-            class="fixed inset-0 z-[140] flex items-end justify-center bg-black/50 sm:items-center sm:p-5"
-            @click.self="closeOrderEditor"
-        >
-            <section class="max-h-[94vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[760px] sm:rounded-[28px]">
-                <div class="sticky top-0 z-20 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
-                    <div>
-                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                            Gestión de pedidos
-                        </p>
-
-                        <h2 class="text-lg font-black text-gray-700">
-                            {{
-                                orderEditorMode === "add"
-                                    ? "Nuevo pedido"
-                                    : "Editar pedido"
-                            }}
-                        </h2>
-                    </div>
-
-                    <button
-                        type="button"
-                        class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
-                        @click="closeOrderEditor"
-                    >
-                        ×
-                    </button>
-                </div>
-
-                <form
-                    class="space-y-5 p-5 sm:p-7"
-                    @submit.prevent="saveOrder"
-                >
-                    <!-- Datos del cliente. -->
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <label>
-                            <span class="mb-1.5 block text-sm font-bold text-gray-600">
-                                Nombre del cliente
-                            </span>
-
-                            <input
-                                v-model="orderForm.customerName"
-                                required
-                                type="text"
-                                placeholder="Ejemplo: María López"
-                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                            >
-                        </label>
-
-                        <label>
-                            <span class="mb-1.5 block text-sm font-bold text-gray-600">
-                                Teléfono o WhatsApp
-                            </span>
-
-                            <input
-                                v-model="orderForm.customerPhone"
-                                type="tel"
-                                placeholder="7000 0000"
-                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                            >
-                        </label>
-                    </div>
-
-                    <label class="block">
-                        <span class="mb-1.5 block text-sm font-bold text-gray-600">
-                            Estado
-                        </span>
-
-                        <select
-                            v-model="orderForm.status"
-                            class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 outline-none focus:border-[#00B4D8]"
-                        >
-                            <option
-                                v-for="status in orderStatuses"
-                                :key="status.value"
-                                :value="status.value"
-                            >
-                                {{ status.label }}
-                            </option>
-                        </select>
-                    </label>
-
-                    <!-- Productos del pedido. -->
-                    <div>
-                        <div class="flex items-end justify-between gap-4">
-                            <div>
-                                <p class="text-sm font-bold text-gray-600">
-                                    Productos del pedido
-                                </p>
-
-                                <p class="mt-1 text-xs text-gray-400">
-                                    El precio se carga desde tu catálogo, pero puedes modificarlo.
-                                </p>
-                            </div>
-
-                            <button
-                                type="button"
-                                :disabled="!products.length"
-                                class="shrink-0 rounded-xl bg-[#CAF0F8] px-4 py-2.5 text-xs font-bold text-[#0077B6] disabled:opacity-50"
-                                @click="addOrderItem"
-                            >
-                                Añadir producto
-                            </button>
-                        </div>
-
-                        <div
-                            v-if="products.length"
-                            class="mt-4 space-y-3"
-                        >
-                            <article
-                                v-for="(item, index) in orderForm.items"
-                                :key="item.key"
-                                class="rounded-2xl bg-[#F8FBFC] p-4"
-                            >
-                                <div class="grid gap-3 sm:grid-cols-[1fr_100px_130px_38px] sm:items-end">
-                                    <label>
-                                        <span class="mb-1 block text-xs font-bold text-gray-500">
-                                            Producto
-                                        </span>
-
-                                        <select
-                                            v-model="item.productId"
-                                            required
-                                            class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#00B4D8]"
-                                            @change="selectOrderProduct(item)"
-                                        >
-                                            <option
-                                                disabled
-                                                value=""
-                                            >
-                                                Seleccionar producto
-                                            </option>
-
-                                            <option
-                                                v-for="product in products"
-                                                :key="product.id"
-                                                :value="product.id"
-                                            >
-                                                {{ product.name }} ·
-                                                {{ formatPrice(product.price) }}
-                                                · Stock {{ product.stock }}
-                                            </option>
-                                        </select>
-                                    </label>
-
-                                    <label>
-                                        <span class="mb-1 block text-xs font-bold text-gray-500">
-                                            Cantidad
-                                        </span>
-
-                                        <input
-                                            v-model.number="item.quantity"
-                                            required
-                                            min="1"
-                                            step="1"
-                                            type="number"
-                                            class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#00B4D8]"
-                                        >
-                                    </label>
-
-                                    <label>
-                                        <span class="mb-1 block text-xs font-bold text-gray-500">
-                                            Precio unitario
-                                        </span>
-
-                                        <input
-                                            v-model.number="item.unitPrice"
-                                            required
-                                            min="0"
-                                            step="0.01"
-                                            type="number"
-                                            class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#00B4D8]"
-                                        >
-                                    </label>
-
-                                    <button
-                                        type="button"
-                                        aria-label="Quitar producto"
-                                        class="flex h-[42px] w-[38px] items-center justify-center rounded-xl bg-red-50 text-xl font-bold text-red-500"
-                                        @click="removeOrderItem(index)"
-                                    >
-                                        ×
-                                    </button>
-                                </div>
-
-                                <div class="mt-3 flex items-center justify-between text-xs">
-                                    <span class="text-gray-400">
-                                        Subtotal
-                                    </span>
-
-                                    <span class="font-black text-gray-600">
-                                        {{
-                                            formatPrice(
-                                                item.quantity *
-                                                item.unitPrice
-                                            )
-                                        }}
-                                    </span>
-                                </div>
-                            </article>
-                        </div>
-
-                        <div
-                            v-else
-                            class="mt-4 rounded-2xl border border-dashed border-[#90E0EF] bg-[#F8FBFC] px-5 py-8 text-center"
-                        >
-                            <p class="font-bold text-gray-600">
-                                Primero registra un producto
-                            </p>
-
-                            <p class="mt-1 text-sm text-gray-400">
-                                Los pedidos utilizan productos de tu catálogo.
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Notas -->
-                    <label class="block">
-                        <span class="mb-1.5 block text-sm font-bold text-gray-600">
-                            Notas del pedido
-                        </span>
-
-                        <textarea
-                            v-model="orderForm.notes"
-                            rows="3"
-                            placeholder="Ejemplo: Entregar el sábado por la mañana."
-                            class="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                        ></textarea>
-                    </label>
-
-                    <!-- Total automático -->
-                    <div class="flex items-center justify-between rounded-2xl bg-[#EAF9FC] p-5">
-                        <div>
-                            <p class="text-xs font-bold uppercase tracking-[0.08em] text-[#0077B6]">
-                                Total del pedido
-                            </p>
-
-                            <p class="mt-1 text-xs text-gray-400">
-                                Calculado según precios y cantidades.
-                            </p>
-                        </div>
-
-                        <p class="text-2xl font-black text-black">
-                            {{ formatPrice(orderFormTotal) }}
-                        </p>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-2">
-                        <button
-                            type="button"
-                            class="rounded-xl border border-gray-200 px-4 py-3 text-sm font-bold text-gray-400"
-                            @click="closeOrderEditor"
-                        >
-                            Cancelar
-                        </button>
-
-                        <button
-                            type="submit"
-                            :disabled="
-                                orderSaving ||
-                                !products.length
-                            "
-                            class="rounded-xl bg-[#00B4D8] px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
-                        >
-                            {{
-                                orderSaving
-                                    ? "Guardando..."
-                                    : orderEditorMode === "add"
-                                        ? "Crear pedido"
-                                        : "Guardar cambios"
-                            }}
-                        </button>
-                    </div>
-                </form>
-            </section>
-        </div>
-    </Teleport>
 </div>
 </template>

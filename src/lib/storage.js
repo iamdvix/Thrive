@@ -1,106 +1,249 @@
-// Funciones de Storage usadas únicamente por el panel institucional.
 import { supabase } from "./supabaseClient";
 
-const bucketName = "thrive-images";
+// Nombre del bucket donde guardamos las imágenes de Thrive.
+const BUCKET_NAME = "thrive-images";
 
-function cleanFileName(name) {
-    return name
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-z0-9.]+/g, "-")
-        .replace(/^-+|-+$/g, "");
+// Obtiene la extensión original de una imagen.
+function getFileExtension(file) {
+    const parts = file.name.split(".");
+
+    if (parts.length < 2) {
+        return "jpg";
+    }
+
+    return parts.pop().toLowerCase();
 }
 
-function extensionFromFile(file) {
-    return file.name.split(".").pop()?.toLowerCase() || "jpg";
+// Genera un nombre único para cada imagen.
+function createUniqueFileName(file) {
+    const extension = getFileExtension(file);
+
+    const randomId =
+        typeof crypto !== "undefined" &&
+        crypto.randomUUID
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    return `${randomId}.${extension}`;
 }
 
-async function uploadFile(path, file) {
-    const { error } = await supabase.storage
-        .from(bucketName)
-        .upload(path, file, {
-            cacheControl: "3600",
-            upsert: false
-        });
+// Valida que el archivo sea una imagen y no supere 5 MB.
+function validateImage(file) {
+    if (!file) {
+        throw new Error(
+            "No se seleccionó ninguna imagen."
+        );
+    }
 
-    if (error) throw error;
+    if (!file.type.startsWith("image/")) {
+        throw new Error(
+            "El archivo seleccionado debe ser una imagen."
+        );
+    }
 
-    const { data } = supabase.storage
-        .from(bucketName)
-        .getPublicUrl(path);
+    const maxSize =
+        5 * 1024 * 1024;
+
+    if (file.size > maxSize) {
+        throw new Error(
+            "La imagen no puede superar los 5 MB."
+        );
+    }
+}
+
+// ===============================
+// FOTO DE PERFIL DEL CLIENTE
+// ===============================
+
+export async function uploadProfileImage(
+    userId,
+    file
+) {
+    validateImage(file);
+
+    const fileName =
+        createUniqueFileName(file);
+
+    const filePath =
+        `${userId}/profile/${fileName}`;
+
+    const { error } = await supabase
+        .storage
+        .from(BUCKET_NAME)
+        .upload(
+            filePath,
+            file,
+            {
+                cacheControl: "3600",
+                upsert: false
+            }
+        );
+
+    if (error) {
+        throw error;
+    }
+
+    const { data } = supabase
+        .storage
+        .from(BUCKET_NAME)
+        .getPublicUrl(filePath);
 
     return {
-        path,
+        path: filePath,
         publicUrl: data.publicUrl
     };
 }
 
-export function getInstitutionStoragePath(publicUrl) {
-    if (!publicUrl) return "";
+// ===============================
+// FOTO DEL EMPRENDIMIENTO
+// ===============================
 
-    const marker =
-        `/storage/v1/object/public/${bucketName}/`;
-
-    const index = publicUrl.indexOf(marker);
-
-    if (index === -1) return "";
-
-    return decodeURIComponent(
-        publicUrl.slice(index + marker.length)
-    );
-}
-
-export async function uploadInstitutionLogo(userId, file) {
-    const fileName =
-        `${Date.now()}-${crypto.randomUUID()}.${extensionFromFile(file)}`;
-
-    const path =
-        `${userId}/institutions/logo/${fileName}`;
-
-    return uploadFile(path, file);
-}
-
-export async function uploadInstitutionPostImages(
+export async function uploadEntrepreneurLogo(
     userId,
-    postId,
-    files
+    file
 ) {
-    const uploaded = [];
+    validateImage(file);
 
-    for (
-        let index = 0;
-        index < files.length;
-        index += 1
-    ) {
-        const file = files[index];
-        const name =
-            cleanFileName(
-                file.name.replace(/\.[^.]+$/, "")
-            ) || "imagen";
+    const fileName =
+        createUniqueFileName(file);
 
-        const fileName =
-            `${Date.now()}-${index}-${name}-${crypto.randomUUID()}.${extensionFromFile(file)}`;
+    const filePath =
+        `${userId}/entrepreneur/${fileName}`;
 
-        const path =
-            `${userId}/institutions/posts/${postId}/${fileName}`;
-
-        uploaded.push(
-            await uploadFile(path, file)
+    const { error } = await supabase
+        .storage
+        .from(BUCKET_NAME)
+        .upload(
+            filePath,
+            file,
+            {
+                cacheControl: "3600",
+                upsert: false
+            }
         );
+
+    if (error) {
+        throw error;
     }
 
-    return uploaded;
+    const { data } = supabase
+        .storage
+        .from(BUCKET_NAME)
+        .getPublicUrl(filePath);
+
+    return {
+        path: filePath,
+        publicUrl: data.publicUrl
+    };
 }
 
-export async function deleteInstitutionImages(paths) {
-    const validPaths = paths.filter(Boolean);
+// ===============================
+// IMÁGENES DE PRODUCTOS
+// ===============================
 
-    if (!validPaths.length) return;
+export async function uploadProductImages(
+    userId,
+    productId,
+    files
+) {
+    const uploadedImages = [];
 
-    const { error } = await supabase.storage
-        .from(bucketName)
-        .remove(validPaths);
+    /*
+        Recorremos todas las imágenes seleccionadas
+        y las subimos una por una.
+    */
+    for (const file of files) {
+        validateImage(file);
 
-    if (error) throw error;
+        const fileName =
+            createUniqueFileName(file);
+
+        const filePath =
+            `${userId}/products/${productId}/${fileName}`;
+
+        const { error } = await supabase
+            .storage
+            .from(BUCKET_NAME)
+            .upload(
+                filePath,
+                file,
+                {
+                    cacheControl: "3600",
+                    upsert: false
+                }
+            );
+
+        if (error) {
+            throw error;
+        }
+
+        /*
+            Como nuestro bucket es público,
+            obtenemos la URL que utilizaremos
+            para mostrar la fotografía.
+        */
+        const { data } = supabase
+            .storage
+            .from(BUCKET_NAME)
+            .getPublicUrl(filePath);
+
+        uploadedImages.push({
+            path: filePath,
+            publicUrl: data.publicUrl
+        });
+    }
+
+    return uploadedImages;
+}
+
+// ===============================
+// ELIMINAR UNA IMAGEN
+// ===============================
+
+export async function deleteImage(
+    filePath
+) {
+    if (!filePath) {
+        return;
+    }
+
+    const { error } = await supabase
+        .storage
+        .from(BUCKET_NAME)
+        .remove([
+            filePath
+        ]);
+
+    if (error) {
+        throw error;
+    }
+}
+// Obtiene la ruta interna de Storage utilizando una URL pública.
+// Esto nos permite eliminar una fotografía antigua aunque
+// solamente tengamos guardada su URL en la base de datos.
+export function getStoragePathFromPublicUrl(publicUrl) {
+    if (!publicUrl) {
+        return null;
+    }
+
+    const marker =
+        `/storage/v1/object/public/${BUCKET_NAME}/`;
+
+    const markerIndex =
+        publicUrl.indexOf(marker);
+
+    if (markerIndex === -1) {
+        return null;
+    }
+
+    const encodedPath =
+        publicUrl.slice(
+            markerIndex + marker.length
+        );
+
+    try {
+        return decodeURIComponent(encodedPath);
+    } catch {
+        return encodedPath;
+    }
 }

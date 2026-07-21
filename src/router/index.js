@@ -3,7 +3,7 @@ import {
     createRouter,
     createWebHashHistory
 } from "vue-router";
-import { supabase } from "../lib/supabaseClient.js";
+import { supabase } from "../lib/supabaseClient";
 
 import Home from "../views/Home.vue";
 import Auth from "../views/Auth.vue";
