@@ -175,15 +175,11 @@ async function loadEntrepreneurs() {
         });
 }
 
-// Carga únicamente los seguimientos creados por esta institución.
+// Carga los seguimientos reales desde Supabase.
 async function loadFollows() {
-    const { data, error } = await supabase
-        .from("institution_follows")
-        .select("entrepreneur_id")
-        .eq(
-            "institution_id",
-            props.institution.id
-        );
+    const { data, error } = await supabase.rpc(
+        "get_my_institution_follows"
+    );
 
     if (error) {
         throw error;
@@ -195,7 +191,7 @@ async function loadFollows() {
         });
 }
 
-// Sigue o deja de seguir un emprendimiento.
+// Sigue o deja de seguir usando una sola función segura en Supabase.
 async function toggleFollow(entrepreneurId) {
     if (
         !entrepreneurId ||
@@ -209,56 +205,43 @@ async function toggleFollow(entrepreneurId) {
     );
 
     try {
-        if (isFollowing(entrepreneurId)) {
-            const { error } = await supabase
-                .from("institution_follows")
-                .delete()
-                .eq(
-                    "institution_id",
-                    props.institution.id
-                )
-                .eq(
-                    "entrepreneur_id",
+        const { data, error } = await supabase.rpc(
+            "toggle_institution_follow",
+            {
+                target_entrepreneur_id:
                     entrepreneurId
-                );
-
-            if (error) {
-                throw error;
             }
-
-            followedEntrepreneurs.value =
-                followedEntrepreneurs.value
-                    .filter(function (id) {
-                        return (
-                            id !==
-                            entrepreneurId
-                        );
-                    });
-
-            return;
-        }
-
-        const { error } = await supabase
-            .from("institution_follows")
-            .insert({
-                institution_id:
-                    props.institution.id,
-                entrepreneur_id:
-                    entrepreneurId
-            });
+        );
 
         if (error) {
-            if (error.code === "23505") {
-                await loadFollows();
-                return;
-            }
-
             throw error;
         }
 
-        followedEntrepreneurs.value.push(
-            entrepreneurId
-        );
+        // Actualizamos inmediatamente el botón.
+        if (data === true) {
+            if (
+                !followedEntrepreneurs.value.includes(
+                    entrepreneurId
+                )
+            ) {
+                followedEntrepreneurs.value.push(
+                    entrepreneurId
+                );
+            }
+        } else {
+            followedEntrepreneurs.value =
+                followedEntrepreneurs.value.filter(
+                    function (id) {
+                        return id !== entrepreneurId;
+                    }
+                );
+        }
+
+        /*
+            Volvemos a leer desde Supabase para que la lista "Seguidos"
+            siempre refleje el estado real de la base de datos.
+        */
+        await loadFollows();
     } catch (error) {
         console.error(
             "Error al actualizar seguimiento institucional:",
@@ -266,16 +249,14 @@ async function toggleFollow(entrepreneurId) {
         );
 
         alert(
-            "No fue posible actualizar el seguimiento."
+            "No fue posible actualizar el seguimiento: " +
+            (error.message || "Error inesperado")
         );
     } finally {
         followLoading.value =
             followLoading.value.filter(
                 function (id) {
-                    return (
-                        id !==
-                        entrepreneurId
-                    );
+                    return id !== entrepreneurId;
                 }
             );
     }

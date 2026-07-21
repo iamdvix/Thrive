@@ -2,7 +2,7 @@
 // Vista principal de la institución; mantiene la misma navegación del dashboard del emprendedor.
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
-import { supabase } from "../lib/supabaseClient";
+import { supabase } from "../lib/supabaseClient.js";
 import InicioInstitucion from "../components/institucion/InicioInstitucion.vue";
 import PublicacionesInstitucion from "../components/institucion/PublicacionesInstitucion.vue";
 import EmprendedoresInstitucion from "../components/institucion/EmprendedoresInstitucion.vue";

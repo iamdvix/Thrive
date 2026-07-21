@@ -1268,7 +1268,7 @@ onBeforeUnmount(function () {
                 <div class="mt-3 grid grid-cols-3 gap-2">
                     <button
                         type="button"
-                        class="rounded-xl border border-[#00B4D8] px-2 py-2 text-[9px] font-black text-[#0077B6] sm:text-[10px]"
+                        class="rounded-xl border border-[#00B4D8] px-2 py-2 text-[10px] font-black text-[#0077B6] sm:text-[10px]"
                         @click="openPreview(post)"
                     >
                         Vista
