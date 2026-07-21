@@ -261,7 +261,7 @@ function contactByWhatsApp() {
                         <button
                             type="button"
                             aria-label="Imagen anterior"
-                            class="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl font-black text-[#0077B6] shadow-md backdrop-blur"
+                            class="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl text-gray-600 shadow"
                             @click="previousImage"
                         >
                             ‹
@@ -270,7 +270,7 @@ function contactByWhatsApp() {
                         <button
                             type="button"
                             aria-label="Imagen siguiente"
-                            class="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl font-black text-[#0077B6] shadow-md backdrop-blur"
+                            class="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl text-gray-600 shadow"
                             @click="nextImage"
                         >
                             ›
@@ -284,14 +284,14 @@ function contactByWhatsApp() {
 
                 <div
                     v-if="images.length > 1"
-                    class="mt-3 flex gap-2 overflow-x-auto pb-1"
+                    class="mt-3 flex gap-2 overflow-x-auto"
                 >
                     <button
                         v-for="(image, index) in images"
                         :key="image.id"
                         type="button"
-                        class="h-16 w-16 shrink-0 overflow-hidden rounded-xl border-2 bg-white transition"
-                        :class="currentImageIndex === index ? 'border-[#00B4D8]' : 'border-transparent opacity-70'"
+                        class="h-16 w-16 shrink-0 overflow-hidden rounded-xl border-2"
+                        :class="currentImageIndex === index ? 'border-[#00B4D8]' : 'border-transparent'"
                         @click="selectImage(index)"
                     >
                         <img
@@ -421,19 +421,19 @@ function contactByWhatsApp() {
                 <!-- Acciones disponibles para el emprendedor. -->
                 <div
                     v-if="showContactButton || post.externalUrl"
-                    class="mt-7 grid gap-3 sm:grid-cols-2"
+                    class="mx-auto mt-7 flex max-w-[680px] flex-col gap-3 sm:flex-row sm:items-stretch sm:justify-center"
                 >
                     <button
                         v-if="showContactButton"
                         type="button"
-                        class="flex items-center justify-center gap-2 rounded-xl bg-[#25D366] px-5 py-3.5 text-sm font-black text-white shadow-sm transition hover:brightness-95"
+                        class="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-5 py-3.5 text-sm font-black text-white shadow-sm transition hover:bg-[#20BD5A] sm:flex-1"
                         @click="contactByWhatsApp"
                     >
                         <svg class="h-5 w-5" viewBox="0 0 32 32" fill="currentColor">
                             <path d="M19.11 17.34c-.26-.13-1.53-.76-1.77-.84-.24-.09-.41-.13-.59.13-.17.26-.67.84-.82 1.01-.15.17-.3.2-.56.07-.26-.13-1.08-.4-2.06-1.28-.76-.68-1.28-1.52-1.43-1.78-.15-.26-.02-.4.11-.53.12-.12.26-.3.39-.45.13-.15.17-.26.26-.43.09-.17.04-.33-.02-.46-.07-.13-.59-1.42-.8-1.94-.21-.51-.43-.44-.59-.45h-.5c-.17 0-.46.07-.69.33-.24.26-.91.89-.91 2.17s.93 2.51 1.06 2.68c.13.17 1.83 2.79 4.43 3.91.62.27 1.1.43 1.48.55.62.2 1.18.17 1.63.1.5-.07 1.53-.63 1.75-1.23.22-.61.22-1.13.15-1.23-.06-.11-.24-.17-.5-.3z"></path>
                             <path d="M16.02 3.2A12.7 12.7 0 005.16 22.48L3.2 28.8l6.49-1.91a12.7 12.7 0 106.33-23.69zm0 22.89a10.2 10.2 0 01-5.2-1.42l-.37-.22-3.85 1.13 1.16-3.75-.24-.39a10.2 10.2 0 118.5 4.65z"></path>
                         </svg>
-                        Comunicarme para asistir
+                        Consultar por WhatsApp
                     </button>
 
                     <a
@@ -441,7 +441,7 @@ function contactByWhatsApp() {
                         :href="post.externalUrl"
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="flex items-center justify-center rounded-xl border border-[#00B4D8] px-5 py-3.5 text-sm font-black text-[#0077B6] transition hover:bg-[#CAF0F8]"
+                        class="flex w-full items-center justify-center rounded-xl border border-[#00B4D8] px-5 py-3.5 text-sm font-black text-[#0077B6] transition hover:bg-[#CAF0F8] sm:flex-1"
                     >
                         Abrir enlace de inscripción
                     </a>

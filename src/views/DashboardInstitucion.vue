@@ -293,6 +293,7 @@ onBeforeUnmount(function () {
 
         <EmprendedoresInstitucion
             v-else-if="activeSection === 'emprendedores'"
+            :institution="institution"
         />
 
         <PerfilInstitucion

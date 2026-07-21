@@ -276,14 +276,6 @@ onMounted(loadSummary);
             <div class="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
                 <button
                     type="button"
-                    class="w-full rounded-xl border border-[#00B4D8] px-5 py-3 text-sm font-bold text-[#0077B6] transition hover:bg-[#CAF0F8] lg:w-auto"
-                    @click="emit('change-section', 'perfil')"
-                >
-                    Editar perfil
-                </button>
-
-                <button
-                    type="button"
                     class="w-full rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#009CC0] lg:w-auto"
                     @click="emit('change-section', 'publicaciones')"
                 >
