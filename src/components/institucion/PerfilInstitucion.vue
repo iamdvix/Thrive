@@ -2,7 +2,13 @@
 // Perfil público del emprendimiento; muestra información, productos, seguidores y contacto.
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { supabase } from "../lib/supabaseClient";
+import { supabase } from "../../lib/supabaseClient";
+
+import {
+    uploadInstitutionLogo,
+    deleteInstitutionImages,
+    getInstitutionStoragePath
+} from "../../lib/institutionStorage";
 
 const route = useRoute();
 const router = useRouter();
