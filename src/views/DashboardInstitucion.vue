@@ -1,75 +1,84 @@
 <script setup>
-// Panel principal de instituciones; administra perfil, publicaciones e información de emprendedores.
-import {
-    ref,
-    computed,
-    onMounted,
-    onBeforeUnmount
-} from "vue";
+// Panel principal del emprendedor; centraliza perfil, productos, seguidores y vistas de administración.
+import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
-import { supabase } from "../lib/supabaseClient";
-
+import { supabase } from "../lib/supabaseClient.js";
+import {
+    uploadEntrepreneurLogo,
+    uploadProductImages,
+    deleteImage
+} from "../lib/storage.js";
+import NovedadesEmprendedor from "../components/emprendedor/NovedadesEmprendedor.vue";
 const router = useRouter();
-const bucketName = "thrive-images";
-
-// Estados generales.
-const institution = ref(null);
-const posts = ref([]);
-const entrepreneurs = ref([]);
+// Estados principales utilizados por el dashboard.
+const entrepreneur = ref(null);
+const products = ref([]);
 const loading = ref(true);
 const loadError = ref("");
-const activeSection = ref("inicio");
-const logoutLoading = ref(false);
-
-// Ventanas del panel.
-const showProfileEditor = ref(false);
-const showPostEditor = ref(false);
-const showPostPreview = ref(false);
-
-// Perfil institucional.
 const profileSaving = ref(false);
-const profileLogoFile = ref(null);
-const profileLogoPreview = ref("");
+const productSaving = ref(false);
+const logoutLoading = ref(false);
+// Controla la sección visible del dashboard.
+const activeSection = ref("inicio");
+// Control de ventanas.
+const showProfileEditor = ref(false);
+const showProductEditor = ref(false);
+const showFollowersModal = ref(false);
+// Datos y controles relacionados con los seguidores.
+// Guarda la cantidad total y los datos públicos de quienes siguen al emprendimiento.
+const followerCount = ref(0);
+const followers = ref([]);
+const followersLoading = ref(false);
+// Datos y controles utilizados para editar el perfil del emprendimiento.
 const profileForm = ref({
-    institutionName: "",
+    businessName: "",
     phone: "",
-    website: "",
     description: "",
     department: "",
     district: ""
 });
-
-// Cambio opcional de contraseña.
+const profileLogoFile = ref(null);
+const profileLogoPreview = ref("");
+// Campos utilizados cuando el emprendedor desea cambiar su contraseña.
 const currentPassword = ref("");
 const newPassword = ref("");
 const confirmNewPassword = ref("");
 const showCurrentPassword = ref(false);
 const showNewPassword = ref(false);
 const showConfirmPassword = ref(false);
-
-// Publicaciones.
-const postSaving = ref(false);
-const postEditorMode = ref("add");
-const selectedPost = ref(null);
-const postForm = ref({
-    title: "",
+// Datos y controles utilizados para mostrar los productos.
+const productEditorMode = ref("add");
+const selectedProduct = ref(null);
+const productForm = ref({
+    name: "",
     description: "",
-    postType: "noticia",
-    location: "",
-    externalUrl: "",
-    eventDate: "",
-    eventEndDate: "",
-    deadline: "",
-    status: "draft"
+    categories: [],
+    price: 0,
+    stock: 0
 });
-
-// Las imágenes nuevas y existentes se mantienen juntas para poder ordenarlas.
+// Aquí mantenemos juntas las imágenes actuales y las nuevas.
+// Esto permite cambiar el orden y elegir fácilmente la portada.
 const editorImages = ref([]);
-const originalPostImages = ref([]);
-
-// Búsqueda de emprendedores.
-const entrepreneurSearch = ref("");
-
+// Conserva las imágenes originales para saber cuáles
+// fueron eliminadas durante una edición.
+const originalProductImages = ref([]);
+const showCategoryDropdown = ref(false);
+// 12 categorías principales utilizadas dentro de Thrive.
+const productCategories = [
+    "Alimentos y bebidas",
+    "Repostería y dulces",
+    "Artesanías",
+    "Moda y ropa",
+    "Accesorios y joyería",
+    "Belleza y cuidado personal",
+    "Hogar y decoración",
+    "Arte y diseño",
+    "Papelería y personalizados",
+    "Tecnología y accesorios",
+    "Plantas y jardinería",
+    "Productos para mascotas"
+];
+// Datos generales y listas utilizadas en esta pantalla.
 const departments = [
     "Ahuachapán",
     "Cabañas",
@@ -86,39 +95,9 @@ const departments = [
     "Sonsonate",
     "Usulután"
 ];
-
-const postTypes = [
-    {
-        value: "noticia",
-        label: "Noticia"
-    },
-    {
-        value: "taller",
-        label: "Taller"
-    },
-    {
-        value: "evento",
-        label: "Evento"
-    },
-    {
-        value: "convocatoria",
-        label: "Convocatoria"
-    },
-    {
-        value: "oportunidad",
-        label: "Oportunidad"
-    },
-    {
-        value: "anuncio",
-        label: "Anuncio"
-    }
-];
-
-const institutionInitials = computed(function () {
-    const name =
-        institution.value?.institutionName ||
-        "Institución";
-
+// Valores calculados automáticamente a partir del estado actual.
+const entrepreneurInitials = computed(function () {
+    const name = entrepreneur.value?.businessName || "Thrive";
     return name
         .trim()
         .split(/\s+/)
@@ -128,657 +107,395 @@ const institutionInitials = computed(function () {
         })
         .join("");
 });
-
-const publishedCount = computed(function () {
-    return posts.value.filter(function (post) {
-        return post.status === "published";
-    }).length;
+const productCountText = computed(function () {
+    const total = products.value.length;
+    return total === 1 ? "1 producto" : `${total} productos`;
 });
-
-const draftCount = computed(function () {
-    return posts.value.filter(function (post) {
-        return post.status === "draft";
-    }).length;
+const productEditorTitle = computed(function () {
+    return productEditorMode.value === "add"
+        ? "Añadir producto"
+        : "Editar producto";
 });
-
-const upcomingCount = computed(function () {
-    const now = Date.now();
-
-    return posts.value.filter(function (post) {
-        if (
-            post.status !== "published" ||
-            !post.eventDate
-        ) {
-            return false;
-        }
-
-        return new Date(post.eventDate).getTime() >= now;
-    }).length;
+const followerCountText = computed(function () {
+    return followerCount.value === 1
+        ? "1 seguidor"
+        : `${followerCount.value} seguidores`;
 });
-
-const filteredEntrepreneurs = computed(function () {
-    const search =
-        entrepreneurSearch.value
-            .trim()
-            .toLowerCase();
-
-    if (!search) {
-        return entrepreneurs.value;
+// Funciones pequeñas reutilizadas en distintas partes de la vista.
+function formatPrice(price) {
+    return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD"
+    }).format(Number(price) || 0);
+}
+// Devuelve las clases visuales correspondientes al nivel de existencias.
+function stockClasses(stock) {
+    const amount = Number(stock) || 0;
+    if (amount > 10) {
+        return "bg-green-100 text-green-700";
+    }
+    if (amount >= 5) {
+        return "bg-yellow-100 text-yellow-700";
+    }
+    return "bg-red-100 text-red-700";
+}
+// Devuelve el texto que describe el estado actual del inventario.
+function stockText(stock) {
+    const amount = Number(stock) || 0;
+    if (amount === 0) return "Sin stock";
+    if (amount === 1) return "1 unidad";
+    return `${amount} unidades`;
+}
+// Cambia la sección visible o abre las herramientas que tienen su propia página.
+function changeSection(section) {
+    // Inventario tiene su propia vista para gestionar stock y pedidos.
+    if (section === "inventario") {
+        router.push({ name: "Inventario" });
+        return;
     }
 
-    return entrepreneurs.value.filter(function (item) {
-        const searchable = [
-            item.businessName,
-            item.department,
-            item.district,
-            item.description
-        ]
-            .join(" ")
-            .toLowerCase();
+    // La calculadora también funciona como una vista independiente.
+    if (section === "calculadora") {
+        router.push({ name: "Calculadora" });
+        return;
+    }
 
-        return searchable.includes(search);
-    });
-});
-
-const postEditorTitle = computed(function () {
-    return postEditorMode.value === "add"
-        ? "Crear publicación"
-        : "Editar publicación";
-});
-
-function changeSection(section) {
     activeSection.value = section;
-
     window.scrollTo({
         top: 0,
         behavior: "smooth"
     });
 }
-
-function formatDate(date) {
-    if (!date) return "Sin fecha";
-
-    return new Intl.DateTimeFormat(
-        "es-SV",
-        {
-            day: "numeric",
-            month: "short",
-            year: "numeric"
-        }
-    ).format(new Date(date));
-}
-
-function formatDateTime(date) {
-    if (!date) return "Sin fecha";
-
-    return new Intl.DateTimeFormat(
-        "es-SV",
-        {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-            hour: "numeric",
-            minute: "2-digit"
-        }
-    ).format(new Date(date));
-}
-
-function postTypeLabel(type) {
-    return (
-        postTypes.find(function (item) {
-            return item.value === type;
-        })?.label || "Publicación"
-    );
-}
-
-function statusLabel(status) {
-    if (status === "published") {
-        return "Publicado";
-    }
-
-    if (status === "archived") {
-        return "Archivado";
-    }
-
-    return "Borrador";
-}
-
-function statusClasses(status) {
-    if (status === "published") {
-        return "bg-green-100 text-green-700";
-    }
-
-    if (status === "archived") {
-        return "bg-gray-100 text-gray-600";
-    }
-
-    return "bg-amber-100 text-amber-700";
-}
-
-function toInputDateTime(date) {
-    if (!date) return "";
-
-    const value = new Date(date);
-    const offset =
-        value.getTimezoneOffset() * 60000;
-
-    return new Date(
-        value.getTime() - offset
-    )
-        .toISOString()
-        .slice(0, 16);
-}
-
-function toIsoDateTime(value) {
-    if (!value) return null;
-
-    return new Date(value).toISOString();
-}
-
-function cleanFileName(name) {
-    return name
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-z0-9.]+/g, "-")
-        .replace(/^-+|-+$/g, "");
-}
-
-function getStoragePathFromPublicUrl(url) {
-    if (!url) return "";
-
-    const marker =
-        `/storage/v1/object/public/${bucketName}/`;
-
-    const index = url.indexOf(marker);
-
-    if (index === -1) {
-        return "";
-    }
-
-    return decodeURIComponent(
-        url.slice(index + marker.length)
-    );
-}
-
-function createPreview(file) {
-    return URL.createObjectURL(file);
-}
-
-function revokePreview(image) {
-    if (
-        image?.kind === "new" &&
-        image.previewUrl
-    ) {
-        URL.revokeObjectURL(
-            image.previewUrl
-        );
-    }
-}
-
-async function uploadFile(path, file) {
-    const { error } = await supabase.storage
-        .from(bucketName)
-        .upload(path, file, {
-            cacheControl: "3600",
-            upsert: false
-        });
-
-    if (error) {
-        throw error;
-    }
-
-    const { data } = supabase.storage
-        .from(bucketName)
-        .getPublicUrl(path);
-
-    return {
-        path,
-        publicUrl:
-            data.publicUrl
-    };
-}
-
-async function deleteStorageFiles(paths) {
-    const validPaths =
-        paths.filter(Boolean);
-
-    if (!validPaths.length) {
-        return;
-    }
-
-    const { error } = await supabase.storage
-        .from(bucketName)
-        .remove(validPaths);
-
-    if (error) {
-        throw error;
-    }
-}
-
-async function uploadInstitutionLogo(userId, file) {
-    const extension =
-        file.name.split(".").pop() || "jpg";
-
-    const fileName =
-        `${Date.now()}-${crypto.randomUUID()}.${extension}`;
-
-    const path =
-        `${userId}/institutions/logo/${fileName}`;
-
-    return uploadFile(path, file);
-}
-
-async function uploadPostImages(
-    userId,
-    postId,
-    images
-) {
-    const uploaded = [];
-
-    for (
-        let index = 0;
-        index < images.length;
-        index += 1
-    ) {
-        const image = images[index];
-        const extension =
-            image.file.name.split(".").pop() ||
-            "jpg";
-
-        const baseName =
-            cleanFileName(
-                image.file.name.replace(
-                    /\.[^.]+$/,
-                    ""
-                )
-            ) || "imagen";
-
-        const fileName =
-            `${Date.now()}-${index}-${baseName}-${crypto.randomUUID()}.${extension}`;
-
-        const path =
-            `${userId}/institutions/posts/${postId}/${fileName}`;
-
-        const result =
-            await uploadFile(
-                path,
-                image.file
-            );
-
-        uploaded.push({
-            ...result,
-            sortOrder: index
-        });
-    }
-
-    return uploaded;
-}
-
+// Cierra la sesión actual y vuelve a la pantalla de autenticación.
 async function logout() {
     if (logoutLoading.value) return;
-
     logoutLoading.value = true;
-
     try {
-        const { error } =
-            await supabase.auth.signOut({
-                scope: "local"
-            });
-
+        const { error } = await supabase.auth.signOut({
+            scope: "local"
+        });
         if (error) {
             throw error;
         }
-
-        closeProfileEditor();
-        closePostEditor();
-        closePostPreview();
+        // Cerramos cualquier ventana antes de cambiar de pantalla.
+        showProfileEditor.value = false;
+        showProductEditor.value = false;
+        showFollowersModal.value = false;
+        document.body.style.overflow = "";
         router.replace("/auth");
     } catch (error) {
-        console.error(
-            "Error al cerrar sesión:",
-            error
-        );
-
-        alert(
-            "No fue posible cerrar la sesión."
-        );
+        console.error("Error al cerrar sesión:", error);
+        alert("No fue posible cerrar la sesión. Intenta nuevamente.");
     } finally {
         logoutLoading.value = false;
     }
 }
-
+// Carga la información necesaria para mostrar el dashboard.
 async function loadDashboard() {
     loading.value = true;
     loadError.value = "";
-
     try {
         const {
             data: { user },
             error: userError
         } = await supabase.auth.getUser();
-
         if (userError || !user) {
             loadError.value =
-                "No se encontró una sesión activa.";
+                "No se encontró una sesión activa. Inicia sesión nuevamente.";
             return;
         }
-
-        const {
-            data: profile,
-            error: profileError
-        } = await supabase
-            .from("profiles")
-            .select(`
-                full_name,
-                phone,
-                user_type
-            `)
-            .eq("id", user.id)
-            .single();
-
-        if (
-            profileError ||
-            profile?.user_type !== "institucion"
-        ) {
+        // Primero cargamos la información del emprendimiento.
+        const { data: entrepreneurData, error: entrepreneurError } =
+            await supabase
+                .from("entrepreneurs")
+                .select(`
+                    id,
+                    business_name,
+                    description,
+                    department,
+                    district,
+                    logo_url
+                `)
+                .eq("id", user.id)
+                .single();
+        if (entrepreneurError || !entrepreneurData) {
             console.error(
-                "Perfil institucional no válido:",
-                profileError
+                "Error al cargar el emprendimiento:",
+                entrepreneurError
             );
-
             loadError.value =
-                "Esta cuenta no tiene acceso al panel institucional.";
+                "No fue posible cargar la información del emprendimiento.";
             return;
         }
+        // El teléfono pertenece al perfil general de la cuenta.
+        const { data: accountData, error: accountError } =
+            await supabase
+                .from("profiles")
+                .select("phone")
+                .eq("id", user.id)
+                .single();
 
-        const {
-            data: institutionData,
-            error: institutionError
-        } = await supabase
-            .from("institutions")
-            .select(`
-                id,
-                institution_name,
-                description,
-                website,
-                department,
-                district,
-                logo_url,
-                active,
-                created_at
-            `)
-            .eq("id", user.id)
-            .single();
-
-        if (
-            institutionError ||
-            !institutionData
-        ) {
-            console.error(
-                "Error al cargar la institución:",
-                institutionError
+        if (accountError) {
+            console.warn(
+                "No se pudo cargar el teléfono del perfil:",
+                accountError
             );
-
-            loadError.value =
-                "No fue posible cargar el perfil de la institución.";
-            return;
         }
 
-        institution.value = {
-            id:
-                institutionData.id,
-            institutionName:
-                institutionData.institution_name,
-            phone:
-                profile.phone || "",
-            email:
-                user.email || "",
-            description:
-                institutionData.description || "",
-            website:
-                institutionData.website || "",
-            department:
-                institutionData.department || "",
-            district:
-                institutionData.district || "",
-            logoUrl:
-                institutionData.logo_url || "",
-            active:
-                institutionData.active
+        entrepreneur.value = {
+            id: entrepreneurData.id,
+            businessName: entrepreneurData.business_name,
+            phone: accountData?.phone || "",
+            email: user.email || "",
+            description: entrepreneurData.description,
+            department: entrepreneurData.department,
+            district: entrepreneurData.district,
+            avatar: entrepreneurData.logo_url
         };
-
+        // Cargamos productos y seguidores reales desde Supabase.
         await Promise.all([
-            loadPosts(user.id),
-            loadEntrepreneurs()
+            loadProducts(user.id),
+            loadFollowers()
         ]);
     } catch (error) {
-        console.error(
-            "Error al cargar el dashboard institucional:",
-            error
-        );
-
+        console.error("Error al cargar el dashboard:", error);
         loadError.value =
-            "Ocurrió un problema inesperado al cargar el panel.";
+            "Ocurrió un problema inesperado al cargar el dashboard.";
     } finally {
         loading.value = false;
     }
 }
+// Obtiene el promedio de reseñas de los productos del emprendedor.
+async function loadReviewSummary(productIds) {
+    if (!productIds.length) return {};
+    const { data, error } = await supabase
+        .from("product_reviews")
+        .select("product_id, rating")
+        .in("product_id", productIds);
+    if (error) {
+        console.error("No se pudieron cargar las reseñas:", error);
+        return {};
+    }
+    const summary = {};
+    for (const review of data || []) {
+        if (!summary[review.product_id]) {
+            summary[review.product_id] = {
+                total: 0,
+                count: 0
+            };
+        }
+        summary[review.product_id].total += Number(review.rating) || 0;
+        summary[review.product_id].count += 1;
+    }
+    return summary;
+}
 
-async function loadPosts(userId) {
-    const {
-        data: postRows,
-        error: postError
-    } = await supabase
-        .from("institution_posts")
+// Carga todos los productos pertenecientes al emprendedor.
+async function loadProducts(userId) {
+    const { data: productRows, error: productError } = await supabase
+        .from("products")
         .select(`
             id,
-            institution_id,
-            title,
+            entrepreneur_id,
+            name,
             description,
-            post_type,
-            location,
-            external_url,
-            event_date,
-            event_end_date,
-            deadline,
-            status,
-            published_at,
+            categories,
+            price,
+            stock,
+            featured,
+            active,
             created_at,
             updated_at
         `)
-        .eq("institution_id", userId)
+        .eq("entrepreneur_id", userId)
         .order("created_at", {
             ascending: false
         });
 
-    if (postError) {
-        throw postError;
+    if (productError) {
+        console.error("Error al cargar los productos:", productError);
+        throw productError;
     }
 
-    if (!postRows?.length) {
-        posts.value = [];
+    if (!productRows?.length) {
+        products.value = [];
         return;
     }
 
-    const postIds =
-        postRows.map(function (post) {
-            return post.id;
-        });
+    const productIds = productRows.map(function (product) {
+        return product.id;
+    });
 
-    const {
-        data: imageRows,
-        error: imageError
-    } = await supabase
-        .from("institution_post_images")
-        .select(`
-            id,
-            post_id,
-            image_url,
-            storage_path,
-            sort_order
-        `)
-        .in("post_id", postIds)
-        .order("sort_order", {
-            ascending: true
-        });
+    const [
+        { data: imageRows, error: imageError },
+        reviewSummary
+    ] = await Promise.all([
+        supabase
+            .from("product_images")
+            .select(`
+                id,
+                product_id,
+                image_url,
+                storage_path,
+                sort_order
+            `)
+            .in("product_id", productIds)
+            .order("sort_order", {
+                ascending: true
+            }),
+        loadReviewSummary(productIds)
+    ]);
 
     if (imageError) {
+        console.error("Error al cargar imágenes:", imageError);
         throw imageError;
     }
 
-    posts.value =
-        postRows.map(function (post) {
-            const imageRecords =
-                (imageRows || [])
-                    .filter(function (image) {
-                        return (
-                            image.post_id ===
-                            post.id
-                        );
-                    })
-                    .sort(function (a, b) {
-                        return (
-                            a.sort_order -
-                            b.sort_order
-                        );
-                    })
-                    .map(function (image) {
-                        return {
-                            id: image.id,
-                            imageUrl:
-                                image.image_url,
-                            storagePath:
-                                image.storage_path,
-                            sortOrder:
-                                image.sort_order
-                        };
-                    });
+    products.value = productRows.map(function (product) {
+        const productImages = (imageRows || [])
+            .filter(function (image) {
+                return image.product_id === product.id;
+            })
+            .sort(function (a, b) {
+                return a.sort_order - b.sort_order;
+            })
+            .map(function (image) {
+                return {
+                    id: image.id,
+                    imageUrl: image.image_url,
+                    storagePath: image.storage_path,
+                    sortOrder: image.sort_order
+                };
+            });
 
+        const reviews = reviewSummary[product.id];
+
+        return {
+            id: product.id,
+            entrepreneurId: product.entrepreneur_id,
+            name: product.name,
+            description: product.description || "",
+            categories: product.categories || [],
+            price: Number(product.price) || 0,
+            stock: Number(product.stock) || 0,
+            featured: product.featured,
+            active: product.active,
+            imageRecords: productImages,
+            images: productImages.map(function (image) {
+                return image.imageUrl;
+            }),
+            image: productImages[0]?.imageUrl || null,
+            averageRating:
+                reviews?.count
+                    ? reviews.total / reviews.count
+                    : 0,
+            reviewCount:
+                reviews?.count || 0,
+            createdAt: product.created_at
+        };
+    });
+}
+// Carga y prepara la lista de seguidores del emprendimiento.
+async function loadFollowers() {
+    followersLoading.value = true;
+    try {
+        /*
+            Esta función RPC devuelve solamente los seguidores
+            del emprendimiento que tiene la sesión iniciada.
+            Así evitamos abrir profiles públicamente y evitamos
+            políticas RLS que se consulten entre sí.
+        */
+        const { data, error } = await supabase.rpc(
+            "get_my_followers"
+        );
+        if (error) {
+            throw error;
+        }
+        const rows = data || [];
+        followerCount.value = rows.length;
+        followers.value = rows.map(function (follower) {
             return {
-                id:
-                    post.id,
-                institutionId:
-                    post.institution_id,
-                title:
-                    post.title,
-                description:
-                    post.description,
-                postType:
-                    post.post_type,
-                location:
-                    post.location || "",
-                externalUrl:
-                    post.external_url || "",
-                eventDate:
-                    post.event_date,
-                eventEndDate:
-                    post.event_end_date,
-                deadline:
-                    post.deadline,
-                status:
-                    post.status,
-                publishedAt:
-                    post.published_at,
-                createdAt:
-                    post.created_at,
-                updatedAt:
-                    post.updated_at,
-                imageRecords,
-                images:
-                    imageRecords.map(
-                        function (image) {
-                            return image.imageUrl;
-                        }
-                    ),
-                cover:
-                    imageRecords[0]?.imageUrl ||
-                    ""
+                id: follower.id,
+                fullName:
+                    follower.full_name ||
+                    "Usuario de Thrive",
+                avatarUrl:
+                    follower.avatar_url || "",
+                followedAt:
+                    follower.created_at
             };
         });
-}
-
-async function loadEntrepreneurs() {
-    const {
-        data: entrepreneurRows,
-        error: entrepreneurError
-    } = await supabase
-        .from("entrepreneurs")
-        .select(`
-            id,
-            business_name,
-            description,
-            department,
-            district,
-            logo_url,
-            created_at
-        `)
-        .order("business_name", {
-            ascending: true
-        });
-
-    if (entrepreneurError) {
-        throw entrepreneurError;
+    } catch (error) {
+        console.error(
+            "Error al cargar seguidores:",
+            error
+        );
+        followerCount.value = 0;
+        followers.value = [];
+    } finally {
+        followersLoading.value = false;
     }
-
-    if (!entrepreneurRows?.length) {
-        entrepreneurs.value = [];
+}
+// Genera las iniciales que se muestran cuando un seguidor no tiene foto.
+function followerInitials(name) {
+    if (!name) return "TH";
+    return name
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map(function (word) {
+            return word.charAt(0).toUpperCase();
+        })
+        .join("");
+}
+// Abre la ventana con la lista de seguidores.
+async function openFollowersModal() {
+    if (!entrepreneur.value) return;
+    showFollowersModal.value = true;
+    document.body.style.overflow = "hidden";
+    // Actualizamos la lista cada vez que se abre.
+    await loadFollowers();
+}
+// Cierra la ventana de seguidores.
+function closeFollowersModal() {
+    showFollowersModal.value = false;
+    document.body.style.overflow = "";
+}
+// Funciones utilizadas para abrir, editar y guardar el perfil.
+function openProfileEditor() {
+    if (!entrepreneur.value) return;
+    profileForm.value = {
+        businessName: entrepreneur.value.businessName || "",
+        phone: entrepreneur.value.phone || "",
+        description: entrepreneur.value.description || "",
+        department: entrepreneur.value.department || "",
+        district: entrepreneur.value.district || ""
+    };
+    profileLogoPreview.value =
+        entrepreneur.value.avatar || "";
+    profileLogoFile.value = null;
+    clearPasswordFields();
+    showProfileEditor.value = true;
+    document.body.style.overflow = "hidden";
+}
+// Prepara la vista previa del nuevo logo antes de guardarlo.
+function handleProfileLogo(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+        alert("Selecciona un archivo de imagen válido.");
+        event.target.value = "";
         return;
     }
-
-    const ids =
-        entrepreneurRows.map(function (item) {
-            return item.id;
-        });
-
-    const {
-        data: productRows,
-        error: productError
-    } = await supabase
-        .from("products")
-        .select(`
-            id,
-            entrepreneur_id
-        `)
-        .in("entrepreneur_id", ids)
-        .eq("active", true);
-
-    if (productError) {
-        console.warn(
-            "No se pudo cargar el total de productos:",
-            productError
-        );
-    }
-
-    entrepreneurs.value =
-        entrepreneurRows.map(function (item) {
-            const productCount =
-                (productRows || []).filter(
-                    function (product) {
-                        return (
-                            product.entrepreneur_id ===
-                            item.id
-                        );
-                    }
-                ).length;
-
-            return {
-                id:
-                    item.id,
-                businessName:
-                    item.business_name,
-                description:
-                    item.description || "",
-                department:
-                    item.department || "",
-                district:
-                    item.district || "",
-                logoUrl:
-                    item.logo_url || "",
-                productCount
-            };
-        });
+    profileLogoFile.value = file;
+    const reader = new FileReader();
+    reader.onload = function (loadEvent) {
+        profileLogoPreview.value =
+            loadEvent.target.result;
+    };
+    reader.readAsDataURL(file);
 }
-
+// Limpia los campos de contraseña para evitar conservar datos anteriores.
 function clearPasswordFields() {
     currentPassword.value = "";
     newPassword.value = "";
@@ -787,120 +504,22 @@ function clearPasswordFields() {
     showNewPassword.value = false;
     showConfirmPassword.value = false;
 }
-
-function openProfileEditor() {
-    if (!institution.value) return;
-
-    profileForm.value = {
-        institutionName:
-            institution.value.institutionName ||
-            "",
-        phone:
-            institution.value.phone || "",
-        website:
-            institution.value.website || "",
-        description:
-            institution.value.description || "",
-        department:
-            institution.value.department || "",
-        district:
-            institution.value.district || ""
-    };
-
-    profileLogoFile.value = null;
-    profileLogoPreview.value =
-        institution.value.logoUrl || "";
-
-    clearPasswordFields();
-    showProfileEditor.value = true;
-    document.body.style.overflow =
-        "hidden";
-}
-
+// Cierra el editor de perfil y limpia sus estados temporales.
 function closeProfileEditor() {
     showProfileEditor.value = false;
     profileLogoFile.value = null;
-    profileLogoPreview.value = "";
     clearPasswordFields();
     document.body.style.overflow = "";
 }
-
-function handleProfileLogo(event) {
-    const file =
-        event.target.files?.[0];
-
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-        alert(
-            "Selecciona un archivo de imagen válido."
-        );
-
-        event.target.value = "";
-        return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-        alert(
-            "La imagen no puede superar los 5 MB."
-        );
-
-        event.target.value = "";
-        return;
-    }
-
-    profileLogoFile.value = file;
-
-    const reader = new FileReader();
-
-    reader.onload = function (loadEvent) {
-        profileLogoPreview.value =
-            loadEvent.target.result;
-    };
-
-    reader.readAsDataURL(file);
-}
-
+// Valida y guarda los cambios realizados en el perfil del emprendimiento.
 async function saveProfile() {
-    if (
-        !institution.value ||
-        profileSaving.value
-    ) {
-        return;
-    }
-
-    if (
-        !profileForm.value.institutionName.trim()
-    ) {
-        alert(
-            "Escribe el nombre de la institución."
-        );
-        return;
-    }
-
+    if (!entrepreneur.value || profileSaving.value) return;
     profileSaving.value = true;
-
     try {
-        const {
-            data: { user },
-            error: userError
-        } = await supabase.auth.getUser();
-
-        if (
-            userError ||
-            !user?.email
-        ) {
-            alert(
-                "No fue posible verificar tu cuenta."
-            );
-            return;
-        }
-
         const wantsPasswordChange =
             currentPassword.value.length > 0 ||
             newPassword.value.length > 0 ||
             confirmNewPassword.value.length > 0;
-
         if (wantsPasswordChange) {
             if (
                 !currentPassword.value ||
@@ -908,20 +527,16 @@ async function saveProfile() {
                 !confirmNewPassword.value
             ) {
                 alert(
-                    "Completa los tres campos de contraseña."
+                    "Para cambiar la contraseña debes completar los tres campos."
                 );
                 return;
             }
-
-            if (
-                newPassword.value.length < 8
-            ) {
+            if (newPassword.value.length < 8) {
                 alert(
                     "La nueva contraseña debe tener al menos 8 caracteres."
                 );
                 return;
             }
-
             if (
                 newPassword.value !==
                 confirmNewPassword.value
@@ -931,17 +546,35 @@ async function saveProfile() {
                 );
                 return;
             }
-
+        }
+        let logoUrl =
+            entrepreneur.value.avatar || null;
+        // Si existe una nueva imagen, se sube primero a Storage.
+        if (profileLogoFile.value) {
+            const uploadedLogo =
+                await uploadEntrepreneurLogo(
+                    entrepreneur.value.id,
+                    profileLogoFile.value
+                );
+            logoUrl = uploadedLogo.publicUrl;
+        }
+        // Verificamos la contraseña actual antes de cambiarla.
+        if (wantsPasswordChange) {
             const {
-                error: passwordCheckError
-            } = await supabase.auth
-                .signInWithPassword({
-                    email:
-                        user.email,
-                    password:
-                        currentPassword.value
+                data: { user },
+                error: userError
+            } = await supabase.auth.getUser();
+            if (userError || !user?.email) {
+                alert(
+                    "No fue posible verificar tu cuenta."
+                );
+                return;
+            }
+            const { error: passwordCheckError } =
+                await supabase.auth.signInWithPassword({
+                    email: user.email,
+                    password: currentPassword.value
                 });
-
             if (passwordCheckError) {
                 alert(
                     "La contraseña actual es incorrecta."
@@ -949,1017 +582,663 @@ async function saveProfile() {
                 return;
             }
         }
-
-        const oldLogoPath =
-            getStoragePathFromPublicUrl(
-                institution.value.logoUrl
-            );
-
-        let logoUrl =
-            institution.value.logoUrl ||
-            null;
-
-        let uploadedLogo = null;
-
-        if (profileLogoFile.value) {
-            uploadedLogo =
-                await uploadInstitutionLogo(
-                    user.id,
-                    profileLogoFile.value
-                );
-
-            logoUrl =
-                uploadedLogo.publicUrl;
-        }
-
-        const {
-            data,
-            error
-        } = await supabase
-            .from("institutions")
+        const { data, error } = await supabase
+            .from("entrepreneurs")
             .update({
-                institution_name:
-                    profileForm.value
-                        .institutionName
-                        .trim(),
+                business_name:
+                    profileForm.value.businessName.trim(),
                 description:
-                    profileForm.value
-                        .description
-                        .trim(),
-                website:
-                    profileForm.value
-                        .website
-                        .trim() ||
-                    null,
+                    profileForm.value.description.trim(),
                 department:
-                    profileForm.value
-                        .department ||
-                    null,
+                    profileForm.value.department,
                 district:
-                    profileForm.value
-                        .district
-                        .trim() ||
-                    null,
+                    profileForm.value.district.trim(),
                 logo_url:
                     logoUrl
             })
-            .eq("id", user.id)
+            .eq(
+                "id",
+                entrepreneur.value.id
+            )
             .select()
             .single();
-
         if (error) {
-            if (uploadedLogo?.path) {
-                await deleteStorageFiles([
-                    uploadedLogo.path
-                ]);
-            }
-
-            throw error;
+            alert(
+                "No fue posible actualizar el perfil: " +
+                error.message
+            );
+            return;
         }
 
-        const {
-            error: profileError
-        } = await supabase
-            .from("profiles")
-            .update({
-                full_name:
-                    profileForm.value
-                        .institutionName
-                        .trim(),
-                phone:
-                    profileForm.value
-                        .phone
-                        .trim()
-            })
-            .eq("id", user.id);
-
-        if (profileError) {
-            throw profileError;
-        }
-
-        if (
-            uploadedLogo?.path &&
-            oldLogoPath &&
-            uploadedLogo.path !==
-                oldLogoPath
-        ) {
-            try {
-                await deleteStorageFiles([
-                    oldLogoPath
-                ]);
-            } catch (deleteError) {
-                console.warn(
-                    "No se pudo eliminar el logo anterior:",
-                    deleteError
+        // El teléfono se guarda en profiles, igual que en la cuenta del cliente.
+        const { error: accountUpdateError } =
+            await supabase
+                .from("profiles")
+                .update({
+                    phone:
+                        profileForm.value.phone.trim()
+                })
+                .eq(
+                    "id",
+                    entrepreneur.value.id
                 );
-            }
+
+        if (accountUpdateError) {
+            alert(
+                "El emprendimiento se actualizó, pero no fue posible guardar el teléfono: " +
+                accountUpdateError.message
+            );
+            return;
         }
 
-        institution.value = {
-            ...institution.value,
-            institutionName:
-                data.institution_name,
-            phone:
-                profileForm.value.phone.trim(),
-            website:
-                data.website || "",
-            description:
-                data.description || "",
-            department:
-                data.department || "",
-            district:
-                data.district || "",
-            logoUrl:
-                data.logo_url || ""
+        entrepreneur.value = {
+            id: data.id,
+            businessName: data.business_name,
+            phone: profileForm.value.phone.trim(),
+            email: entrepreneur.value.email || "",
+            description: data.description,
+            department: data.department,
+            district: data.district,
+            avatar: data.logo_url
         };
-
         if (wantsPasswordChange) {
-            const {
-                error: passwordError
-            } = await supabase.auth
-                .updateUser({
-                    password:
-                        newPassword.value
+            const { error: passwordError } =
+                await supabase.auth.updateUser({
+                    password: newPassword.value
                 });
-
             if (passwordError) {
                 alert(
-                    "El perfil se guardó, pero no fue posible cambiar la contraseña."
+                    "El perfil se actualizó, pero no fue posible cambiar la contraseña: " +
+                    passwordError.message
                 );
                 return;
             }
         }
-
-        alert(
-            "Perfil institucional actualizado."
-        );
-
+        alert("Perfil actualizado correctamente.");
         closeProfileEditor();
     } catch (error) {
         console.error(
             "Error al guardar el perfil:",
             error
         );
-
         alert(
-            "No fue posible guardar los cambios: " +
-            (error.message ||
-                "Error inesperado")
+            "Ocurrió un problema al guardar los cambios."
         );
     } finally {
         profileSaving.value = false;
     }
 }
-
-function resetPostForm() {
-    postForm.value = {
-        title: "",
-        description: "",
-        postType: "noticia",
-        location: "",
-        externalUrl: "",
-        eventDate: "",
-        eventEndDate: "",
-        deadline: "",
-        status: "draft"
-    };
-
-    editorImages.value.forEach(
-        revokePreview
+// Controla la selección de categorías del emprendimiento o producto.
+function toggleCategory(category) {
+    const categories =
+        productForm.value.categories;
+    const index =
+        categories.indexOf(category);
+    if (index === -1) {
+        categories.push(category);
+    } else {
+        categories.splice(index, 1);
+    }
+}
+// Comprueba si una categoría ya está seleccionada.
+function isCategorySelected(category) {
+    return productForm.value.categories.includes(
+        category
     );
-
-    editorImages.value = [];
-    originalPostImages.value = [];
 }
-
-function openAddPost() {
-    postEditorMode.value = "add";
-    selectedPost.value = null;
-    resetPostForm();
-    showPostEditor.value = true;
-    document.body.style.overflow =
-        "hidden";
-}
-
-function openEditPost(post) {
-    postEditorMode.value = "edit";
-    selectedPost.value = post;
-
-    postForm.value = {
-        title:
-            post.title || "",
-        description:
-            post.description || "",
-        postType:
-            post.postType || "noticia",
-        location:
-            post.location || "",
-        externalUrl:
-            post.externalUrl || "",
-        eventDate:
-            toInputDateTime(
-                post.eventDate
-            ),
-        eventEndDate:
-            toInputDateTime(
-                post.eventEndDate
-            ),
-        deadline:
-            toInputDateTime(
-                post.deadline
-            ),
-        status:
-            post.status || "draft"
+// Prepara el formulario para registrar un producto nuevo.
+function openAddProduct() {
+    productEditorMode.value = "add";
+    selectedProduct.value = null;
+    productForm.value = {
+        name: "",
+        description: "",
+        categories: [],
+        price: 0,
+        stock: 0
     };
-
-    editorImages.value =
-        post.imageRecords.map(
-            function (image) {
-                return {
-                    kind: "existing",
-                    id: image.id,
-                    imageUrl:
-                        image.imageUrl,
-                    storagePath:
-                        image.storagePath
-                };
-            }
-        );
-
-    originalPostImages.value =
-        post.imageRecords.map(
-            function (image) {
-                return {
-                    id: image.id,
-                    storagePath:
-                        image.storagePath
-                };
-            }
-        );
-
-    showPostEditor.value = true;
-    document.body.style.overflow =
-        "hidden";
+    editorImages.value = [];
+    originalProductImages.value = [];
+    showCategoryDropdown.value = false;
+    showProductEditor.value = true;
+    document.body.style.overflow = "hidden";
 }
-
-function closePostEditor() {
-    showPostEditor.value = false;
-    selectedPost.value = null;
-    resetPostForm();
-    document.body.style.overflow = "";
-}
-
-function handlePostImages(event) {
-    const files =
-        Array.from(
-            event.target.files || []
-        );
-
-    if (!files.length) return;
-
-    const available =
-        6 - editorImages.value.length;
-
-    if (available <= 0) {
-        alert(
-            "Puedes agregar hasta 6 imágenes por publicación."
-        );
-
-        event.target.value = "";
-        return;
-    }
-
-    const accepted =
-        files
-            .filter(function (file) {
-                return (
-                    file.type.startsWith(
-                        "image/"
-                    ) &&
-                    file.size <=
-                        5 * 1024 * 1024
-                );
-            })
-            .slice(0, available);
-
-    if (
-        accepted.length !==
-        files.slice(0, available).length
-    ) {
-        alert(
-            "Algunas imágenes no eran válidas o superaban los 5 MB."
-        );
-    }
-
-    for (const file of accepted) {
-        editorImages.value.push({
-            kind: "new",
-            file,
-            previewUrl:
-                createPreview(file)
+// Carga un producto existente dentro del formulario de edición.
+function openProductEditor(product) {
+    productEditorMode.value = "edit";
+    selectedProduct.value = product;
+    productForm.value = {
+        name: product.name || "",
+        description: product.description || "",
+        categories: [
+            ...(product.categories || [])
+        ],
+        price: Number(product.price) || 0,
+        stock: Number(product.stock) || 0
+    };
+    /*
+        Las imágenes existentes conservan su ID y ruta.
+        Así podemos identificar cuáles se mantienen o eliminan.
+    */
+    editorImages.value = (
+        product.imageRecords || []
+    ).map(function (image) {
+        return {
+            kind: "existing",
+            id: image.id,
+            imageUrl: image.imageUrl,
+            storagePath: image.storagePath,
+            preview: image.imageUrl
+        };
+    });
+    originalProductImages.value =
+        editorImages.value.map(function (image) {
+            return {
+                ...image
+            };
         });
+    showCategoryDropdown.value = false;
+    showProductEditor.value = true;
+    document.body.style.overflow = "hidden";
+}
+// Convierte un archivo en una vista previa.
+function fileToPreview(file) {
+    return new Promise(function (resolve, reject) {
+        const reader = new FileReader();
+        reader.onload = function (event) {
+            resolve(event.target.result);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+// Permite añadir varias fotografías sin borrar las anteriores.
+async function handleProductImages(event) {
+    const files = Array.from(
+        event.target.files || []
+    );
+    if (!files.length) return;
+    const validFiles = [];
+    for (const file of files) {
+        if (!file.type.startsWith("image/")) {
+            continue;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            alert(
+                `${file.name} supera el límite de 5 MB.`
+            );
+            continue;
+        }
+        validFiles.push(file);
     }
-
+    const newImages =
+        await Promise.all(
+            validFiles.map(
+                async function (file, index) {
+                    const preview =
+                        await fileToPreview(file);
+                    return {
+                        kind: "new",
+                        key:
+                            `${Date.now()}-${index}-${file.name}`,
+                        file,
+                        preview
+                    };
+                }
+            )
+        );
+    editorImages.value.push(...newImages);
+    // Permite seleccionar nuevamente los mismos archivos.
     event.target.value = "";
 }
-
-function removeEditorImage(index) {
-    const image =
-        editorImages.value[index];
-
-    revokePreview(image);
-
-    editorImages.value.splice(
-        index,
-        1
-    );
+// Elimina una imagen únicamente del formulario.
+// La eliminación real ocurre cuando se guardan los cambios.
+function removeProductImage(index) {
+    editorImages.value.splice(index, 1);
 }
-
-function moveEditorImage(
-    index,
-    direction
-) {
-    const newIndex =
-        index + direction;
-
-    if (
-        newIndex < 0 ||
-        newIndex >=
-            editorImages.value.length
-    ) {
-        return;
-    }
-
-    const images =
-        editorImages.value;
-
-    const current =
-        images[index];
-
-    images[index] =
-        images[newIndex];
-
-    images[newIndex] =
-        current;
+// Convierte cualquier fotografía en la portada.
+function makeProductImageCover(index) {
+    if (index === 0) return;
+    const [image] =
+        editorImages.value.splice(index, 1);
+    editorImages.value.unshift(image);
 }
-
-async function savePost() {
-    if (
-        !institution.value ||
-        postSaving.value
-    ) {
-        return;
-    }
-
-    if (
-        !postForm.value.title.trim() ||
-        !postForm.value.description.trim()
-    ) {
+// Cierra el formulario de producto y limpia los datos temporales.
+function closeProductEditor() {
+    showProductEditor.value = false;
+    selectedProduct.value = null;
+    editorImages.value = [];
+    originalProductImages.value = [];
+    showCategoryDropdown.value = false;
+    document.body.style.overflow = "";
+}
+// Guarda un producto nuevo o actualiza uno existente.
+async function saveProduct() {
+    if (productSaving.value) return;
+    if (!productForm.value.categories.length) {
         alert(
-            "Escribe el título y la descripción."
+            "Selecciona al menos una categoría."
         );
         return;
     }
-
-    postSaving.value = true;
-
-    let createdPostId = "";
-    let uploadedFiles = [];
-
+    productSaving.value = true;
     try {
-        const payload = {
-            institution_id:
-                institution.value.id,
-            title:
-                postForm.value.title.trim(),
-            description:
-                postForm.value.description.trim(),
-            post_type:
-                postForm.value.postType,
-            location:
-                postForm.value.location.trim() ||
-                null,
-            external_url:
-                postForm.value.externalUrl.trim() ||
-                null,
-            event_date:
-                toIsoDateTime(
-                    postForm.value.eventDate
-                ),
-            event_end_date:
-                toIsoDateTime(
-                    postForm.value.eventEndDate
-                ),
-            deadline:
-                toIsoDateTime(
-                    postForm.value.deadline
-                ),
-            status:
-                postForm.value.status,
-            published_at:
-                postForm.value.status ===
-                "published"
-                    ? new Date().toISOString()
-                    : null
-        };
-
-        let postId = "";
-
-        if (
-            postEditorMode.value ===
-            "add"
-        ) {
-            const {
-                data,
-                error
-            } = await supabase
-                .from("institution_posts")
-                .insert(payload)
-                .select("id")
-                .single();
-
-            if (error) {
-                throw error;
-            }
-
-            postId = data.id;
-            createdPostId = data.id;
+        const {
+            data: { user },
+            error: userError
+        } = await supabase.auth.getUser();
+        if (userError || !user) {
+            alert(
+                "No se encontró una sesión activa."
+            );
+            return;
+        }
+        if (productEditorMode.value === "add") {
+            await createProduct(user);
         } else {
-            postId =
-                selectedPost.value.id;
-
-            if (
-                postForm.value.status ===
-                    "published" &&
-                selectedPost.value
-                    .status ===
-                    "published"
-            ) {
-                payload.published_at =
-                    selectedPost.value
-                        .publishedAt;
-            }
-
-            const { error } =
-                await supabase
-                    .from(
-                        "institution_posts"
-                    )
-                    .update(payload)
-                    .eq("id", postId)
-                    .eq(
-                        "institution_id",
-                        institution.value.id
-                    );
-
-            if (error) {
-                throw error;
-            }
+            await updateProduct(user);
         }
-
-        const newImages =
-            editorImages.value.filter(
-                function (image) {
-                    return (
-                        image.kind === "new"
-                    );
-                }
-            );
-
-        uploadedFiles =
-            await uploadPostImages(
-                institution.value.id,
-                postId,
-                newImages
-            );
-
-        const insertedByFile =
-            new Map();
-
-        for (
-            let index = 0;
-            index < newImages.length;
-            index += 1
-        ) {
-            insertedByFile.set(
-                newImages[index].file,
-                uploadedFiles[index]
-            );
-        }
-
-        const finalImages =
-            editorImages.value.map(
-                function (image, index) {
-                    if (
-                        image.kind ===
-                        "existing"
-                    ) {
-                        return {
-                            kind:
-                                "existing",
-                            id:
-                                image.id,
-                            storagePath:
-                                image.storagePath,
-                            sortOrder:
-                                index
-                        };
-                    }
-
-                    const uploaded =
-                        insertedByFile.get(
-                            image.file
-                        );
-
-                    return {
-                        kind:
-                            "new",
-                        imageUrl:
-                            uploaded.publicUrl,
-                        storagePath:
-                            uploaded.path,
-                        sortOrder:
-                            index
-                    };
-                }
-            );
-
-        const newRows =
-            finalImages
-                .filter(function (image) {
-                    return (
-                        image.kind ===
-                        "new"
-                    );
-                })
-                .map(function (image) {
-                    return {
-                        post_id:
-                            postId,
-                        image_url:
-                            image.imageUrl,
-                        storage_path:
-                            image.storagePath,
-                        sort_order:
-                            image.sortOrder
-                    };
-                });
-
-        if (newRows.length) {
-            const { error } =
-                await supabase
-                    .from(
-                        "institution_post_images"
-                    )
-                    .insert(newRows);
-
-            if (error) {
-                throw error;
-            }
-        }
-
-        const existingImages =
-            finalImages.filter(
-                function (image) {
-                    return (
-                        image.kind ===
-                        "existing"
-                    );
-                }
-            );
-
-        for (
-            const image of existingImages
-        ) {
-            const { error } =
-                await supabase
-                    .from(
-                        "institution_post_images"
-                    )
-                    .update({
-                        sort_order:
-                            image.sortOrder
-                    })
-                    .eq("id", image.id);
-
-            if (error) {
-                throw error;
-            }
-        }
-
-        if (
-            postEditorMode.value ===
-            "edit"
-        ) {
-            const currentIds =
-                new Set(
-                    existingImages.map(
-                        function (image) {
-                            return image.id;
-                        }
-                    )
-                );
-
-            const removedImages =
-                originalPostImages.value
-                    .filter(
-                        function (image) {
-                            return !currentIds.has(
-                                image.id
-                            );
-                        }
-                    );
-
-            if (
-                removedImages.length
-            ) {
-                const removedIds =
-                    removedImages.map(
-                        function (image) {
-                            return image.id;
-                        }
-                    );
-
-                const { error } =
-                    await supabase
-                        .from(
-                            "institution_post_images"
-                        )
-                        .delete()
-                        .in(
-                            "id",
-                            removedIds
-                        );
-
-                if (error) {
-                    throw error;
-                }
-
-                try {
-                    await deleteStorageFiles(
-                        removedImages.map(
-                            function (image) {
-                                return (
-                                    image.storagePath
-                                );
-                            }
-                        )
-                    );
-                } catch (deleteError) {
-                    console.warn(
-                        "No se pudieron eliminar algunos archivos anteriores:",
-                        deleteError
-                    );
-                }
-            }
-        }
-
-        await loadPosts(
-            institution.value.id
-        );
-
+        await loadProducts(user.id);
         alert(
-            postEditorMode.value ===
-                "add"
-                ? "Publicación creada correctamente."
-                : "Publicación actualizada correctamente."
+            productEditorMode.value === "add"
+                ? "Producto publicado correctamente."
+                : "Producto actualizado correctamente."
         );
-
-        closePostEditor();
+        closeProductEditor();
     } catch (error) {
         console.error(
-            "Error al guardar la publicación:",
+            "Error al guardar el producto:",
             error
         );
-
-        if (uploadedFiles.length) {
+        alert(
+            "No fue posible guardar el producto: " +
+            error.message
+        );
+    } finally {
+        productSaving.value = false;
+    }
+}
+// Crea el registro principal y después almacena sus fotografías.
+async function createProduct(user) {
+    const { data: newProduct, error: productError } =
+        await supabase
+            .from("products")
+            .insert({
+                entrepreneur_id: user.id,
+                name: productForm.value.name.trim(),
+                description: productForm.value.description.trim(),
+                categories: productForm.value.categories,
+                price: Number(productForm.value.price) || 0,
+                stock: Number(productForm.value.stock) || 0,
+                featured: false,
+                active: true
+            })
+            .select()
+            .single();
+    if (productError) {
+        throw productError;
+    }
+    const newImages = editorImages.value.filter(function (image) {
+        return image.kind === "new";
+    });
+    if (!newImages.length) {
+        return;
+    }
+    let uploadedImages = [];
+    try {
+        // Subimos todas las imágenes al Storage del producto.
+        uploadedImages = await uploadProductImages(
+            user.id,
+            newProduct.id,
+            newImages.map(function (image) {
+                return image.file;
+            })
+        );
+        const imageRows = uploadedImages.map(function (image, index) {
+            return {
+                product_id: newProduct.id,
+                image_url: image.publicUrl,
+                storage_path: image.path,
+                sort_order: index
+            };
+        });
+        const { error: imageError } = await supabase
+            .from("product_images")
+            .insert(imageRows);
+        if (imageError) {
+            throw imageError;
+        }
+    } catch (error) {
+        /*
+            Si algo falla después de subir fotografías, limpiamos
+            los archivos nuevos para no dejar imágenes huérfanas.
+        */
+        for (const image of uploadedImages) {
             try {
-                await deleteStorageFiles(
-                    uploadedFiles.map(
-                        function (file) {
-                            return file.path;
-                        }
-                    )
-                );
+                await deleteImage(image.path);
             } catch (cleanupError) {
                 console.warn(
-                    "No se pudieron limpiar algunas imágenes nuevas:",
+                    "No se pudo limpiar una imagen subida:",
                     cleanupError
                 );
             }
         }
-
-        if (
-            createdPostId &&
-            !uploadedFiles.length
+        /*
+            Como el producto todavía no terminó de crearse correctamente,
+            eliminamos también su registro. product_images se elimina en
+            cascada si ya se alcanzó a insertar alguna fila.
+        */
+        try {
+            await supabase
+                .from("products")
+                .delete()
+                .eq("id", newProduct.id);
+        } catch (cleanupError) {
+            console.warn(
+                "No se pudo limpiar el producto incompleto:",
+                cleanupError
+            );
+        }
+        throw error;
+    }
+}
+// Actualiza el producto y sincroniza por completo sus fotografías.
+async function updateProduct(user) {
+    if (!selectedProduct.value) {
+        throw new Error(
+            "No se encontró el producto seleccionado."
+        );
+    }
+    const productId = selectedProduct.value.id;
+    // Actualizamos primero la información principal del producto.
+    const { error: updateError } = await supabase
+        .from("products")
+        .update({
+            name: productForm.value.name.trim(),
+            description: productForm.value.description.trim(),
+            categories: productForm.value.categories,
+            price: Number(productForm.value.price) || 0,
+            stock: Number(productForm.value.stock) || 0,
+            updated_at: new Date().toISOString()
+        })
+        .eq("id", productId);
+    if (updateError) {
+        throw updateError;
+    }
+    /*
+        Comparamos las imágenes que existían al abrir el editor
+        con las que todavía siguen presentes cuando el usuario guarda.
+    */
+    const currentExistingIds = editorImages.value
+        .filter(function (image) {
+            return image.kind === "existing";
+        })
+        .map(function (image) {
+            return image.id;
+        });
+    const removedImages = originalProductImages.value.filter(
+        function (image) {
+            return !currentExistingIds.includes(image.id);
+        }
+    );
+    const newImages = editorImages.value.filter(function (image) {
+        return image.kind === "new";
+    });
+    let uploadedImages = [];
+    let insertedImageIds = [];
+    try {
+        // 1. Subimos primero las fotografías nuevas.
+        if (newImages.length) {
+            uploadedImages = await uploadProductImages(
+                user.id,
+                productId,
+                newImages.map(function (image) {
+                    return image.file;
+                })
+            );
+        }
+        /*
+            2. Construimos las filas nuevas respetando exactamente
+            el orden visual del editor. La posición 0 será la portada.
+        */
+        let uploadedIndex = 0;
+        const newImageRows = [];
+        for (
+            let index = 0;
+            index < editorImages.value.length;
+            index++
         ) {
-            try {
-                await supabase
-                    .from(
-                        "institution_posts"
-                    )
-                    .delete()
-                    .eq(
-                        "id",
-                        createdPostId
-                    );
-            } catch {
-                // El post puede conservarse como borrador si la limpieza falla.
+            const image = editorImages.value[index];
+            if (image.kind === "new") {
+                const uploaded = uploadedImages[uploadedIndex];
+                if (uploaded) {
+                    newImageRows.push({
+                        product_id: productId,
+                        image_url: uploaded.publicUrl,
+                        storage_path: uploaded.path,
+                        sort_order: index
+                    });
+                }
+                uploadedIndex++;
             }
         }
-
-        alert(
-            "No fue posible guardar la publicación: " +
-            (error.message ||
-                "Error inesperado")
-        );
-    } finally {
-        postSaving.value = false;
-    }
-}
-
-async function deletePost(post) {
-    if (!post || postSaving.value) {
-        return;
-    }
-
-    const confirmed =
-        window.confirm(
-            `¿Deseas eliminar "${post.title}"?`
-        );
-
-    if (!confirmed) return;
-
-    postSaving.value = true;
-
-    try {
-        const paths =
-            post.imageRecords.map(
-                function (image) {
-                    return image.storagePath;
-                }
-            );
-
-        const { error } =
-            await supabase
-                .from("institution_posts")
+        // 3. Registramos las imágenes nuevas en product_images.
+        if (newImageRows.length) {
+            const { data: insertedRows, error: insertError } =
+                await supabase
+                    .from("product_images")
+                    .insert(newImageRows)
+                    .select("id");
+            if (insertError) {
+                throw insertError;
+            }
+            insertedImageIds = (insertedRows || []).map(function (row) {
+                return row.id;
+            });
+        }
+        /*
+            4. Actualizamos el orden de las fotografías que ya existían.
+            Esto también permite cambiar cuál imagen es la portada.
+        */
+        for (
+            let index = 0;
+            index < editorImages.value.length;
+            index++
+        ) {
+            const image = editorImages.value[index];
+            if (image.kind !== "existing") {
+                continue;
+            }
+            const { error: orderError } = await supabase
+                .from("product_images")
+                .update({
+                    sort_order: index
+                })
+                .eq("id", image.id);
+            if (orderError) {
+                throw orderError;
+            }
+        }
+        /*
+            5. Las fotografías quitadas del editor se eliminan
+            definitivamente de la tabla product_images.
+        */
+        if (removedImages.length) {
+            const removedIds = removedImages.map(function (image) {
+                return image.id;
+            });
+            const { error: deleteRowsError } = await supabase
+                .from("product_images")
                 .delete()
-                .eq("id", post.id)
-                .eq(
-                    "institution_id",
-                    institution.value.id
-                );
-
-        if (error) {
-            throw error;
-        }
-
-        try {
-            await deleteStorageFiles(
-                paths
-            );
-        } catch (storageError) {
-            console.warn(
-                "La publicación se eliminó, pero algunas imágenes no pudieron borrarse:",
-                storageError
-            );
-        }
-
-        posts.value =
-            posts.value.filter(
-                function (item) {
-                    return (
-                        item.id !==
-                        post.id
+                .in("id", removedIds);
+            if (deleteRowsError) {
+                throw deleteRowsError;
+            }
+            /*
+                6. Después de eliminar sus filas, borramos también
+                los archivos físicos del bucket thrive-images.
+            */
+            for (const image of removedImages) {
+                try {
+                    await deleteImage(image.storagePath);
+                } catch (storageDeleteError) {
+                    /*
+                        La fila ya se eliminó de la base de datos.
+                        Si Storage falla, dejamos una advertencia en consola
+                        sin romper la actualización completa del producto.
+                    */
+                    console.warn(
+                        "La imagen se eliminó de la base de datos, pero no del Storage:",
+                        storageDeleteError
                     );
                 }
-            );
-
-        alert(
-            "Publicación eliminada."
-        );
+            }
+        }
     } catch (error) {
-        console.error(
-            "Error al eliminar publicación:",
-            error
-        );
-
-        alert(
-            "No fue posible eliminar la publicación."
-        );
-    } finally {
-        postSaving.value = false;
+        /*
+            Si las fotografías nuevas se subieron pero la sincronización
+            de la base de datos falla, intentamos retirar esas nuevas
+            fotografías y sus filas para evitar archivos duplicados.
+        */
+        if (insertedImageIds.length) {
+            try {
+                await supabase
+                    .from("product_images")
+                    .delete()
+                    .in("id", insertedImageIds);
+            } catch (cleanupError) {
+                console.warn(
+                    "No se pudieron limpiar las filas nuevas:",
+                    cleanupError
+                );
+            }
+        }
+        for (const image of uploadedImages) {
+            try {
+                await deleteImage(image.path);
+            } catch (cleanupError) {
+                console.warn(
+                    "No se pudo limpiar una imagen nueva:",
+                    cleanupError
+                );
+            }
+        }
+        throw error;
     }
 }
-
-function openPostPreview(post) {
-    selectedPost.value = post;
-    showPostPreview.value = true;
-    document.body.style.overflow =
-        "hidden";
-}
-
-function closePostPreview() {
-    showPostPreview.value = false;
-    selectedPost.value = null;
-    document.body.style.overflow = "";
-}
-
-function openEntrepreneurProfile(id) {
+// Abre el producto en la pantalla independiente de detalle.
+function openProductDetail(product) {
+    if (!product?.id) return;
     router.push({
-        name: "PerfilEmprendedor",
+        name: "DetalleProducto",
         params: {
-            id
+            id: product.id
         }
     });
 }
-
+// Maneja accesos rápidos del teclado para cerrar ventanas.
 function handleEscape(event) {
-    if (event.key !== "Escape") {
+    if (event.key !== "Escape") return;
+    if (showFollowersModal.value) {
+        closeFollowersModal();
         return;
     }
-
-    if (showPostPreview.value) {
-        closePostPreview();
+    if (showProductEditor.value) {
+        closeProductEditor();
         return;
     }
-
-    if (showPostEditor.value) {
-        closePostEditor();
-        return;
-    }
-
     if (showProfileEditor.value) {
         closeProfileEditor();
     }
 }
-
 onMounted(function () {
-    loadDashboard();
+    // Al regresar desde Inventario o Calculadora podemos volver directamente a Inicio o Novedades.
+    const pendingSection = sessionStorage.getItem("thriveDashboardSection");
+    if (["inicio", "novedades"].includes(pendingSection)) {
+        activeSection.value = pendingSection;
+        sessionStorage.removeItem("thriveDashboardSection");
+    }
 
+    loadDashboard();
     document.addEventListener(
         "keydown",
         handleEscape
     );
 });
-
 onBeforeUnmount(function () {
     document.removeEventListener(
         "keydown",
         handleEscape
     );
-
-    editorImages.value.forEach(
-        revokePreview
-    );
-
     document.body.style.overflow = "";
 });
 </script>
-
 <template>
-<div class="min-h-screen bg-[#F8FBFC] pb-24 text-gray-700 lg:pb-8">
-    <!-- Navegación lateral -->
-    <aside class="fixed inset-y-0 left-0 z-40 hidden w-[270px] flex-col bg-[#0077B6] px-5 py-6 text-white lg:flex">
-        <div class="flex items-center gap-3 px-2">
-            <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-xl font-black text-[#0077B6]">
-                T
-            </div>
-            <div>
-                <p class="text-xl font-black">
-                    Thrive
-                </p>
-                <p class="text-xs font-semibold text-white/65">
-                    Panel institucional
-                </p>
-            </div>
-        </div>
-
-        <nav class="mt-10 space-y-2">
-            <button
-                type="button"
-                class="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-bold transition"
-                :class="activeSection === 'inicio' ? 'bg-white text-[#0077B6]' : 'text-white/80 hover:bg-white/10 hover:text-white'"
-                @click="changeSection('inicio')"
-            >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 11l9-8 9 8v9a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z"></path>
-                </svg>
-                Inicio
-            </button>
-
-            <button
-                type="button"
-                class="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-bold transition"
-                :class="activeSection === 'publicaciones' ? 'bg-white text-[#0077B6]' : 'text-white/80 hover:bg-white/10 hover:text-white'"
-                @click="changeSection('publicaciones')"
-            >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2zM7 8h10M7 12h10M7 16h6"></path>
-                </svg>
-                Publicaciones
-            </button>
-
-            <button
-                type="button"
-                class="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-bold transition"
-                :class="activeSection === 'emprendedores' ? 'bg-white text-[#0077B6]' : 'text-white/80 hover:bg-white/10 hover:text-white'"
-                @click="changeSection('emprendedores')"
-            >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"></path>
-                </svg>
-                Emprendedores
-            </button>
-
-            <button
-                type="button"
-                class="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-bold transition"
-                :class="activeSection === 'perfil' ? 'bg-white text-[#0077B6]' : 'text-white/80 hover:bg-white/10 hover:text-white'"
-                @click="changeSection('perfil')"
-            >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                    <circle cx="12" cy="8" r="4"></circle>
-                    <path stroke-linecap="round" d="M4 21a8 8 0 0116 0"></path>
-                </svg>
-                Perfil
-            </button>
-        </nav>
-
-        <div class="mt-auto">
-            <button
-                type="button"
-                :disabled="logoutLoading"
-                class="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/25 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/10 disabled:opacity-60"
-                @click="logout"
-            >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M10 17l5-5-5-5M15 12H3M14 4h5a2 2 0 012 2v12a2 2 0 01-2 2h-5"></path>
-                </svg>
-                {{ logoutLoading ? "Cerrando..." : "Cerrar sesión" }}
-            </button>
-        </div>
-    </aside>
-
-    <!-- Barra superior -->
-    <header class="sticky top-0 z-30 bg-[#F8FBFC] lg:ml-[270px]">
-        <div class="mx-auto max-w-[1450px] px-3 pt-3 sm:px-5 lg:px-8">
-            <div class="flex items-center justify-between gap-3 rounded-[24px] bg-[#00B4D8] px-4 py-3 text-white shadow-sm">
-                <div class="flex min-w-0 items-center gap-3">
-                    <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/20 font-black">
-                        <img
-                            v-if="institution?.logoUrl"
-                            :src="institution.logoUrl"
-                            :alt="institution.institutionName"
-                            class="h-full w-full object-cover"
-                        >
-                        <span v-else>
-                            {{ institutionInitials }}
-                        </span>
-                    </div>
-                    <div class="min-w-0">
-                        <p class="truncate text-sm font-black">
-                            {{ institution?.institutionName || "Panel institucional" }}
-                        </p>
-                        <p class="truncate text-xs text-white/75">
-                            Gestión de oportunidades para emprendedores
-                        </p>
-                    </div>
+<div class="min-h-screen bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-0">
+    <!-- Cabecera. En móvil conserva la vista original y en laptop funciona como navegación principal. -->
+    <header class="sticky top-0 z-40 bg-[#F8FBFC]">
+        <div class="mx-auto max-w-[1450px] px-2 pt-2 sm:px-5 lg:px-8 lg:pt-4">
+            <!-- Cabecera móvil: mantiene el nombre y los accesos rápidos de la aplicación. -->
+            <div class="flex items-center gap-1 rounded-[24px] bg-[#00B4D8] p-1.5 shadow-sm sm:gap-2 sm:p-2 lg:hidden">
+                <div class="flex min-w-0 flex-1 items-center px-3">
+                    <span class="truncate text-sm font-bold text-white sm:text-base">
+                        {{ entrepreneur?.businessName || "Thrive" }}
+                    </span>
                 </div>
-
-                <button
-                    type="button"
-                    class="rounded-xl bg-white px-4 py-2 text-xs font-black text-[#0077B6] sm:text-sm"
-                    @click="openAddPost"
-                >
-                    + Crear publicación
+                <button type="button" aria-label="Mensajes" class="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/20">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                        <path stroke-linejoin="round" d="M4 5h16v12H8l-4 3V5z"></path>
+                        <path stroke-linecap="round" d="M8 9h8M8 13h5"></path>
+                    </svg>
+                </button>
+                <button type="button" aria-label="Notificaciones" class="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/20">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"></path>
+                    </svg>
                 </button>
             </div>
+
+            <!-- Navbar principal para laptop. La antigua isla azul ahora sí se utiliza para navegar. -->
+            <nav class="hidden items-center justify-center gap-2 rounded-[24px] bg-[#00B4D8] p-2 shadow-sm lg:flex">
+                <button
+                    v-for="item in [
+                        ['inicio', 'Inicio'],
+                        ['inventario', 'Inventario'],
+                        ['novedades', 'Novedades'],
+                        ['calculadora', 'Calculadora']
+                    ]"
+                    :key="item[0]"
+                    type="button"
+                    class="rounded-full px-6 py-2.5 text-sm font-bold transition"
+                    :class="activeSection === item[0] ? 'bg-white text-[#0077B6] shadow-sm' : 'text-white/85 hover:bg-white/15 hover:text-white'"
+                    @click="changeSection(item[0])"
+                >
+                    {{ item[1] }}
+                </button>
+            </nav>
         </div>
     </header>
-
-    <!-- Cargando -->
+    <!-- Cargando. -->
     <main
         v-if="loading"
-        class="mx-auto max-w-[1450px] px-5 py-24 text-center lg:ml-[270px]"
+        class="mx-auto max-w-[1450px] px-5 py-24 text-center"
     >
-        <div class="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div>
+        <div class="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div>
         <p class="mt-4 text-sm font-semibold text-gray-400">
-            Cargando panel institucional...
+            Cargando tu emprendimiento...
         </p>
     </main>
-
-    <!-- Error -->
+    <!-- Error. -->
     <main
         v-else-if="loadError"
-        class="mx-auto max-w-[1450px] px-5 py-24 text-center lg:ml-[270px]"
+        class="mx-auto max-w-[1450px] px-5 py-24 text-center"
     >
         <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100 font-black text-red-600">
             !
         </div>
-        <h1 class="mt-4 text-xl font-black text-gray-700">
-            No pudimos cargar el panel
-        </h1>
+        <p class="mt-4 font-black text-gray-700">
+            No pudimos cargar el dashboard
+        </p>
         <p class="mt-2 text-sm text-gray-400">
             {{ loadError }}
         </p>
@@ -1971,581 +1250,481 @@ onBeforeUnmount(function () {
             Intentar nuevamente
         </button>
     </main>
-
-    <!-- Contenido -->
+    <!-- Contenido. -->
     <main
-        v-else-if="institution"
-        class="mx-auto max-w-[1450px] px-3 py-5 sm:px-5 lg:ml-[270px] lg:px-8"
+        v-else-if="entrepreneur"
+        class="mx-auto max-w-[1450px] px-3 pb-10 pt-3 sm:px-5 lg:px-8"
     >
-        <!-- Inicio -->
-        <template v-if="activeSection === 'inicio'">
-            <section class="overflow-hidden rounded-[28px] bg-white">
-                <div class="grid gap-6 p-5 sm:p-7 lg:grid-cols-[1fr_auto] lg:items-center">
-                    <div>
-                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                            Panel institucional
-                        </p>
-                        <h1 class="mt-2 text-3xl font-black text-gray-700 sm:text-4xl">
-                            Bienvenido, {{ institution.institutionName }}
-                        </h1>
-                        <p class="mt-3 max-w-3xl text-sm leading-6 text-gray-400 sm:text-base">
-                            Publica talleres, eventos, convocatorias y noticias para apoyar el crecimiento de los emprendimientos registrados en Thrive.
-                        </p>
+        <!-- INICIO -->
+        <section v-if="activeSection === 'inicio'">
+            <!-- Perfil -->
+            <section class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
+                <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                    <div class="flex flex-col items-center gap-5 text-center sm:flex-row sm:text-left">
+                        <img
+                            v-if="entrepreneur.avatar"
+                            :src="entrepreneur.avatar"
+                            :alt="entrepreneur.businessName"
+                            class="h-24 w-24 rounded-full border-4 border-[#CAF0F8] object-cover sm:h-28 sm:w-28"
+                        >
+                        <div
+                            v-else
+                            class="flex h-24 w-24 items-center justify-center rounded-full border-4 border-[#CAF0F8] bg-[#EAF9FC] text-2xl font-black text-[#0077B6] sm:h-28 sm:w-28"
+                        >
+                            {{ entrepreneurInitials }}
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
+                                Mi emprendimiento
+                            </p>
+                            <h1 class="mt-1 text-2xl font-black text-gray-700 sm:text-3xl">
+                                {{ entrepreneur.businessName }}
+                            </h1>
+                            <p class="mt-1 text-sm text-gray-400">
+                                {{ entrepreneur.district }},
+                                {{ entrepreneur.department }}
+                            </p>
+                            <p class="mt-3 max-w-2xl text-sm leading-6 text-gray-500">
+                                {{ entrepreneur.description }}
+                            </p>
+                            <!-- Seguidores -->
+                            <button
+                                type="button"
+                                class="mt-4 inline-flex items-center gap-2 rounded-full bg-[#EAF9FC] px-4 py-2 text-left transition hover:bg-[#CAF0F8]"
+                                @click="openFollowersModal"
+                            >
+                                <span class="text-base font-black text-[#0077B6]">
+                                    {{ followerCount }}
+                                </span>
+                                <span class="text-xs font-bold text-[#4F7180]">
+                                    {{ followerCount === 1 ? "seguidor" : "seguidores" }}
+                                </span>
+                            </button>
+                        </div>
                     </div>
-
-                    <button
-                        type="button"
-                        class="rounded-2xl bg-[#00B4D8] px-6 py-3 text-sm font-black text-white"
-                        @click="openAddPost"
-                    >
-                        Crear nueva publicación
-                    </button>
-                </div>
-            </section>
-
-            <section class="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
-                <article class="rounded-[22px] bg-white p-4 sm:p-5">
-                    <p class="text-xs font-bold uppercase tracking-wide text-gray-400">
-                        Publicadas
-                    </p>
-                    <p class="mt-2 text-3xl font-black text-[#0077B6]">
-                        {{ publishedCount }}
-                    </p>
-                </article>
-
-                <article class="rounded-[22px] bg-white p-4 sm:p-5">
-                    <p class="text-xs font-bold uppercase tracking-wide text-gray-400">
-                        Borradores
-                    </p>
-                    <p class="mt-2 text-3xl font-black text-amber-500">
-                        {{ draftCount }}
-                    </p>
-                </article>
-
-                <article class="rounded-[22px] bg-white p-4 sm:p-5">
-                    <p class="text-xs font-bold uppercase tracking-wide text-gray-400">
-                        Próximos eventos
-                    </p>
-                    <p class="mt-2 text-3xl font-black text-[#00B4D8]">
-                        {{ upcomingCount }}
-                    </p>
-                </article>
-
-                <article class="rounded-[22px] bg-white p-4 sm:p-5">
-                    <p class="text-xs font-bold uppercase tracking-wide text-gray-400">
-                        Emprendedores
-                    </p>
-                    <p class="mt-2 text-3xl font-black text-[#4F7180]">
-                        {{ entrepreneurs.length }}
-                    </p>
-                </article>
-            </section>
-
-            <section class="mt-7">
-                <div class="mb-4 flex items-end justify-between gap-3">
-                    <div>
-                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                            Actividad reciente
-                        </p>
-                        <h2 class="mt-1 text-2xl font-black text-gray-700">
-                            Últimas publicaciones
-                        </h2>
-                    </div>
-
-                    <button
-                        type="button"
-                        class="text-sm font-bold text-[#0077B6]"
-                        @click="changeSection('publicaciones')"
-                    >
-                        Ver todas
-                    </button>
-                </div>
-
-                <div
-                    v-if="posts.length"
-                    class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-                >
-                    <article
-                        v-for="post in posts.slice(0, 6)"
-                        :key="post.id"
-                        class="overflow-hidden rounded-[24px] bg-white"
-                    >
+                    <div class="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
                         <button
                             type="button"
-                            class="block w-full text-left"
-                            @click="openPostPreview(post)"
+                            class="w-full rounded-xl border border-[#00B4D8] px-5 py-3 text-sm font-bold text-[#0077B6] transition hover:bg-[#CAF0F8] lg:w-auto"
+                            @click="openProfileEditor"
                         >
-                            <div class="aspect-[16/9] bg-[#EAF8FB]">
-                                <img
-                                    v-if="post.cover"
-                                    :src="post.cover"
-                                    :alt="post.title"
-                                    class="h-full w-full object-cover"
-                                >
-                                <div
-                                    v-else
-                                    class="flex h-full items-center justify-center text-sm font-bold text-[#00B4D8]"
-                                >
-                                    {{ postTypeLabel(post.postType) }}
-                                </div>
-                            </div>
-
-                            <div class="p-4">
-                                <div class="flex items-center justify-between gap-2">
-                                    <span class="rounded-full bg-[#CAF0F8] px-3 py-1 text-[10px] font-black uppercase text-[#0077B6]">
-                                        {{ postTypeLabel(post.postType) }}
-                                    </span>
-                                    <span
-                                        class="rounded-full px-3 py-1 text-[10px] font-black"
-                                        :class="statusClasses(post.status)"
-                                    >
-                                        {{ statusLabel(post.status) }}
-                                    </span>
-                                </div>
-
-                                <h3 class="mt-3 line-clamp-2 font-black text-gray-700">
-                                    {{ post.title }}
-                                </h3>
-
-                                <p class="mt-2 text-xs text-gray-400">
-                                    {{ formatDate(post.createdAt) }}
-                                </p>
-                            </div>
+                            Editar perfil
                         </button>
-                    </article>
-                </div>
-
-                <div
-                    v-else
-                    class="rounded-[24px] bg-white px-5 py-14 text-center"
-                >
-                    <p class="font-black text-gray-600">
-                        Aún no has creado publicaciones.
-                    </p>
-                    <p class="mt-1 text-sm text-gray-400">
-                        Crea la primera oportunidad para los emprendedores.
-                    </p>
-                    <button
-                        type="button"
-                        class="mt-5 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white"
-                        @click="openAddPost"
-                    >
-                        Crear publicación
-                    </button>
+                        <button
+                            type="button"
+                            :disabled="logoutLoading"
+                            class="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-bold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
+                            @click="logout"
+                        >
+                            <svg
+                                class="h-5 w-5"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.8"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    d="M10 17l5-5-5-5M15 12H3M14 4h5a2 2 0 012 2v12a2 2 0 01-2 2h-5"
+                                ></path>
+                            </svg>
+                            {{ logoutLoading ? "Cerrando..." : "Cerrar sesión" }}
+                        </button>
+                    </div>
                 </div>
             </section>
-        </template>
-
-        <!-- Publicaciones -->
-        <template v-else-if="activeSection === 'publicaciones'">
-            <section>
+            <!-- Productos -->
+            <section class="mt-7">
                 <div class="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                         <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                            Contenido institucional
+                            Mi catálogo
                         </p>
-                        <h1 class="mt-1 text-3xl font-black text-gray-700">
-                            Publicaciones
-                        </h1>
+                        <h2 class="mt-1 text-2xl font-black text-gray-700">
+                            Mis productos
+                        </h2>
                         <p class="mt-1 text-sm text-gray-400">
-                            {{ posts.length }} publicaciones registradas
+                            {{ productCountText }}
                         </p>
                     </div>
-
                     <button
                         type="button"
-                        class="rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-black text-white"
-                        @click="openAddPost"
+                        class="flex w-full items-center justify-center gap-2 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#009CC0] sm:w-auto"
+                        @click="openAddProduct"
                     >
-                        + Crear publicación
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" d="M12 5v14M5 12h14"></path>
+                        </svg>
+                        Añadir producto
                     </button>
                 </div>
-
+                <!-- Productos con el mismo estilo limpio del catálogo -->
                 <div
-                    v-if="posts.length"
-                    class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+                    v-if="products.length"
+                    class="grid grid-cols-2 gap-x-2 gap-y-5 sm:gap-4 md:grid-cols-3 xl:grid-cols-4"
                 >
                     <article
-                        v-for="post in posts"
-                        :key="post.id"
-                        class="overflow-hidden rounded-[24px] bg-white"
+                        v-for="product in products"
+                        :key="product.id"
+                        class="min-w-0 overflow-hidden bg-transparent"
                     >
                         <button
                             type="button"
-                            class="block w-full text-left"
-                            @click="openPostPreview(post)"
+                            class="block w-full overflow-hidden rounded-xl bg-gray-100 sm:rounded-2xl"
+                            @click="openProductDetail(product)"
                         >
-                            <div class="aspect-[16/9] bg-[#EAF8FB]">
-                                <img
-                                    v-if="post.cover"
-                                    :src="post.cover"
-                                    :alt="post.title"
-                                    class="h-full w-full object-cover"
-                                >
-                                <div
-                                    v-else
-                                    class="flex h-full items-center justify-center font-bold text-[#00B4D8]"
-                                >
-                                    {{ postTypeLabel(post.postType) }}
-                                </div>
+                            <img
+                                v-if="product.image"
+                                :src="product.image"
+                                :alt="product.name"
+                                class="aspect-square w-full object-cover"
+                            >
+                            <div
+                                v-else
+                                class="flex aspect-square items-center justify-center text-xs font-bold text-gray-400"
+                            >
+                                Sin fotografía
                             </div>
                         </button>
-
-                        <div class="p-4">
-                            <div class="flex items-center justify-between gap-2">
-                                <span class="rounded-full bg-[#CAF0F8] px-3 py-1 text-[10px] font-black uppercase text-[#0077B6]">
-                                    {{ postTypeLabel(post.postType) }}
+                        <div class="pt-1.5 sm:px-1 sm:pt-3">
+                            <div class="mb-1 flex flex-wrap gap-1">
+                                <span
+                                    v-for="category in product.categories.slice(0, 1)"
+                                    :key="category"
+                                    class="text-[9px] font-bold uppercase text-[#00B4D8]"
+                                >
+                                    {{ category }}
                                 </span>
                                 <span
-                                    class="rounded-full px-3 py-1 text-[10px] font-black"
-                                    :class="statusClasses(post.status)"
+                                    v-if="product.categories.length > 1"
+                                    class="text-[9px] font-bold text-gray-400"
                                 >
-                                    {{ statusLabel(post.status) }}
+                                    +{{ product.categories.length - 1 }}
                                 </span>
                             </div>
-
-                            <h2 class="mt-3 line-clamp-2 font-black text-gray-700">
-                                {{ post.title }}
-                            </h2>
-
-                            <p class="mt-2 line-clamp-2 text-sm leading-5 text-gray-400">
-                                {{ post.description }}
-                            </p>
-
-                            <p class="mt-3 text-xs font-semibold text-gray-400">
-                                {{ formatDate(post.createdAt) }}
-                            </p>
-
-                            <div class="mt-4 grid grid-cols-3 gap-2">
-                                <button
-                                    type="button"
-                                    class="rounded-xl border border-gray-200 px-2 py-2 text-xs font-bold text-gray-500"
-                                    @click="openPostPreview(post)"
+                            <h3 class="line-clamp-2 min-h-[34px] text-xs font-bold leading-tight text-gray-600 sm:min-h-[40px] sm:text-sm">
+                                {{ product.name }}
+                            </h3>
+                            <div class="mt-1 flex items-center gap-1 text-[10px] sm:text-xs">
+                                <span class="text-amber-500">★</span>
+                                <span class="font-bold text-gray-600">
+                                    {{ Number(product.averageRating).toFixed(1) }}
+                                </span>
+                                <span class="text-gray-400">
+                                    {{ product.reviewCount }} reseñas
+                                </span>
+                            </div>
+                            <div class="mt-2 flex items-center justify-between gap-2">
+                                <p class="text-base font-black text-[#4F7180] sm:text-xl">
+                                    {{ formatPrice(product.price) }}
+                                </p>
+                                <span
+                                    class="rounded-full px-2 py-1 text-[9px] font-bold sm:text-[10px]"
+                                    :class="stockClasses(product.stock)"
                                 >
-                                    Ver
-                                </button>
-
+                                    {{ stockText(product.stock) }}
+                                </span>
+                            </div>
+                            <div class="mt-3 grid grid-cols-2 gap-2">
                                 <button
                                     type="button"
-                                    class="rounded-xl bg-[#CAF0F8] px-2 py-2 text-xs font-bold text-[#0077B6]"
-                                    @click="openEditPost(post)"
+                                    class="rounded-xl border border-gray-200 px-2 py-2 text-[10px] font-bold text-gray-500 sm:text-xs"
+                                    @click="openProductDetail(product)"
+                                >
+                                    Ver detalle
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded-xl bg-[#CAF0F8] px-2 py-2 text-[10px] font-bold text-[#0077B6] sm:text-xs"
+                                    @click="openProductEditor(product)"
                                 >
                                     Editar
                                 </button>
-
-                                <button
-                                    type="button"
-                                    class="rounded-xl border border-red-200 px-2 py-2 text-xs font-bold text-red-600"
-                                    @click="deletePost(post)"
-                                >
-                                    Eliminar
-                                </button>
                             </div>
                         </div>
                     </article>
                 </div>
-
+                <!-- Sin productos -->
                 <div
                     v-else
-                    class="rounded-[24px] bg-white px-5 py-16 text-center"
+                    class="rounded-[24px] border border-dashed border-[#90E0EF] bg-white px-5 py-16 text-center"
                 >
-                    <p class="font-black text-gray-600">
-                        No hay publicaciones todavía.
-                    </p>
-                    <p class="mt-1 text-sm text-gray-400">
-                        Las noticias, talleres y eventos aparecerán aquí.
-                    </p>
-                </div>
-            </section>
-        </template>
-
-        <!-- Emprendedores -->
-        <template v-else-if="activeSection === 'emprendedores'">
-            <section>
-                <div class="mb-5">
-                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                        Comunidad Thrive
-                    </p>
-                    <h1 class="mt-1 text-3xl font-black text-gray-700">
-                        Emprendedores
-                    </h1>
-                    <p class="mt-1 text-sm text-gray-400">
-                        Consulta los emprendimientos registrados en la plataforma.
-                    </p>
-                </div>
-
-                <div class="mb-5 rounded-[22px] bg-white p-3">
-                    <div class="flex items-center gap-3 rounded-2xl bg-[#F8FBFC] px-4 py-3">
-                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                            <circle cx="11" cy="11" r="7"></circle>
-                            <path stroke-linecap="round" d="M20 20l-3.5-3.5"></path>
+                    <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#CAF0F8] text-[#0077B6]">
+                        <svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                            <path d="M4 7l8-4 8 4-8 4-8-4z"></path>
+                            <path d="M4 7v10l8 4 8-4V7"></path>
+                            <path d="M12 11v10"></path>
                         </svg>
-                        <input
-                            v-model="entrepreneurSearch"
-                            type="search"
-                            placeholder="Buscar por nombre o ubicación..."
-                            class="w-full bg-transparent text-sm outline-none placeholder:text-gray-400"
-                        >
                     </div>
-                </div>
-
-                <div
-                    v-if="filteredEntrepreneurs.length"
-                    class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
-                >
-                    <article
-                        v-for="item in filteredEntrepreneurs"
-                        :key="item.id"
-                        class="rounded-[24px] bg-white p-5"
-                    >
-                        <div class="flex items-start gap-4">
-                            <div class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#CAF0F8] font-black text-[#0077B6]">
-                                <img
-                                    v-if="item.logoUrl"
-                                    :src="item.logoUrl"
-                                    :alt="item.businessName"
-                                    class="h-full w-full object-cover"
-                                >
-                                <span v-else>
-                                    {{ item.businessName.charAt(0).toUpperCase() }}
-                                </span>
-                            </div>
-
-                            <div class="min-w-0 flex-1">
-                                <h2 class="truncate font-black text-gray-700">
-                                    {{ item.businessName }}
-                                </h2>
-                                <p class="mt-1 truncate text-xs text-gray-400">
-                                    {{ item.district || item.department || "Ubicación no registrada" }}
-                                </p>
-                                <p class="mt-2 text-xs font-bold text-[#0077B6]">
-                                    {{ item.productCount === 1 ? "1 producto" : `${item.productCount} productos` }}
-                                </p>
-                            </div>
-                        </div>
-
-                        <p class="mt-4 line-clamp-3 text-sm leading-6 text-gray-400">
-                            {{ item.description || "Este emprendimiento todavía no tiene descripción." }}
-                        </p>
-
-                        <button
-                            type="button"
-                            class="mt-4 w-full rounded-xl bg-[#CAF0F8] px-4 py-3 text-sm font-black text-[#0077B6]"
-                            @click="openEntrepreneurProfile(item.id)"
-                        >
-                            Ver emprendimiento
-                        </button>
-                    </article>
-                </div>
-
-                <div
-                    v-else
-                    class="rounded-[24px] bg-white px-5 py-16 text-center"
-                >
-                    <p class="font-black text-gray-600">
-                        No encontramos emprendimientos.
-                    </p>
+                    <h3 class="mt-4 font-black text-gray-700">
+                        Tu catálogo está vacío
+                    </h3>
                     <p class="mt-1 text-sm text-gray-400">
-                        Prueba con otro nombre o ubicación.
+                        Publica tu primer producto para comenzar.
                     </p>
-                </div>
-            </section>
-        </template>
-
-        <!-- Perfil -->
-        <template v-else>
-            <section class="rounded-[28px] bg-white p-5 sm:p-7">
-                <div class="flex flex-col items-center gap-5 text-center sm:flex-row sm:text-left">
-                    <div class="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[28px] bg-[#CAF0F8] text-2xl font-black text-[#0077B6]">
-                        <img
-                            v-if="institution.logoUrl"
-                            :src="institution.logoUrl"
-                            :alt="institution.institutionName"
-                            class="h-full w-full object-cover"
-                        >
-                        <span v-else>
-                            {{ institutionInitials }}
-                        </span>
-                    </div>
-
-                    <div class="min-w-0 flex-1">
-                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                            Perfil institucional
-                        </p>
-                        <h1 class="mt-1 text-3xl font-black text-gray-700">
-                            {{ institution.institutionName }}
-                        </h1>
-                        <p class="mt-2 text-sm text-gray-400">
-                            {{ institution.email }}
-                        </p>
-                        <p class="mt-1 text-sm text-gray-400">
-                            {{ institution.phone || "Teléfono no registrado" }}
-                        </p>
-                    </div>
-
                     <button
                         type="button"
-                        class="rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-black text-white"
-                        @click="openProfileEditor"
+                        class="mt-5 rounded-xl bg-[#00B4D8] px-6 py-3 text-sm font-bold text-white"
+                        @click="openAddProduct"
                     >
-                        Editar perfil
+                        Añadir mi primer producto
                     </button>
                 </div>
-
-                <div class="mt-7 grid gap-4 md:grid-cols-2">
-                    <div class="rounded-2xl bg-[#F8FBFC] p-5">
-                        <p class="text-xs font-bold uppercase tracking-wide text-gray-400">
-                            Descripción
+            </section>
+        </section>
+        <!-- Las novedades institucionales viven en un componente independiente. -->
+        <NovedadesEmprendedor
+            v-else-if="activeSection === 'novedades'"
+        />
+    </main>
+    <!-- Menú móvil. -->
+    <nav class="fixed rounded-t-[28px] inset-x-0 bottom-0 z-50 border-t border-white/20 bg-[#00B4D8] shadow-[0_-6px_20px_rgba(0,0,0,0.12)] lg:hidden">
+        <div class="mx-auto grid max-w-lg grid-cols-4">
+            <!-- Inicio -->
+            <button
+                type="button"
+                class="flex flex-col items-center gap-1 py-2 text-white"
+                :class="activeSection === 'inicio' ? 'bg-white/15' : 'text-white/75'"
+                @click="changeSection('inicio')"
+            >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M3 11l9-8 9 8"></path>
+                    <path d="M5 10v10h14V10"></path>
+                </svg>
+                <span class="text-[9px] font-bold">
+                    Inicio
+                </span>
+            </button>
+            <!-- Inventario -->
+            <button
+                type="button"
+                class="flex flex-col items-center gap-1 py-2 text-white"
+                :class="activeSection === 'inventario' ? 'bg-white/15' : 'text-white/75'"
+                @click="changeSection('inventario')"
+            >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M4 7l8-4 8 4-8 4-8-4z"></path>
+                    <path d="M4 7v10l8 4 8-4V7"></path>
+                </svg>
+                <span class="text-[9px] font-bold">
+                    Inventario
+                </span>
+            </button>
+            <!-- Novedades -->
+            <button
+                type="button"
+                class="flex flex-col items-center gap-1 py-2 text-white"
+                :class="activeSection === 'novedades' ? 'bg-white/15' : 'text-white/75'"
+                @click="changeSection('novedades')"
+            >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path>
+                </svg>
+                <span class="text-[9px] font-bold">
+                    Novedades
+                </span>
+            </button>
+            <!-- Calculadora -->
+            <button
+                type="button"
+                class="flex flex-col items-center gap-1 py-2 text-white"
+                :class="activeSection === 'calculadora' ? 'bg-white/15' : 'text-white/75'"
+                @click="changeSection('calculadora')"
+            >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <rect x="5" y="3" width="14" height="18" rx="2"></rect>
+                    <path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"></path>
+                </svg>
+                <span class="text-[9px] font-bold">
+                    Calculadora
+                </span>
+            </button>
+        </div>
+    </nav>
+    <!-- Seguidores. -->
+    <Teleport to="body">
+        <div
+            v-if="showFollowersModal"
+            class="fixed inset-0 z-[130] flex items-end justify-center bg-black/50 sm:items-center sm:p-5"
+            @click.self="closeFollowersModal"
+        >
+            <section class="max-h-[85vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[520px] sm:rounded-[28px]">
+                <!-- Cabecera -->
+                <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
+                            Comunidad
                         </p>
-                        <p class="mt-2 whitespace-pre-line text-sm leading-6 text-gray-500">
-                            {{ institution.description || "Sin descripción institucional." }}
+                        <h2 class="text-lg font-black text-gray-700">
+                            Seguidores
+                        </h2>
+                        <p class="mt-0.5 text-xs text-gray-400">
+                            {{ followerCountText }}
                         </p>
                     </div>
-
-                    <div class="rounded-2xl bg-[#F8FBFC] p-5">
-                        <p class="text-xs font-bold uppercase tracking-wide text-gray-400">
-                            Información
-                        </p>
-                        <p class="mt-2 text-sm text-gray-500">
-                            {{ institution.district || institution.department || "Ubicación no registrada" }}
-                        </p>
-                        <a
-                            v-if="institution.website"
-                            :href="institution.website"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="mt-2 block truncate text-sm font-bold text-[#0077B6]"
+                    <button
+                        type="button"
+                        class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
+                        @click="closeFollowersModal"
+                    >
+                        ×
+                    </button>
+                </div>
+                <!-- Cargando -->
+                <div
+                    v-if="followersLoading"
+                    class="px-5 py-14 text-center"
+                >
+                    <div class="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div>
+                    <p class="mt-3 text-sm font-semibold text-gray-400">
+                        Cargando seguidores...
+                    </p>
+                </div>
+                <!-- Sin seguidores -->
+                <div
+                    v-else-if="!followers.length"
+                    class="px-5 py-14 text-center"
+                >
+                    <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#CAF0F8] text-[#0077B6]">
+                        <svg
+                            class="h-7 w-7"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.8"
+                            viewBox="0 0 24 24"
                         >
-                            {{ institution.website }}
-                        </a>
+                            <circle cx="9" cy="8" r="3"></circle>
+                            <circle cx="17" cy="9" r="2"></circle>
+                            <path stroke-linecap="round" d="M3 20a6 6 0 0112 0M14 20a4 4 0 018 0"></path>
+                        </svg>
+                    </div>
+                    <h3 class="mt-4 font-black text-gray-700">
+                        Aún no tienes seguidores
+                    </h3>
+                    <p class="mt-1 text-sm text-gray-400">
+                        Aquí aparecerán las personas que sigan tu emprendimiento.
+                    </p>
+                </div>
+                <!-- Lista de seguidores -->
+                <div
+                    v-else
+                    class="divide-y divide-gray-100 px-5 py-2"
+                >
+                    <div
+                        v-for="follower in followers"
+                        :key="follower.id"
+                        class="flex items-center gap-3 py-3"
+                    >
+                        <img
+                            v-if="follower.avatarUrl"
+                            :src="follower.avatarUrl"
+                            :alt="follower.fullName"
+                            class="h-11 w-11 shrink-0 rounded-full border border-gray-100 object-cover"
+                        >
+                        <div
+                            v-else
+                            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#CAF0F8] text-xs font-black text-[#0077B6]"
+                        >
+                            {{ followerInitials(follower.fullName) }}
+                        </div>
+                        <div class="min-w-0">
+                            <p class="truncate text-sm font-bold text-gray-700">
+                                {{ follower.fullName }}
+                            </p>
+                            <p class="text-xs text-gray-400">
+                                Sigue tu emprendimiento
+                            </p>
+                        </div>
                     </div>
                 </div>
-
-                <button
-                    type="button"
-                    :disabled="logoutLoading"
-                    class="mt-7 w-full rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-bold text-red-600 sm:w-auto"
-                    @click="logout"
-                >
-                    {{ logoutLoading ? "Cerrando..." : "Cerrar sesión" }}
-                </button>
             </section>
-        </template>
-    </main>
-
-    <!-- Navegación móvil -->
-    <nav class="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 rounded-t-[28px] bg-white px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_30px_rgba(79,113,128,0.12)] lg:hidden">
-        <button
-            type="button"
-            class="flex flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-bold"
-            :class="activeSection === 'inicio' ? 'bg-[#CAF0F8] text-[#0077B6]' : 'text-gray-400'"
-            @click="changeSection('inicio')"
-        >
-            Inicio
-        </button>
-
-        <button
-            type="button"
-            class="flex flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-bold"
-            :class="activeSection === 'publicaciones' ? 'bg-[#CAF0F8] text-[#0077B6]' : 'text-gray-400'"
-            @click="changeSection('publicaciones')"
-        >
-            Publicaciones
-        </button>
-
-        <button
-            type="button"
-            class="flex flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-bold"
-            :class="activeSection === 'emprendedores' ? 'bg-[#CAF0F8] text-[#0077B6]' : 'text-gray-400'"
-            @click="changeSection('emprendedores')"
-        >
-            Emprendedores
-        </button>
-
-        <button
-            type="button"
-            class="flex flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-bold"
-            :class="activeSection === 'perfil' ? 'bg-[#CAF0F8] text-[#0077B6]' : 'text-gray-400'"
-            @click="changeSection('perfil')"
-        >
-            Perfil
-        </button>
-    </nav>
-
-    <!-- Editor de perfil -->
+        </div>
+    </Teleport>
+    <!-- Editar perfil. -->
     <Teleport to="body">
         <div
             v-if="showProfileEditor"
-            class="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-3 sm:p-6"
+            class="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 sm:items-center sm:p-5"
             @click.self="closeProfileEditor"
         >
-            <section class="max-h-[94vh] w-full max-w-2xl overflow-y-auto rounded-[28px] bg-white">
+            <section class="max-h-[92vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[620px] sm:rounded-[28px]">
                 <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
                     <div>
-                        <p class="text-xs font-bold uppercase tracking-wide text-[#00B4D8]">
-                            Cuenta institucional
+                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
+                            Mi emprendimiento
                         </p>
-                        <h2 class="text-xl font-black text-gray-700">
+                        <h2 class="text-lg font-black text-gray-700">
                             Editar perfil
                         </h2>
                     </div>
-
                     <button
                         type="button"
-                        class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500"
+                        class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
                         @click="closeProfileEditor"
                     >
                         ×
                     </button>
                 </div>
-
-                <form class="space-y-5 p-5 sm:p-7" @submit.prevent="saveProfile">
-                    <div class="flex flex-col items-center gap-4 sm:flex-row">
-                        <div class="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[26px] bg-[#CAF0F8] font-black text-[#0077B6]">
+                <form
+                    class="space-y-5 p-5 sm:p-7"
+                    @submit.prevent="saveProfile"
+                >
+                    <!-- Foto -->
+                    <div>
+                        <label class="mb-3 block text-sm font-bold text-gray-600">
+                            Foto del emprendimiento
+                        </label>
+                        <div class="flex flex-col items-center gap-4 sm:flex-row">
                             <img
                                 v-if="profileLogoPreview"
                                 :src="profileLogoPreview"
-                                alt="Vista previa del logo"
-                                class="h-full w-full object-cover"
+                                alt="Foto del emprendimiento"
+                                class="h-24 w-24 rounded-full border-4 border-[#CAF0F8] object-cover"
                             >
-                            <span v-else>
-                                {{ institutionInitials }}
-                            </span>
+                            <div
+                                v-else
+                                class="flex h-24 w-24 items-center justify-center rounded-full bg-[#CAF0F8] text-xl font-black text-[#0077B6]"
+                            >
+                                {{ entrepreneurInitials }}
+                            </div>
+                            <label class="cursor-pointer rounded-xl border border-[#00B4D8] px-4 py-2.5 text-sm font-bold text-[#0077B6] hover:bg-[#CAF0F8]">
+                                Cambiar foto
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    class="hidden"
+                                    @change="handleProfileLogo"
+                                >
+                            </label>
                         </div>
-
-                        <label class="w-full cursor-pointer rounded-2xl border border-dashed border-[#00B4D8] bg-[#F8FBFC] px-4 py-4 text-center text-sm font-bold text-[#0077B6]">
-                            Seleccionar logo
-                            <input
-                                type="file"
-                                accept="image/*"
-                                class="hidden"
-                                @change="handleProfileLogo"
-                            >
-                        </label>
                     </div>
-
+                    <!-- Nombre -->
                     <div>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                            Nombre de la institución
+                            Nombre del emprendimiento
                         </label>
                         <input
-                            v-model="profileForm.institutionName"
+                            v-model="profileForm.businessName"
                             required
                             type="text"
                             class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         >
                     </div>
-
+                    <!-- Datos generales de la cuenta, iguales al perfil del cliente. -->
                     <div>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
                             Correo electrónico
                         </label>
                         <input
-                            :value="institution.email"
+                            :value="entrepreneur?.email"
                             disabled
                             type="email"
-                            class="w-full cursor-not-allowed rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-gray-400"
+                            class="w-full cursor-not-allowed rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-gray-400 outline-none"
                         >
+                        <p class="mt-1 text-xs text-gray-400">
+                            El correo pertenece a tu cuenta de acceso.
+                        </p>
                     </div>
 
                     <div>
@@ -2560,30 +1739,19 @@ onBeforeUnmount(function () {
                             class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         >
                     </div>
-
-                    <div>
-                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                            Sitio web
-                        </label>
-                        <input
-                            v-model="profileForm.website"
-                            type="url"
-                            placeholder="https://..."
-                            class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                        >
-                    </div>
-
+                    <!-- Descripción -->
                     <div>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
                             Descripción
                         </label>
                         <textarea
                             v-model="profileForm.description"
-                            rows="5"
+                            required
+                            rows="4"
                             class="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         ></textarea>
                     </div>
-
+                    <!-- Ubicación -->
                     <div class="grid gap-4 sm:grid-cols-2">
                         <div>
                             <label class="mb-1.5 block text-sm font-bold text-gray-600">
@@ -2591,11 +1759,9 @@ onBeforeUnmount(function () {
                             </label>
                             <select
                                 v-model="profileForm.department"
+                                required
                                 class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 outline-none focus:border-[#00B4D8]"
                             >
-                                <option value="">
-                                    Seleccionar
-                                </option>
                                 <option
                                     v-for="department in departments"
                                     :key="department"
@@ -2605,85 +1771,54 @@ onBeforeUnmount(function () {
                                 </option>
                             </select>
                         </div>
-
                         <div>
                             <label class="mb-1.5 block text-sm font-bold text-gray-600">
                                 Distrito
                             </label>
                             <input
                                 v-model="profileForm.district"
+                                required
                                 type="text"
                                 class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                             >
                         </div>
                     </div>
-
+                    <!-- Contraseña -->
                     <div class="border-t border-gray-100 pt-5">
                         <h3 class="font-black text-gray-700">
                             Cambiar contraseña
                         </h3>
                         <p class="mt-1 text-xs text-gray-400">
-                            Deja estos campos vacíos para conservar la contraseña actual.
+                            Deja estos campos vacíos si no deseas cambiarla.
                         </p>
-
                         <div class="mt-4 space-y-3">
-                            <div class="relative">
-                                <input
-                                    v-model="currentPassword"
-                                    :type="showCurrentPassword ? 'text' : 'password'"
-                                    autocomplete="current-password"
-                                    placeholder="Contraseña actual"
-                                    class="w-full rounded-xl border border-gray-200 px-4 py-3 pr-12 outline-none focus:border-[#00B4D8]"
-                                >
-                                <button
-                                    type="button"
-                                    class="absolute inset-y-0 right-0 px-4 text-xs font-bold text-gray-400"
-                                    @click="showCurrentPassword = !showCurrentPassword"
-                                >
-                                    Ver
-                                </button>
-                            </div>
-
-                            <div class="relative">
-                                <input
-                                    v-model="newPassword"
-                                    :type="showNewPassword ? 'text' : 'password'"
-                                    autocomplete="new-password"
-                                    placeholder="Nueva contraseña"
-                                    class="w-full rounded-xl border border-gray-200 px-4 py-3 pr-12 outline-none focus:border-[#00B4D8]"
-                                >
-                                <button
-                                    type="button"
-                                    class="absolute inset-y-0 right-0 px-4 text-xs font-bold text-gray-400"
-                                    @click="showNewPassword = !showNewPassword"
-                                >
-                                    Ver
-                                </button>
-                            </div>
-
-                            <div class="relative">
-                                <input
-                                    v-model="confirmNewPassword"
-                                    :type="showConfirmPassword ? 'text' : 'password'"
-                                    autocomplete="new-password"
-                                    placeholder="Confirmar nueva contraseña"
-                                    class="w-full rounded-xl border border-gray-200 px-4 py-3 pr-12 outline-none focus:border-[#00B4D8]"
-                                >
-                                <button
-                                    type="button"
-                                    class="absolute inset-y-0 right-0 px-4 text-xs font-bold text-gray-400"
-                                    @click="showConfirmPassword = !showConfirmPassword"
-                                >
-                                    Ver
-                                </button>
-                            </div>
+                            <input
+                                v-model="currentPassword"
+                                :type="showCurrentPassword ? 'text' : 'password'"
+                                autocomplete="current-password"
+                                placeholder="Contraseña actual"
+                                class="password-field w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                            >
+                            <input
+                                v-model="newPassword"
+                                :type="showNewPassword ? 'text' : 'password'"
+                                autocomplete="new-password"
+                                placeholder="Nueva contraseña"
+                                class="password-field w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                            >
+                            <input
+                                v-model="confirmNewPassword"
+                                :type="showConfirmPassword ? 'text' : 'password'"
+                                autocomplete="new-password"
+                                placeholder="Confirmar nueva contraseña"
+                                class="password-field w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                            >
                         </div>
                     </div>
-
                     <button
                         type="submit"
                         :disabled="profileSaving"
-                        class="w-full rounded-xl bg-[#00B4D8] px-5 py-3.5 text-sm font-black text-white disabled:opacity-60"
+                        class="w-full rounded-xl bg-[#00B4D8] px-5 py-3 font-bold text-white disabled:opacity-50"
                     >
                         {{ profileSaving ? "Guardando..." : "Guardar cambios" }}
                     </button>
@@ -2691,379 +1826,249 @@ onBeforeUnmount(function () {
             </section>
         </div>
     </Teleport>
-
-    <!-- Editor de publicación -->
+    <!-- Crear / editar producto. -->
     <Teleport to="body">
         <div
-            v-if="showPostEditor"
-            class="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-3 sm:p-6"
-            @click.self="closePostEditor"
+            v-if="showProductEditor"
+            class="fixed inset-0 z-[110] flex items-end justify-center bg-black/50 sm:items-center sm:p-5"
+            @click.self="closeProductEditor"
         >
-            <section class="max-h-[95vh] w-full max-w-4xl overflow-y-auto rounded-[28px] bg-white">
-                <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
+            <section class="max-h-[94vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[700px] sm:rounded-[28px]">
+                <div class="sticky top-0 z-20 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
                     <div>
-                        <p class="text-xs font-bold uppercase tracking-wide text-[#00B4D8]">
-                            Contenido institucional
+                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
+                            Mi catálogo
                         </p>
-                        <h2 class="text-xl font-black text-gray-700">
-                            {{ postEditorTitle }}
+                        <h2 class="text-lg font-black text-gray-700">
+                            {{ productEditorTitle }}
                         </h2>
                     </div>
-
                     <button
                         type="button"
-                        class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500"
-                        @click="closePostEditor"
+                        class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
+                        @click="closeProductEditor"
                     >
                         ×
                     </button>
                 </div>
-
-                <form class="space-y-5 p-5 sm:p-7" @submit.prevent="savePost">
+                <form
+                    class="space-y-5 p-5 sm:p-7"
+                    @submit.prevent="saveProduct"
+                >
+                    <!-- Fotografías -->
                     <div>
-                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                            Título
+                        <label class="block text-sm font-bold text-gray-600">
+                            Fotografías
                         </label>
-                        <input
-                            v-model="postForm.title"
-                            required
-                            maxlength="160"
-                            type="text"
-                            placeholder="Ejemplo: Taller de marketing digital"
-                            class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                        >
-                    </div>
-
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <div>
-                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                                Tipo
-                            </label>
-                            <select
-                                v-model="postForm.postType"
-                                class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 outline-none focus:border-[#00B4D8]"
-                            >
-                                <option
-                                    v-for="type in postTypes"
-                                    :key="type.value"
-                                    :value="type.value"
-                                >
-                                    {{ type.label }}
-                                </option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                                Estado
-                            </label>
-                            <select
-                                v-model="postForm.status"
-                                class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 outline-none focus:border-[#00B4D8]"
-                            >
-                                <option value="draft">
-                                    Borrador
-                                </option>
-                                <option value="published">
-                                    Publicado
-                                </option>
-                                <option value="archived">
-                                    Archivado
-                                </option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                            Descripción
-                        </label>
-                        <textarea
-                            v-model="postForm.description"
-                            required
-                            rows="7"
-                            maxlength="5000"
-                            placeholder="Escribe toda la información que necesitan conocer los emprendedores..."
-                            class="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                        ></textarea>
-                    </div>
-
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <div>
-                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                                Ubicación
-                            </label>
-                            <input
-                                v-model="postForm.location"
-                                type="text"
-                                placeholder="Lugar del evento o taller"
-                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                            >
-                        </div>
-
-                        <div>
-                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                                Enlace externo
-                            </label>
-                            <input
-                                v-model="postForm.externalUrl"
-                                type="url"
-                                placeholder="https://..."
-                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                            >
-                        </div>
-                    </div>
-
-                    <div class="grid gap-4 md:grid-cols-3">
-                        <div>
-                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                                Inicio del evento
-                            </label>
-                            <input
-                                v-model="postForm.eventDate"
-                                type="datetime-local"
-                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                            >
-                        </div>
-
-                        <div>
-                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                                Finalización
-                            </label>
-                            <input
-                                v-model="postForm.eventEndDate"
-                                type="datetime-local"
-                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                            >
-                        </div>
-
-                        <div>
-                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                                Fecha límite
-                            </label>
-                            <input
-                                v-model="postForm.deadline"
-                                type="datetime-local"
-                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                            >
-                        </div>
-                    </div>
-
-                    <div>
-                        <div class="flex items-end justify-between gap-3">
-                            <div>
-                                <label class="block text-sm font-bold text-gray-600">
-                                    Imágenes
-                                </label>
-                                <p class="mt-1 text-xs text-gray-400">
-                                    Máximo 6 imágenes de 5 MB cada una.
-                                </p>
-                            </div>
-
-                            <label class="cursor-pointer rounded-xl bg-[#CAF0F8] px-4 py-2.5 text-xs font-black text-[#0077B6]">
-                                Agregar imágenes
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    multiple
-                                    class="hidden"
-                                    @change="handlePostImages"
-                                >
-                            </label>
-                        </div>
-
+                        <p class="mt-1 text-xs text-gray-400">
+                            La primera fotografía será la portada del producto.
+                        </p>
                         <div
                             v-if="editorImages.length"
-                            class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3"
+                            class="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4"
                         >
                             <div
                                 v-for="(image, index) in editorImages"
-                                :key="image.id || image.previewUrl"
-                                class="overflow-hidden rounded-2xl border border-gray-100 bg-[#F8FBFC]"
+                                :key="image.id || image.key"
+                                class="relative overflow-hidden rounded-xl bg-gray-100"
                             >
-                                <div class="aspect-[4/3]">
-                                    <img
-                                        :src="image.kind === 'existing' ? image.imageUrl : image.previewUrl"
-                                        alt="Imagen de la publicación"
-                                        class="h-full w-full object-cover"
-                                    >
-                                </div>
-
-                                <div class="grid grid-cols-3 gap-1 p-2">
+                                <img
+                                    :src="image.preview"
+                                    alt="Producto"
+                                    class="aspect-square w-full object-cover"
+                                >
+                                <span
+                                    v-if="index === 0"
+                                    class="absolute bottom-1 left-1 rounded-full bg-[#00B4D8] px-2 py-1 text-[9px] font-bold text-white"
+                                >
+                                    Portada
+                                </span>
+                                <div class="absolute right-1 top-1 flex gap-1">
                                     <button
+                                        v-if="index !== 0"
                                         type="button"
-                                        class="rounded-lg bg-white py-2 text-xs font-bold text-gray-500"
-                                        @click="moveEditorImage(index, -1)"
+                                        title="Hacer portada"
+                                        class="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-[#0077B6] shadow"
+                                        @click="makeProductImageCover(index)"
                                     >
-                                        ←
+                                        ★
                                     </button>
                                     <button
                                         type="button"
-                                        class="rounded-lg bg-white py-2 text-xs font-bold text-gray-500"
-                                        @click="moveEditorImage(index, 1)"
-                                    >
-                                        →
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="rounded-lg bg-red-50 py-2 text-xs font-bold text-red-600"
-                                        @click="removeEditorImage(index)"
+                                        title="Eliminar"
+                                        class="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white"
+                                        @click="removeProductImage(index)"
                                     >
                                         ×
                                     </button>
                                 </div>
                             </div>
                         </div>
-
-                        <div
-                            v-else
-                            class="mt-4 rounded-2xl border border-dashed border-gray-200 px-4 py-10 text-center text-sm font-semibold text-gray-400"
+                        <label class="mt-4 flex cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-[#90E0EF] bg-[#F7FCFD] px-4 py-5 text-sm font-bold text-[#0077B6] transition hover:bg-[#CAF0F8]">
+                            Añadir fotografías
+                            <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                class="hidden"
+                                @change="handleProductImages"
+                            >
+                        </label>
+                    </div>
+                    <!-- Nombre -->
+                    <div>
+                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                            Nombre del producto
+                        </label>
+                        <input
+                            v-model="productForm.name"
+                            required
+                            type="text"
+                            placeholder="Ejemplo: Muñeco tejido personalizado"
+                            class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         >
-                            Todavía no has agregado imágenes.
+                    </div>
+                    <!-- Categorías múltiples -->
+                    <div class="relative">
+                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                            Categorías
+                        </label>
+                        <button
+                            type="button"
+                            class="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 text-left text-sm outline-none hover:border-[#00B4D8]"
+                            @click="showCategoryDropdown = !showCategoryDropdown"
+                        >
+                            <span
+                                :class="
+                                    productForm.categories.length
+                                        ? 'text-gray-600'
+                                        : 'text-gray-400'
+                                "
+                            >
+                                {{
+                                    productForm.categories.length
+                                        ? `${productForm.categories.length} categorías seleccionadas`
+                                        : "Seleccionar categorías"
+                                }}
+                            </span>
+                            <span class="text-gray-400">
+                                ▼
+                            </span>
+                        </button>
+                        <div
+                            v-if="showCategoryDropdown"
+                            class="absolute left-0 right-0 z-30 mt-2 max-h-64 overflow-y-auto rounded-2xl border border-gray-100 bg-white p-2 shadow-xl"
+                        >
+                            <button
+                                v-for="category in productCategories"
+                                :key="category"
+                                type="button"
+                                class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition hover:bg-[#F1FAFC]"
+                                @click="toggleCategory(category)"
+                            >
+                                <span
+                                    class="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border"
+                                    :class="
+                                        isCategorySelected(category)
+                                            ? 'border-[#00B4D8] bg-[#00B4D8] text-white'
+                                            : 'border-gray-300'
+                                    "
+                                >
+                                    <span v-if="isCategorySelected(category)">
+                                        ✓
+                                    </span>
+                                </span>
+                                {{ category }}
+                            </button>
+                        </div>
+                        <!-- Categorías seleccionadas -->
+                        <div
+                            v-if="productForm.categories.length"
+                            class="mt-3 flex flex-wrap gap-2"
+                        >
+                            <button
+                                v-for="category in productForm.categories"
+                                :key="category"
+                                type="button"
+                                class="rounded-full bg-[#CAF0F8] px-3 py-1.5 text-xs font-bold text-[#0077B6]"
+                                @click="toggleCategory(category)"
+                            >
+                                {{ category }} ×
+                            </button>
                         </div>
                     </div>
-
+                    <!-- Precio y stock -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                                Precio
+                            </label>
+                            <input
+                                v-model.number="productForm.price"
+                                required
+                                min="0"
+                                step="0.01"
+                                type="number"
+                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                            >
+                        </div>
+                        <div>
+                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                                Stock
+                            </label>
+                            <input
+                                v-model.number="productForm.stock"
+                                required
+                                min="0"
+                                type="number"
+                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                            >
+                        </div>
+                    </div>
+                    <!-- Descripción -->
+                    <div>
+                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
+                            Descripción
+                        </label>
+                        <textarea
+                            v-model="productForm.description"
+                            rows="4"
+                            placeholder="Describe tu producto..."
+                            class="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
+                        ></textarea>
+                    </div>
                     <button
                         type="submit"
-                        :disabled="postSaving"
-                        class="w-full rounded-xl bg-[#00B4D8] px-5 py-3.5 text-sm font-black text-white disabled:opacity-60"
+                        :disabled="productSaving"
+                        class="w-full rounded-xl bg-[#00B4D8] px-5 py-3.5 font-bold text-white transition hover:bg-[#009CC0] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {{ postSaving ? "Guardando..." : postEditorMode === "add" ? "Crear publicación" : "Guardar cambios" }}
+                        {{
+                            productSaving
+                                ? "Guardando producto..."
+                                : productEditorMode === "add"
+                                    ? "Publicar producto"
+                                    : "Guardar cambios"
+                        }}
                     </button>
                 </form>
             </section>
         </div>
     </Teleport>
-
-    <!-- Vista previa de publicación -->
-    <Teleport to="body">
-        <div
-            v-if="showPostPreview && selectedPost"
-            class="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-3 sm:p-6"
-            @click.self="closePostPreview"
-        >
-            <section class="max-h-[94vh] w-full max-w-3xl overflow-y-auto rounded-[28px] bg-white">
-                <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
-                    <div>
-                        <p class="text-xs font-bold uppercase tracking-wide text-[#00B4D8]">
-                            Vista previa
-                        </p>
-                        <h2 class="line-clamp-1 font-black text-gray-700">
-                            {{ selectedPost.title }}
-                        </h2>
-                    </div>
-
-                    <button
-                        type="button"
-                        class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500"
-                        @click="closePostPreview"
-                    >
-                        ×
-                    </button>
-                </div>
-
-                <div
-                    v-if="selectedPost.images.length"
-                    class="grid gap-2 p-4 sm:grid-cols-2"
-                >
-                    <img
-                        v-for="image in selectedPost.images"
-                        :key="image"
-                        :src="image"
-                        :alt="selectedPost.title"
-                        class="aspect-[16/10] w-full rounded-2xl object-cover"
-                    >
-                </div>
-
-                <div class="p-5 sm:p-7">
-                    <div class="flex flex-wrap gap-2">
-                        <span class="rounded-full bg-[#CAF0F8] px-3 py-1 text-xs font-black text-[#0077B6]">
-                            {{ postTypeLabel(selectedPost.postType) }}
-                        </span>
-                        <span
-                            class="rounded-full px-3 py-1 text-xs font-black"
-                            :class="statusClasses(selectedPost.status)"
-                        >
-                            {{ statusLabel(selectedPost.status) }}
-                        </span>
-                    </div>
-
-                    <h2 class="mt-4 text-3xl font-black text-gray-700">
-                        {{ selectedPost.title }}
-                    </h2>
-
-                    <p class="mt-5 whitespace-pre-line text-sm leading-7 text-gray-500">
-                        {{ selectedPost.description }}
-                    </p>
-
-                    <div class="mt-6 grid gap-3 sm:grid-cols-2">
-                        <div
-                            v-if="selectedPost.eventDate"
-                            class="rounded-2xl bg-[#F8FBFC] p-4"
-                        >
-                            <p class="text-xs font-bold uppercase text-gray-400">
-                                Fecha
-                            </p>
-                            <p class="mt-1 text-sm font-bold text-gray-600">
-                                {{ formatDateTime(selectedPost.eventDate) }}
-                            </p>
-                        </div>
-
-                        <div
-                            v-if="selectedPost.location"
-                            class="rounded-2xl bg-[#F8FBFC] p-4"
-                        >
-                            <p class="text-xs font-bold uppercase text-gray-400">
-                                Ubicación
-                            </p>
-                            <p class="mt-1 text-sm font-bold text-gray-600">
-                                {{ selectedPost.location }}
-                            </p>
-                        </div>
-
-                        <div
-                            v-if="selectedPost.deadline"
-                            class="rounded-2xl bg-[#F8FBFC] p-4"
-                        >
-                            <p class="text-xs font-bold uppercase text-gray-400">
-                                Fecha límite
-                            </p>
-                            <p class="mt-1 text-sm font-bold text-gray-600">
-                                {{ formatDateTime(selectedPost.deadline) }}
-                            </p>
-                        </div>
-
-                        <a
-                            v-if="selectedPost.externalUrl"
-                            :href="selectedPost.externalUrl"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="flex items-center justify-center rounded-2xl bg-[#00B4D8] p-4 text-sm font-black text-white"
-                        >
-                            Abrir enlace
-                        </a>
-                    </div>
-
-                    <div class="mt-6 grid grid-cols-2 gap-3">
-                        <button
-                            type="button"
-                            class="rounded-xl bg-[#CAF0F8] px-4 py-3 text-sm font-black text-[#0077B6]"
-                            @click="closePostPreview(); openEditPost(selectedPost)"
-                        >
-                            Editar
-                        </button>
-
-                        <button
-                            type="button"
-                            class="rounded-xl border border-red-200 px-4 py-3 text-sm font-black text-red-600"
-                            @click="closePostPreview(); deletePost(selectedPost)"
-                        >
-                            Eliminar
-                        </button>
-                    </div>
-                </div>
-            </section>
-        </div>
-    </Teleport>
 </div>
 </template>
+<style scoped>
+.password-field::-ms-reveal,
+.password-field::-ms-clear {
+    display: none;
+    width: 0;
+    height: 0;
+}
+/* Evita que el texto largo desborde las tarjetas. */
+.line-clamp-2 {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+}
+</style>
