@@ -2182,7 +2182,7 @@ onBeforeUnmount(function () {
     </main>
 
     <!-- Menú móvil. -->
-    <nav class="fixed inset-x-0 bottom-0 z-50 bg-[#00B4D8] shadow-[0_-4px_15px_rgba(0,0,0,0.10)] lg:hidden">
+    <nav class="fixed rounded-t-[28px] inset-x-0 bottom-0 z-50 bg-[#00B4D8] shadow-[0_-4px_15px_rgba(0,0,0,0.10)] lg:hidden">
         <div class="mx-auto grid max-w-md grid-cols-4">
             <button
                 type="button"
