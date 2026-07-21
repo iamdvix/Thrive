@@ -1,10 +1,5 @@
-// Router principal de Thrive.
-import {
-    createRouter,
-    createWebHashHistory
-} from "vue-router";
+import { createRouter, createWebHistory } from "vue-router";
 
-// Vistas principales.
 import Home from "../views/Home.vue";
 import Auth from "../views/Auth.vue";
 import Catalogo from "../views/Catalogo.vue";
@@ -12,81 +7,62 @@ import DashboardEmprendedor from "../views/DashboardEmprendedor.vue";
 import PerfilEmprendedor from "../views/PerfilEmprendedor.vue";
 import DetalleProducto from "../views/DetalleProducto.vue";
 import Calculadora from "../views/Calculadora.vue";
+import Inventario from "../views/Inventario.vue";
 
 const routes = [
-    // Página principal.
     {
         path: "/",
         name: "Home",
         component: Home
     },
-
-    // Inicio de sesión y registro.
     {
         path: "/auth",
         name: "Auth",
         component: Auth
     },
-
-    // Catálogo principal para clientes.
     {
         path: "/catalogo",
         name: "Catalogo",
         component: Catalogo
     },
-
-    // Panel privado del emprendedor.
     {
         path: "/dashboard-emprendedor",
         name: "DashboardEmprendedor",
         component: DashboardEmprendedor
     },
-
-    // Perfil público de un emprendimiento.
     {
         path: "/emprendedor/:id",
         name: "PerfilEmprendedor",
-        component: PerfilEmprendedor,
-        props: true
+        component: PerfilEmprendedor
     },
-
-    // Vista independiente con el detalle del producto y reseñas.
     {
         path: "/producto/:id",
         name: "DetalleProducto",
-        component: DetalleProducto,
-        props: true
+        component: DetalleProducto
     },
 
-    // Si alguien entra a una dirección que no existe,
-    // lo enviamos nuevamente a la página principal.
+    // Herramientas independientes del panel del emprendedor.
+    {
+        path: "/inventario",
+        name: "Inventario",
+        component: Inventario
+    },
+    {
+        path: "/calculadora",
+        name: "Calculadora",
+        component: Calculadora
+    },
+
+    // Si se escribe una ruta inexistente, volvemos al inicio.
     {
         path: "/:pathMatch(.*)*",
         redirect: "/"
-    },
-    {
-    path: "/calculadora",
-    name: "Calculadora",
-    component: Calculadora
     }
 ];
 
 const router = createRouter({
-    /*
-        Usamos Hash History para evitar problemas
-        al recargar rutas internas en GitHub Pages.
-    */
-    history: createWebHashHistory(),
-
-    routes,
-
-    // Al cambiar de pantalla comenzamos desde arriba.
-    scrollBehavior() {
-        return {
-            top: 0,
-            left: 0
-        };
-    }
+    history: createWebHistory(import.meta.env.BASE_URL),
+    routes
 });
 
 export default router;

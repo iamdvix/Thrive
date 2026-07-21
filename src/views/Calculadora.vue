@@ -19,7 +19,7 @@ const variableCostPerUnit = ref(0);
 const unitsToCalculate = ref(0);
 const advertisingCost = ref(0);
 const otherFixedCosts = ref(0);
-const taxRate = ref(13);
+const taxRate = ref(0);
 const calculated = ref(false);
 
 // Producto que se está analizando actualmente.
@@ -209,16 +209,24 @@ function resetCalculator() {
     variableCostPerUnit.value = 0;
     advertisingCost.value = 0;
     otherFixedCosts.value = 0;
-    taxRate.value = 13;
+    taxRate.value = 0;
     unitsToCalculate.value = currentStock.value;
     calculated.value = false;
 }
 
-// Desde la calculadora regresamos al dashboard y abrimos directamente la sección elegida.
+// Mantiene conectadas las tres áreas principales del panel del emprendedor.
 function goDashboardSection(section) {
     if (section === "calculadora") return;
+
+    // Inventario ahora tiene su propia página.
+    if (section === "inventario") {
+        router.push({ name: "Inventario" });
+        return;
+    }
+
+    // Inicio y Novedades siguen viviendo dentro del dashboard.
     sessionStorage.setItem("thriveDashboardSection", section);
-    router.back();
+    router.push({ name: "DashboardEmprendedor" });
 }
 
 async function loadCalculator() {

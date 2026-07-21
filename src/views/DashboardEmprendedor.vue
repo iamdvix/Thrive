@@ -145,13 +145,20 @@ function stockText(stock) {
     if (amount === 1) return "1 unidad";
     return `${amount} unidades`;
 }
-// Cambia la sección visible del dashboard o abre la calculadora en su propia página.
+// Cambia la sección visible o abre las herramientas que tienen su propia página.
 function changeSection(section) {
-    // La calculadora tiene su propia vista para aprovechar mejor el espacio.
-    if (section === "calculadora") {
-        router.push("/calculadora");
+    // Inventario tiene su propia vista para gestionar stock y pedidos.
+    if (section === "inventario") {
+        router.push({ name: "Inventario" });
         return;
     }
+
+    // La calculadora también funciona como una vista independiente.
+    if (section === "calculadora") {
+        router.push({ name: "Calculadora" });
+        return;
+    }
+
     activeSection.value = section;
     window.scrollTo({
         top: 0,
@@ -1144,12 +1151,13 @@ function handleEscape(event) {
     }
 }
 onMounted(function () {
-    // Si regresamos desde la calculadora, abrimos directamente la sección elegida allí.
+    // Al regresar desde Inventario o Calculadora podemos volver directamente a Inicio o Novedades.
     const pendingSection = sessionStorage.getItem("thriveDashboardSection");
-    if (["inicio", "inventario", "novedades"].includes(pendingSection)) {
+    if (["inicio", "novedades"].includes(pendingSection)) {
         activeSection.value = pendingSection;
         sessionStorage.removeItem("thriveDashboardSection");
     }
+
     loadDashboard();
     document.addEventListener(
         "keydown",
