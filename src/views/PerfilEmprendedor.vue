@@ -16,6 +16,10 @@ const isFollowing = ref(false);
 const followLoading = ref(false);
 const followerCount = ref(0);
 
+// Identificamos quién está viendo el perfil para usar el sistema correcto.
+const viewerUserId = ref("");
+const viewerType = ref("");
+
 const entrepreneurId = computed(function () {
     return String(route.params.id || "");
 });
@@ -38,6 +42,15 @@ const followerCountText = computed(function () {
         : `${followerCount.value} seguidores`;
 });
 
+const canFollow = computed(function () {
+    return [
+        "cliente",
+        "institucion"
+    ].includes(
+        viewerType.value
+    );
+});
+
 function formatPrice(price) {
     return new Intl.NumberFormat("en-US", {
         style: "currency",
@@ -51,6 +64,44 @@ function goBack() {
         return;
     }
     router.push("/catalogo");
+}
+
+// Carga el tipo de usuario que está viendo el emprendimiento.
+async function loadViewerContext() {
+    viewerUserId.value = "";
+    viewerType.value = "";
+
+    try {
+        const {
+            data: { user },
+            error: userError
+        } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+            return;
+        }
+
+        viewerUserId.value =
+            user.id;
+
+        const { data, error } = await supabase
+            .from("profiles")
+            .select("user_type")
+            .eq("id", user.id)
+            .maybeSingle();
+
+        if (error) {
+            throw error;
+        }
+
+        viewerType.value =
+            data?.user_type || "";
+    } catch (error) {
+        console.warn(
+            "No se pudo identificar el tipo de usuario:",
+            error
+        );
+    }
 }
 
 // Carga el perfil público y la información relacionada.
@@ -107,6 +158,9 @@ async function loadPublicProfile() {
                 entrepreneurData.logo_url || "",
             whatsapp: ""
         };
+
+        // Primero identificamos si entra un cliente o una institución.
+        await loadViewerContext();
 
         await Promise.all([
             loadProducts(id),
@@ -292,29 +346,59 @@ async function loadWhatsapp(id) {
 
 async function loadFollowState(id) {
     try {
-        const {
-            data: { user },
-            error: userError
-        } = await supabase.auth.getUser();
-
-        if (userError || !user) {
+        if (!viewerUserId.value) {
             isFollowing.value = false;
             return;
         }
 
-        const { data, error } = await supabase
-            .from("follows")
-            .select("id")
-            .eq("follower_id", user.id)
-            .eq("entrepreneur_id", id)
-            .maybeSingle();
+        /*
+            Las instituciones usan institution_follows.
+            Los clientes conservan el sistema follows que ya tenía Thrive.
+        */
+        if (viewerType.value === "institucion") {
+            const { data, error } = await supabase.rpc(
+                "is_institution_following",
+                {
+                    target_entrepreneur_id:
+                        id
+                }
+            );
 
-        if (error) {
-            throw error;
+            if (error) {
+                throw error;
+            }
+
+            isFollowing.value =
+                data === true;
+
+            return;
         }
 
-        isFollowing.value =
-            Boolean(data);
+        if (viewerType.value === "cliente") {
+            const { data, error } = await supabase
+                .from("follows")
+                .select("id")
+                .eq(
+                    "follower_id",
+                    viewerUserId.value
+                )
+                .eq(
+                    "entrepreneur_id",
+                    id
+                )
+                .maybeSingle();
+
+            if (error) {
+                throw error;
+            }
+
+            isFollowing.value =
+                Boolean(data);
+
+            return;
+        }
+
+        isFollowing.value = false;
     } catch (error) {
         console.error(
             "Error al cargar estado de follow:",
@@ -353,7 +437,8 @@ async function loadFollowerCount(id) {
 async function toggleFollow() {
     if (
         !entrepreneur.value ||
-        followLoading.value
+        followLoading.value ||
+        !canFollow.value
     ) {
         return;
     }
@@ -361,12 +446,7 @@ async function toggleFollow() {
     followLoading.value = true;
 
     try {
-        const {
-            data: { user },
-            error: userError
-        } = await supabase.auth.getUser();
-
-        if (userError || !user) {
+        if (!viewerUserId.value) {
             router.push("/auth");
             return;
         }
@@ -374,7 +454,38 @@ async function toggleFollow() {
         const id =
             entrepreneur.value.id;
 
-        if (user.id === id) {
+        /*
+            La institución sigue el emprendimiento con su propia tabla.
+            Este seguimiento funciona como una lista institucional y no
+            aumenta el contador de seguidores de clientes.
+        */
+        if (viewerType.value === "institucion") {
+            const { data, error } = await supabase.rpc(
+                "toggle_institution_follow",
+                {
+                    target_entrepreneur_id:
+                        id
+                }
+            );
+
+            if (error) {
+                throw error;
+            }
+
+            isFollowing.value =
+                data === true;
+
+            // Confirmamos inmediatamente el estado real guardado.
+            await loadFollowState(id);
+            return;
+        }
+
+        // El cliente conserva el funcionamiento original.
+        if (viewerType.value !== "cliente") {
+            return;
+        }
+
+        if (viewerUserId.value === id) {
             alert(
                 "No puedes seguir tu propio emprendimiento."
             );
@@ -387,7 +498,7 @@ async function toggleFollow() {
                 .delete()
                 .eq(
                     "follower_id",
-                    user.id
+                    viewerUserId.value
                 )
                 .eq(
                     "entrepreneur_id",
@@ -413,7 +524,7 @@ async function toggleFollow() {
             .from("follows")
             .insert({
                 follower_id:
-                    user.id,
+                    viewerUserId.value,
                 entrepreneur_id:
                     id
             });
@@ -437,7 +548,8 @@ async function toggleFollow() {
         );
 
         alert(
-            "No fue posible actualizar el seguimiento."
+            "No fue posible actualizar el seguimiento: " +
+            (error.message || "Error inesperado")
         );
     } finally {
         followLoading.value = false;
@@ -600,6 +712,7 @@ watch(
                         </span>
 
                         <button
+                            v-if="canFollow"
                             type="button"
                             :disabled="followLoading"
                             class="rounded-full border px-4 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50"
