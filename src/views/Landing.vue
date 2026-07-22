@@ -143,7 +143,7 @@ onBeforeUnmount(function () {
                     </a>
                     <!-- Esta será la futura página Productos.vue -->
                     <RouterLink
-                        to="/productos"
+                        to="/access"
                         class="rounded-xl px-5 py-3 text-base font-bold text-white/90 hover:bg-white/15 hover:text-white lg:text-[17px]"
                     >
                         Productos
@@ -163,7 +163,7 @@ onBeforeUnmount(function () {
                 </div>
                 <!-- Acceso a la futura vista Auth.vue -->
                 <RouterLink
-                    to="/auth"
+                    to="/access"
                     class="rounded-full bg-white px-6 py-3 text-sm font-extrabold text-[#0077B6] shadow-md hover:bg-[#CAF0F8] sm:text-base"
                 >
                     Comenzar
@@ -218,13 +218,13 @@ onBeforeUnmount(function () {
                         <!-- Acciones principales -->
                         <div class="mt-7 flex flex-col gap-3">
                             <RouterLink
-                                to="/auth"
+                                to="/access"
                                 class="w-full rounded-2xl bg-[#00B4D8] px-6 py-4 text-center text-base font-extrabold text-white hover:bg-[#0077B6]"
                             >
                                 Comenzar
                             </RouterLink>
                             <RouterLink
-                                to="/productos"
+                                to="/access"
                                 class="w-full rounded-2xl border border-[#90E0EF]/60 bg-white/5 px-6 py-4 text-center text-base font-bold text-[#CAF0F8] hover:bg-white/10"
                             >
                                 Explorar productos
@@ -351,13 +351,13 @@ onBeforeUnmount(function () {
                         <!-- Acciones -->
                         <div class="mt-8 flex flex-wrap gap-4">
                             <RouterLink
-                                to="/auth"
+                                to="/access"
                                 class="rounded-2xl bg-[#00B4D8] px-8 py-4 text-base font-extrabold text-white hover:bg-[#0077B6]"
                             >
                                 Comenzar
                             </RouterLink>
                             <RouterLink
-                                to="/productos"
+                                to="/access"
                                 class="rounded-2xl border border-[#90E0EF]/60 bg-white/5 px-8 py-4 text-base font-bold text-[#CAF0F8] hover:bg-white/10"
                             >
                                 Explorar productos

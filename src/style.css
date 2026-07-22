@@ -2,14 +2,12 @@
 html {
     scroll-behavior: smooth;
 }
-
 /* Eliminamos los márgenes predeterminados del navegador. */
 body {
     margin: 0;
     min-width: 320px;
     min-height: 100vh;
 }
-
 /* Permite que Vue utilice todo el ancho disponible de la pantalla. */
 #app {
     width: 100%;
@@ -21,12 +19,10 @@ body,
 #app {
     font-family: Arial, Helvetica, sans-serif;
 }
-
 /* Sobrescribe las clases font-sans que ya existen en algunas pantallas. */
 .font-sans {
     font-family: Arial, Helvetica, sans-serif !important;
 }
-
 /* Los controles de formulario utilizan la misma tipografía. */
 button,
 input,

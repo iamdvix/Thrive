@@ -241,25 +241,22 @@ async function loginUser() {
             return;
         }
         if (profile.user_type === "emprendedor") {
-            router.push("/dashboard-emprendedor");
+            router.push({ name: "BizHome" });
             return;
         }
-
         if (profile.user_type === "institucion") {
             /*
                 Las instituciones no se registran desde esta pantalla.
                 Sus cuentas son creadas previamente por los administradores
                 y desde aquí únicamente inician sesión.
             */
-            router.push("/dashboard-institucion");
+            router.push({ name: "OrgHome" });
             return;
         }
-
         if (profile.user_type === "cliente") {
-            router.push("/catalogo");
+            router.push({ name: "Catalog" });
             return;
         }
-
         alert("Tu cuenta no tiene un tipo de usuario válido.");
     } catch (error) {
         console.error("Error inesperado al iniciar sesión:", error);
@@ -378,7 +375,7 @@ async function registerClient() {
         clientPhotoName.value = "Ningún archivo seleccionado";
         clientStep.value = 1;
         // El cliente entra al catálogo con su sesión activa.
-        router.push("/catalogo");
+        router.push({ name: "Catalog" });
     } catch (error) {
         console.error(
             "Error inesperado al crear cliente:",
@@ -521,7 +518,7 @@ async function registerEntrepreneur() {
         businessLogoName.value = "Ningún archivo seleccionado";
         entrepreneurStep.value = 1;
         // Entramos directamente al panel.
-        router.push("/dashboard-emprendedor");
+        router.push({ name: "BizHome" });
     } catch (error) {
         console.error(
             "Error inesperado al crear emprendedor:",

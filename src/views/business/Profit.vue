@@ -2,17 +2,14 @@
 // Calculadora financiera del emprendedor; usa directamente el precio y stock de sus productos en Supabase.
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { supabase } from "../lib/supabaseClient";
-
+import { supabase } from "../../lib/supabaseClient";
 const router = useRouter();
-
 // Información cargada desde la cuenta actual.
 const entrepreneur = ref(null);
 const products = ref([]);
 const loading = ref(true);
 const loadError = ref("");
 const selectedProductId = ref("");
-
 // Datos editables utilizados para realizar cada estimación.
 const costPerUnit = ref(0);
 const variableCostPerUnit = ref(0);
@@ -21,94 +18,75 @@ const advertisingCost = ref(0);
 const otherFixedCosts = ref(0);
 const taxRate = ref(0);
 const calculated = ref(false);
-
 // Producto que se está analizando actualmente.
 const selectedProduct = computed(function () {
     return products.value.find(function (product) {
         return product.id === selectedProductId.value;
     }) || null;
 });
-
 const salePrice = computed(function () {
     return Number(selectedProduct.value?.price) || 0;
 });
-
 const currentStock = computed(function () {
     return Number(selectedProduct.value?.stock) || 0;
 });
-
 // Nunca se permite calcular una cantidad mayor al stock disponible.
 const calculatedUnits = computed(function () {
     const units = Math.max(Number(unitsToCalculate.value) || 0, 0);
     return Math.min(units, currentStock.value);
 });
-
 const income = computed(function () {
     return salePrice.value * calculatedUnits.value;
 });
-
 const unitVariableCost = computed(function () {
     return (Number(costPerUnit.value) || 0) + (Number(variableCostPerUnit.value) || 0);
 });
-
 const totalVariableCosts = computed(function () {
     return unitVariableCost.value * calculatedUnits.value;
 });
-
 const totalFixedCosts = computed(function () {
     return (Number(advertisingCost.value) || 0) + (Number(otherFixedCosts.value) || 0);
 });
-
 const totalTax = computed(function () {
     return income.value * ((Number(taxRate.value) || 0) / 100);
 });
-
 const totalCosts = computed(function () {
     return totalVariableCosts.value + totalFixedCosts.value + totalTax.value;
 });
-
 const estimatedProfit = computed(function () {
     return income.value - totalCosts.value;
 });
-
 // Ganancia de contribución de una unidad antes de repartir los costos fijos.
 const profitPerUnit = computed(function () {
     const taxPerUnit = salePrice.value * ((Number(taxRate.value) || 0) / 100);
     return salePrice.value - unitVariableCost.value - taxPerUnit;
 });
-
 // El margen mostrado toma en cuenta todos los costos del cálculo, incluidos los costos fijos.
 const profitMargin = computed(function () {
     if (income.value <= 0) return 0;
     return (estimatedProfit.value / income.value) * 100;
 });
-
 // Rentabilidad aproximada sobre el dinero utilizado para cubrir todos los costos.
 const profitability = computed(function () {
     if (totalCosts.value <= 0) return estimatedProfit.value > 0 ? 100 : 0;
     return (estimatedProfit.value / totalCosts.value) * 100;
 });
-
 const costPercentage = computed(function () {
     if (income.value <= 0) return 0;
     return (totalCosts.value / income.value) * 100;
 });
-
 // Cantidad mínima de unidades necesarias para cubrir los costos fijos.
 const breakEvenUnits = computed(function () {
     if (profitPerUnit.value <= 0) return 0;
     return Math.ceil(totalFixedCosts.value / profitPerUnit.value);
 });
-
 const breakEvenProgress = computed(function () {
     if (breakEvenUnits.value <= 0) return 0;
     return Math.min((calculatedUnits.value / breakEvenUnits.value) * 100, 100);
 });
-
 const inventoryValue = computed(function () {
     return salePrice.value * currentStock.value;
 });
-
 // Proyección si se vendiera todo el inventario con los mismos costos utilizados en el cálculo.
 const fullStockProfit = computed(function () {
     const stockIncome = salePrice.value * currentStock.value;
@@ -116,7 +94,6 @@ const fullStockProfit = computed(function () {
     const stockTax = stockIncome * ((Number(taxRate.value) || 0) / 100);
     return stockIncome - stockVariables - totalFixedCosts.value - stockTax;
 });
-
 // La recomendación analiza primero pérdidas, punto de equilibrio y después el margen neto real.
 const recommendation = computed(function () {
     if (!calculated.value) {
@@ -167,30 +144,25 @@ const recommendation = computed(function () {
         classes: "border-green-200 bg-green-50 text-green-700"
     };
 });
-
 function formatPrice(value) {
     return new Intl.NumberFormat("en-US", {
         style: "currency",
         currency: "USD"
     }).format(Number(value) || 0);
 }
-
 function barWidth(value) {
     return Math.min(Math.max(Number(value) || 0, 0), 100);
 }
-
 // Cambia el producto y utiliza su stock completo como estimación inicial.
 function selectProduct(product) {
     selectedProductId.value = product.id;
     unitsToCalculate.value = Number(product.stock) || 0;
     calculated.value = false;
 }
-
 function validateUnits() {
     if (unitsToCalculate.value < 0) unitsToCalculate.value = 0;
     if (unitsToCalculate.value > currentStock.value) unitsToCalculate.value = currentStock.value;
 }
-
 function calculateResults() {
     validateUnits();
     calculated.value = true;
@@ -203,7 +175,6 @@ function calculateResults() {
         }, 50);
     }
 }
-
 function resetCalculator() {
     costPerUnit.value = 0;
     variableCostPerUnit.value = 0;
@@ -213,22 +184,21 @@ function resetCalculator() {
     unitsToCalculate.value = currentStock.value;
     calculated.value = false;
 }
-
-// Mantiene conectadas las tres áreas principales del panel del emprendedor.
+// Navegación del emprendedor. Cada herramienta mantiene su propia ruta.
 function goDashboardSection(section) {
-    if (section === "calculadora") return;
-
-    // Inventario ahora tiene su propia página.
-    if (section === "inventario") {
-        router.push({ name: "Inventario" });
-        return;
+    const routeBySection = {
+        inicio: "BizHome",
+        productos: "BizProducts",
+        inventario: "BizStock",
+        pedidos: "BizOrders",
+        novedades: "BizNews",
+        calculadora: "BizProfit"
+    };
+    const routeName = routeBySection[section];
+    if (routeName && routeName !== "BizProfit") {
+        router.push({ name: routeName });
     }
-
-    // Inicio y Novedades siguen viviendo dentro del dashboard.
-    sessionStorage.setItem("thriveDashboardSection", section);
-    router.push({ name: "DashboardEmprendedor" });
 }
-
 async function loadCalculator() {
     loading.value = true;
     loadError.value = "";
@@ -238,47 +208,38 @@ async function loadCalculator() {
             loadError.value = "No se encontró una sesión activa. Inicia sesión nuevamente.";
             return;
         }
-
         const { data: entrepreneurData, error: entrepreneurError } = await supabase
             .from("entrepreneurs")
             .select("id, business_name, logo_url")
             .eq("id", user.id)
             .single();
-
         if (entrepreneurError || !entrepreneurData) {
             throw entrepreneurError || new Error("No se encontró el emprendimiento.");
         }
-
         entrepreneur.value = {
             id: entrepreneurData.id,
             businessName: entrepreneurData.business_name,
             avatar: entrepreneurData.logo_url
         };
-
         const { data: productRows, error: productError } = await supabase
             .from("products")
             .select("id, name, description, categories, price, stock, active, created_at")
             .eq("entrepreneur_id", user.id)
             .order("created_at", { ascending: false });
-
         if (productError) throw productError;
         if (!productRows?.length) {
             products.value = [];
             return;
         }
-
         const productIds = productRows.map(function (product) {
             return product.id;
         });
-
         const { data: imageRows, error: imageError } = await supabase
             .from("product_images")
             .select("product_id, image_url, sort_order")
             .in("product_id", productIds)
             .order("sort_order", { ascending: true });
-
         if (imageError) throw imageError;
-
         products.value = productRows.map(function (product) {
             const firstImage = (imageRows || []).find(function (image) {
                 return image.product_id === product.id;
@@ -294,7 +255,6 @@ async function loadCalculator() {
                 image: firstImage?.image_url || ""
             };
         });
-
         if (products.value.length) selectProduct(products.value[0]);
     } catch (error) {
         console.error("Error al cargar la calculadora:", error);
@@ -303,12 +263,10 @@ async function loadCalculator() {
         loading.value = false;
     }
 }
-
 onMounted(function () {
     loadCalculator();
 });
 </script>
-
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-10">
     <!-- Cabecera. En móvil conserva la vista de la aplicación y en laptop funciona como navbar principal. -->
@@ -333,7 +291,6 @@ onMounted(function () {
                     </svg>
                 </button>
             </div>
-
             <!-- Navbar principal para laptop -->
             <nav class="hidden items-center justify-center gap-2 rounded-[24px] bg-[#00B4D8] p-2 shadow-sm lg:flex">
                 <button type="button" class="rounded-full px-6 py-2.5 text-sm font-bold text-white/85 transition hover:bg-white/15 hover:text-white" @click="goDashboardSection('inicio')">
@@ -351,13 +308,11 @@ onMounted(function () {
             </nav>
         </div>
     </header>
-
     <!-- Estado de carga -->
     <main v-if="loading" class="mx-auto max-w-[1450px] px-5 py-24 text-center">
         <div class="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div>
         <p class="mt-4 text-sm font-semibold text-gray-400">Cargando tus productos...</p>
     </main>
-
     <!-- Error al cargar -->
     <main v-else-if="loadError" class="mx-auto max-w-[1450px] px-5 py-24 text-center">
         <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100 font-black text-red-600">!</div>
@@ -367,7 +322,6 @@ onMounted(function () {
             Intentar nuevamente
         </button>
     </main>
-
     <!-- Contenido principal -->
     <main v-else class="mx-auto max-w-[1450px] px-3 pb-10 pt-4 sm:px-5 lg:px-8 lg:pt-6">
         <section class="mb-6">
@@ -377,7 +331,6 @@ onMounted(function () {
                 Selecciona uno de tus productos y calcula una estimación utilizando su precio y stock actuales.
             </p>
         </section>
-
         <!-- Se muestra cuando todavía no hay productos registrados -->
         <section v-if="!products.length" class="rounded-[24px] bg-white px-5 py-16 text-center shadow-sm">
             <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#EAF9FC] text-[#00B4D8]">
@@ -387,10 +340,9 @@ onMounted(function () {
             </div>
             <h2 class="mt-4 text-lg font-black text-gray-700">Todavía no tienes productos</h2>
             <p class="mx-auto mt-2 max-w-md text-sm leading-relaxed text-gray-400">
-                Crea tu primer producto desde el dashboard para comenzar a calcular sus posibles ganancias.
+                Crea tu primer producto desde Productos para comenzar a calcular sus posibles ganancias.
             </p>
         </section>
-
         <template v-else>
             <!-- Selector de productos -->
             <section class="mb-6 rounded-[24px] bg-white p-5 shadow-sm sm:p-6">
@@ -415,7 +367,6 @@ onMounted(function () {
                     </button>
                 </div>
             </section>
-
             <!-- Resumen rápido del producto seleccionado -->
             <section v-if="selectedProduct" class="mb-6 grid gap-4 sm:grid-cols-3">
                 <div class="rounded-[22px] bg-white p-5 shadow-sm">
@@ -434,14 +385,12 @@ onMounted(function () {
                     <p class="mt-1 text-xs text-gray-400">Si vendieras todo al precio actual</p>
                 </div>
             </section>
-
             <div class="grid gap-6 lg:grid-cols-[380px_1fr]">
                 <!-- Formulario de costos -->
                 <section class="h-fit rounded-[24px] bg-white p-5 shadow-sm sm:p-6 lg:sticky lg:top-[88px]">
                     <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">Costos</p>
                     <h2 class="mt-1 text-xl font-black text-gray-700">Datos del cálculo</h2>
                     <p class="mt-1 text-sm text-gray-400">Completa únicamente los costos relacionados con este producto.</p>
-
                     <div class="mt-6 space-y-5">
                         <label class="block">
                             <span class="text-sm font-bold text-gray-600">Costo de fabricación por unidad</span>
@@ -450,7 +399,6 @@ onMounted(function () {
                                 <input v-model.number="costPerUnit" type="number" min="0" step="0.01" class="w-full rounded-xl border border-gray-200 bg-white py-3 pl-9 pr-4 text-sm text-gray-700 outline-none focus:border-[#00B4D8]" placeholder="0.00">
                             </div>
                         </label>
-
                         <label class="block">
                             <span class="text-sm font-bold text-gray-600">Otros costos por unidad</span>
                             <div class="relative mt-2">
@@ -458,7 +406,6 @@ onMounted(function () {
                                 <input v-model.number="variableCostPerUnit" type="number" min="0" step="0.01" class="w-full rounded-xl border border-gray-200 bg-white py-3 pl-9 pr-4 text-sm text-gray-700 outline-none focus:border-[#00B4D8]" placeholder="Empaque, materiales...">
                             </div>
                         </label>
-
                         <label class="block">
                             <div class="flex items-center justify-between gap-3">
                                 <span class="text-sm font-bold text-gray-600">Unidades a calcular</span>
@@ -467,7 +414,6 @@ onMounted(function () {
                             <input v-model.number="unitsToCalculate" type="number" min="0" :max="currentStock" class="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-700 outline-none focus:border-[#00B4D8]" @input="validateUnits">
                             <p class="mt-2 text-xs leading-relaxed text-gray-400">Por defecto utilizamos todo tu stock actual para mostrar el potencial del producto.</p>
                         </label>
-
                         <label class="block">
                             <span class="text-sm font-bold text-gray-600">Publicidad</span>
                             <div class="relative mt-2">
@@ -475,7 +421,6 @@ onMounted(function () {
                                 <input v-model.number="advertisingCost" type="number" min="0" step="0.01" class="w-full rounded-xl border border-gray-200 bg-white py-3 pl-9 pr-4 text-sm text-gray-700 outline-none focus:border-[#00B4D8]" placeholder="0.00">
                             </div>
                         </label>
-
                         <label class="block">
                             <span class="text-sm font-bold text-gray-600">Otros gastos</span>
                             <div class="relative mt-2">
@@ -483,13 +428,11 @@ onMounted(function () {
                                 <input v-model.number="otherFixedCosts" type="number" min="0" step="0.01" class="w-full rounded-xl border border-gray-200 bg-white py-3 pl-9 pr-4 text-sm text-gray-700 outline-none focus:border-[#00B4D8]" placeholder="0.00">
                             </div>
                         </label>
-
                         <label class="block">
                             <span class="text-sm font-bold text-gray-600">Impuestos o comisiones (%)</span>
                             <input v-model.number="taxRate" type="number" min="0" max="100" step="0.1" class="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-700 outline-none focus:border-[#00B4D8]">
                         </label>
                     </div>
-
                     <div class="mt-6 grid gap-2">
                         <button type="button" class="rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#0077B6]" @click="calculateResults">
                             Calcular resultados
@@ -499,7 +442,6 @@ onMounted(function () {
                         </button>
                     </div>
                 </section>
-
                 <!-- Resultados financieros -->
                 <section id="calculatorResults" class="space-y-5 scroll-mt-24">
                     <div class="rounded-[24px] bg-[#0077B6] p-6 text-white shadow-sm sm:p-8">
@@ -509,7 +451,6 @@ onMounted(function () {
                             Estimación basada en {{ calculatedUnits }} unidades de {{ selectedProduct.name }}.
                         </p>
                     </div>
-
                     <div class="grid grid-cols-2 gap-3 xl:grid-cols-4">
                         <div class="rounded-[22px] bg-white p-5 shadow-sm">
                             <p class="text-xs font-bold text-gray-400">Ganancia por unidad</p>
@@ -530,7 +471,6 @@ onMounted(function () {
                             <p class="mt-2 text-xl font-black text-gray-700">{{ calculated ? formatPrice(totalCosts) : "$0.00" }}</p>
                         </div>
                     </div>
-
                     <!-- Desglose completo -->
                     <div class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
                         <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">Resumen</p>
@@ -546,7 +486,6 @@ onMounted(function () {
                             </div>
                         </div>
                     </div>
-
                     <!-- Indicadores visuales -->
                     <div class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
                         <h2 class="text-xl font-black text-gray-700">Indicadores</h2>
@@ -571,7 +510,6 @@ onMounted(function () {
                             </div>
                         </div>
                     </div>
-
                     <!-- Punto de equilibrio y potencial del inventario -->
                     <div class="grid gap-5 md:grid-cols-2">
                         <div class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
@@ -591,7 +529,6 @@ onMounted(function () {
                             </p>
                         </div>
                     </div>
-
                     <!-- Recomendación final -->
                     <div class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
                         <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">Recomendaciones Thrive</p>
@@ -604,8 +541,7 @@ onMounted(function () {
             </div>
         </template>
     </main>
-
-    <!-- Menú móvil: se mantiene igual que en el dashboard. -->
+    <!-- Menú móvil del área de emprendimiento. -->
     <nav class="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] border-t border-white/20 bg-[#00B4D8] shadow-[0_-6px_20px_rgba(0,0,0,0.12)] lg:hidden">
         <div class="mx-auto grid max-w-lg grid-cols-4">
             <button type="button" class="flex flex-col items-center gap-1 py-2 text-white/75" @click="goDashboardSection('inicio')">

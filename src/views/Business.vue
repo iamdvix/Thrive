@@ -3,27 +3,21 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
-
 const route = useRoute();
 const router = useRouter();
-
 const entrepreneur = ref(null);
 const products = ref([]);
 const loading = ref(true);
 const loadError = ref("");
-
 const isFollowing = ref(false);
 const followLoading = ref(false);
 const followerCount = ref(0);
-
 // Identificamos quién está viendo el perfil para usar el sistema correcto.
 const viewerUserId = ref("");
 const viewerType = ref("");
-
 const entrepreneurId = computed(function () {
     return String(route.params.id || "");
 });
-
 const entrepreneurInitials = computed(function () {
     const name = entrepreneur.value?.businessName || "Thrive";
     return name
@@ -35,13 +29,11 @@ const entrepreneurInitials = computed(function () {
         })
         .join("");
 });
-
 const followerCountText = computed(function () {
     return followerCount.value === 1
         ? "1 seguidor"
         : `${followerCount.value} seguidores`;
 });
-
 const canFollow = computed(function () {
     return [
         "cliente",
@@ -50,50 +42,41 @@ const canFollow = computed(function () {
         viewerType.value
     );
 });
-
 function formatPrice(price) {
     return new Intl.NumberFormat("en-US", {
         style: "currency",
         currency: "USD"
     }).format(Number(price) || 0);
 }
-
 function goBack() {
     if (window.history.length > 1) {
         router.back();
         return;
     }
-    router.push("/catalogo");
+    router.push({ name: "Catalog" });
 }
-
 // Carga el tipo de usuario que está viendo el emprendimiento.
 async function loadViewerContext() {
     viewerUserId.value = "";
     viewerType.value = "";
-
     try {
         const {
             data: { user },
             error: userError
         } = await supabase.auth.getUser();
-
         if (userError || !user) {
             return;
         }
-
         viewerUserId.value =
             user.id;
-
         const { data, error } = await supabase
             .from("profiles")
             .select("user_type")
             .eq("id", user.id)
             .maybeSingle();
-
         if (error) {
             throw error;
         }
-
         viewerType.value =
             data?.user_type || "";
     } catch (error) {
@@ -103,23 +86,19 @@ async function loadViewerContext() {
         );
     }
 }
-
 // Carga el perfil público y la información relacionada.
 async function loadPublicProfile() {
     loading.value = true;
     loadError.value = "";
     entrepreneur.value = null;
     products.value = [];
-
     try {
         const id = entrepreneurId.value;
-
         if (!id) {
             loadError.value =
                 "El enlace del emprendimiento no es válido.";
             return;
         }
-
         const { data: entrepreneurData, error: entrepreneurError } =
             await supabase
                 .from("entrepreneurs")
@@ -133,17 +112,14 @@ async function loadPublicProfile() {
                 `)
                 .eq("id", id)
                 .maybeSingle();
-
         if (entrepreneurError) {
             throw entrepreneurError;
         }
-
         if (!entrepreneurData) {
             loadError.value =
                 "No pudimos encontrar este emprendimiento.";
             return;
         }
-
         entrepreneur.value = {
             id: entrepreneurData.id,
             businessName:
@@ -158,10 +134,8 @@ async function loadPublicProfile() {
                 entrepreneurData.logo_url || "",
             whatsapp: ""
         };
-
         // Primero identificamos si entra un cliente o una institución.
         await loadViewerContext();
-
         await Promise.all([
             loadProducts(id),
             loadFollowState(id),
@@ -173,23 +147,19 @@ async function loadPublicProfile() {
             "Error al cargar perfil público:",
             error
         );
-
         loadError.value =
             "Ocurrió un problema al cargar este emprendimiento.";
     } finally {
         loading.value = false;
     }
 }
-
 // Obtiene el promedio de reseñas de los productos del emprendimiento.
 async function loadReviewSummary(productIds) {
     if (!productIds.length) return {};
-
     const { data, error } = await supabase
         .from("product_reviews")
         .select("product_id, rating")
         .in("product_id", productIds);
-
     if (error) {
         console.error(
             "No se pudieron cargar las reseñas:",
@@ -197,9 +167,7 @@ async function loadReviewSummary(productIds) {
         );
         return {};
     }
-
     const summary = {};
-
     for (const review of data || []) {
         if (!summary[review.product_id]) {
             summary[review.product_id] = {
@@ -207,16 +175,12 @@ async function loadReviewSummary(productIds) {
                 count: 0
             };
         }
-
         summary[review.product_id].total +=
             Number(review.rating) || 0;
-
         summary[review.product_id].count += 1;
     }
-
     return summary;
 }
-
 // Carga los productos y su promedio de reseñas.
 async function loadProducts(id) {
     const { data: productRows, error: productError } =
@@ -239,20 +203,16 @@ async function loadProducts(id) {
             .order("created_at", {
                 ascending: false
             });
-
     if (productError) {
         throw productError;
     }
-
     if (!productRows?.length) {
         products.value = [];
         return;
     }
-
     const productIds = productRows.map(function (product) {
         return product.id;
     });
-
     const { data: imageRows, error: imageError } =
         await supabase
             .from("product_images")
@@ -266,14 +226,11 @@ async function loadProducts(id) {
             .order("sort_order", {
                 ascending: true
             });
-
     if (imageError) {
         throw imageError;
     }
-
     const reviewSummary =
         await loadReviewSummary(productIds);
-
     products.value = productRows.map(function (product) {
         const images = (imageRows || [])
             .filter(function (image) {
@@ -285,10 +242,8 @@ async function loadProducts(id) {
             .map(function (image) {
                 return image.image_url;
             });
-
         const reviews =
             reviewSummary[product.id];
-
         return {
             id: product.id,
             entrepreneurId:
@@ -317,7 +272,6 @@ async function loadProducts(id) {
         };
     });
 }
-
 // Carga el teléfono del emprendimiento sin exponer otros datos del perfil.
 async function loadWhatsapp(id) {
     try {
@@ -327,11 +281,9 @@ async function loadWhatsapp(id) {
                 target_entrepreneur_id: id
             }
         );
-
         if (error) {
             throw error;
         }
-
         if (entrepreneur.value) {
             entrepreneur.value.whatsapp =
                 data?.[0]?.phone || "";
@@ -343,14 +295,12 @@ async function loadWhatsapp(id) {
         );
     }
 }
-
 async function loadFollowState(id) {
     try {
         if (!viewerUserId.value) {
             isFollowing.value = false;
             return;
         }
-
         /*
             Las instituciones usan institution_follows.
             Los clientes conservan el sistema follows que ya tenía Thrive.
@@ -363,17 +313,13 @@ async function loadFollowState(id) {
                         id
                 }
             );
-
             if (error) {
                 throw error;
             }
-
             isFollowing.value =
                 data === true;
-
             return;
         }
-
         if (viewerType.value === "cliente") {
             const { data, error } = await supabase
                 .from("follows")
@@ -387,28 +333,22 @@ async function loadFollowState(id) {
                     id
                 )
                 .maybeSingle();
-
             if (error) {
                 throw error;
             }
-
             isFollowing.value =
                 Boolean(data);
-
             return;
         }
-
         isFollowing.value = false;
     } catch (error) {
         console.error(
             "Error al cargar estado de follow:",
             error
         );
-
         isFollowing.value = false;
     }
 }
-
 async function loadFollowerCount(id) {
     try {
         const { data, error } = await supabase.rpc(
@@ -417,11 +357,9 @@ async function loadFollowerCount(id) {
                 p_entrepreneur_id: id
             }
         );
-
         if (error) {
             throw error;
         }
-
         followerCount.value =
             Number(data) || 0;
     } catch (error) {
@@ -429,11 +367,9 @@ async function loadFollowerCount(id) {
             "Error al cargar contador de seguidores:",
             error
         );
-
         followerCount.value = 0;
     }
 }
-
 async function toggleFollow() {
     if (
         !entrepreneur.value ||
@@ -442,18 +378,14 @@ async function toggleFollow() {
     ) {
         return;
     }
-
     followLoading.value = true;
-
     try {
         if (!viewerUserId.value) {
-            router.push("/auth");
+            router.push({ name: "Access" });
             return;
         }
-
         const id =
             entrepreneur.value.id;
-
         /*
             La institución sigue el emprendimiento con su propia tabla.
             Para el contador público, clientes e instituciones sí cuentan
@@ -467,14 +399,11 @@ async function toggleFollow() {
                         id
                 }
             );
-
             if (error) {
                 throw error;
             }
-
             isFollowing.value =
                 data === true;
-
             /*
                 Volvemos a consultar el estado y el contador total.
                 Así se incluyen tanto clientes como instituciones.
@@ -483,22 +412,18 @@ async function toggleFollow() {
                 loadFollowState(id),
                 loadFollowerCount(id)
             ]);
-
             return;
         }
-
         // El cliente conserva el funcionamiento original.
         if (viewerType.value !== "cliente") {
             return;
         }
-
         if (viewerUserId.value === id) {
             alert(
                 "No puedes seguir tu propio emprendimiento."
             );
             return;
         }
-
         if (isFollowing.value) {
             const { error } = await supabase
                 .from("follows")
@@ -511,19 +436,14 @@ async function toggleFollow() {
                     "entrepreneur_id",
                     id
                 );
-
             if (error) {
                 throw error;
             }
-
             isFollowing.value = false;
-
             // Leemos el total real para no perder los seguidores institucionales.
             await loadFollowerCount(id);
-
             return;
         }
-
         const { error } = await supabase
             .from("follows")
             .insert({
@@ -532,19 +452,15 @@ async function toggleFollow() {
                 entrepreneur_id:
                     id
             });
-
         if (error) {
             if (error.code === "23505") {
                 isFollowing.value = true;
                 await loadFollowerCount(id);
                 return;
             }
-
             throw error;
         }
-
         isFollowing.value = true;
-
         // El total público se vuelve a leer desde Supabase.
         await loadFollowerCount(id);
     } catch (error) {
@@ -552,7 +468,6 @@ async function toggleFollow() {
             "Error al actualizar follow:",
             error
         );
-
         alert(
             "No fue posible actualizar el seguimiento: " +
             (error.message || "Error inesperado")
@@ -561,28 +476,23 @@ async function toggleFollow() {
         followLoading.value = false;
     }
 }
-
 // Abre el producto en la pantalla independiente de detalle.
 function openProductDetail(product) {
     if (!product?.id) return;
-
     router.push({
-        name: "DetalleProducto",
+        name: "Product",
         params: {
             id: product.id
         }
     });
 }
-
 // Abre WhatsApp con un mensaje dirigido al emprendimiento.
 function contactWhatsApp() {
     if (!entrepreneur.value) return;
-
     const message =
         encodeURIComponent(
             `Hola, vi el perfil de ${entrepreneur.value.businessName} en Thrive y quisiera obtener más información.`
         );
-
     const rawWhatsapp =
         String(
             entrepreneur.value.whatsapp || ""
@@ -591,23 +501,19 @@ function contactWhatsApp() {
         rawWhatsapp.length === 8
             ? `503${rawWhatsapp}`
             : rawWhatsapp;
-
     const url =
         whatsapp
             ? `https://wa.me/${whatsapp}?text=${message}`
             : `https://wa.me/?text=${message}`;
-
     window.open(
         url,
         "_blank",
         "noopener,noreferrer"
     );
 }
-
 onMounted(function () {
     loadPublicProfile();
 });
-
 watch(
     function () {
         return route.params.id;
@@ -617,7 +523,6 @@ watch(
     }
 );
 </script>
-
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-10 text-gray-700">
     <!-- Cabecera -->
@@ -642,7 +547,6 @@ watch(
             </div>
         </div>
     </header>
-
     <!-- Cargando -->
     <main
         v-if="loading"
@@ -653,7 +557,6 @@ watch(
             Cargando emprendimiento...
         </p>
     </main>
-
     <!-- Error -->
     <main
         v-else-if="loadError"
@@ -676,7 +579,6 @@ watch(
             Intentar nuevamente
         </button>
     </main>
-
     <!-- Contenido -->
     <main
         v-else-if="entrepreneur"
@@ -697,7 +599,6 @@ watch(
                 >
                     {{ entrepreneurInitials }}
                 </div>
-
                 <div class="min-w-0 flex-1">
                     <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
                         Emprendimiento
@@ -711,12 +612,10 @@ watch(
                     <p class="mt-3 max-w-2xl text-sm leading-6 text-gray-500">
                         {{ entrepreneur.description || "Este emprendimiento aún no tiene una descripción." }}
                     </p>
-
                     <div class="mt-4 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
                         <span class="mr-1 text-sm font-bold text-gray-600">
                             {{ followerCountText }}
                         </span>
-
                         <button
                             v-if="canFollow"
                             type="button"
@@ -737,7 +636,6 @@ watch(
                                         : "Seguir +"
                             }}
                         </button>
-
                         <button
                             type="button"
                             class="flex items-center gap-2 rounded-full bg-[#25D366] px-4 py-2 text-xs font-bold text-white"
@@ -752,7 +650,6 @@ watch(
                 </div>
             </div>
         </section>
-
         <!-- Productos -->
         <section class="mt-7">
             <div class="mb-5">
@@ -763,7 +660,6 @@ watch(
                     Productos de {{ entrepreneur.businessName }}
                 </h2>
             </div>
-
             <div
                 v-if="products.length"
                 class="grid grid-cols-2 gap-x-2 gap-y-5 sm:gap-4 md:grid-cols-3 xl:grid-cols-4"
@@ -788,7 +684,6 @@ watch(
                             Sin imagen
                         </div>
                     </div>
-
                     <div class="pt-1.5 sm:px-1 sm:pt-3">
                         <div class="mb-1 flex flex-wrap gap-1">
                             <span
@@ -799,11 +694,9 @@ watch(
                                 {{ category }}
                             </span>
                         </div>
-
                         <h3 class="min-h-[30px] text-[11px] font-medium leading-tight text-gray-500 sm:min-h-[40px] sm:text-sm">
                             {{ product.name }}
                         </h3>
-
                         <div class="mt-1 flex items-center gap-1 text-[10px] sm:text-xs">
                             <span class="text-amber-500">★</span>
                             <span class="font-bold text-gray-600">
@@ -813,14 +706,12 @@ watch(
                                 {{ product.reviewCount }} reseñas
                             </span>
                         </div>
-
                         <p class="mt-1 text-base font-extrabold text-[#4F7180] sm:text-xl">
                             {{ formatPrice(product.price) }}
                         </p>
                     </div>
                 </article>
             </div>
-
             <div
                 v-else
                 class="rounded-[24px] border border-dashed border-[#90E0EF] bg-white px-5 py-16 text-center"

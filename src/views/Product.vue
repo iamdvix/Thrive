@@ -3,27 +3,21 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
-
 const route = useRoute();
 const router = useRouter();
-
 const product = ref(null);
 const loading = ref(true);
 const loadError = ref("");
-
 const currentUserId = ref("");
 const currentUserType = ref("");
-
 const selectedImageIndex = ref(0);
 const reviews = ref([]);
 const reviewsLoading = ref(false);
 const reviewSaving = ref(false);
-
 const reviewForm = ref({
     rating: 5,
     comment: ""
 });
-
 // La edición se abre únicamente desde el lápiz de la reseña propia.
 const editingReviewId = ref("");
 const openReviewMenuId = ref("");
@@ -31,20 +25,16 @@ const editReviewForm = ref({
     rating: 5,
     comment: ""
 });
-
 const productId = computed(function () {
     return String(route.params.id || "");
 });
-
 const productImages = computed(function () {
     return product.value?.images || [];
 });
-
 const selectedImage = computed(function () {
     if (!productImages.value.length) {
         return null;
     }
-
     return (
         productImages.value[
             selectedImageIndex.value
@@ -52,12 +42,10 @@ const selectedImage = computed(function () {
         productImages.value[0]
     );
 });
-
 const averageRating = computed(function () {
     if (!reviews.value.length) {
         return 0;
     }
-
     const total =
         reviews.value.reduce(
             function (sum, review) {
@@ -68,23 +56,18 @@ const averageRating = computed(function () {
             },
             0
         );
-
     return total / reviews.value.length;
 });
-
 const reviewCountText = computed(function () {
     const total = reviews.value.length;
-
     return total === 1
         ? "1 reseña"
         : `${total} reseñas`;
 });
-
 const myReview = computed(function () {
     if (!currentUserId.value) {
         return null;
     }
-
     return (
         reviews.value.find(
             function (review) {
@@ -96,14 +79,12 @@ const myReview = computed(function () {
         ) || null
     );
 });
-
 const canReview = computed(function () {
     return (
         currentUserType.value ===
         "cliente"
     );
 });
-
 function formatPrice(price) {
     return new Intl.NumberFormat(
         "en-US",
@@ -113,11 +94,9 @@ function formatPrice(price) {
         }
     ).format(Number(price) || 0);
 }
-
 // Muestra la fecha de creación de la reseña de forma clara y corta.
 function formatReviewDate(date) {
     if (!date) return "";
-
     return new Intl.DateTimeFormat(
         "es-SV",
         {
@@ -127,10 +106,8 @@ function formatReviewDate(date) {
         }
     ).format(new Date(date));
 }
-
 function getInitials(name) {
     if (!name) return "TH";
-
     return name
         .trim()
         .split(/\s+/)
@@ -142,51 +119,43 @@ function getInitials(name) {
         })
         .join("");
 }
-
 function goBack() {
     if (window.history.length > 1) {
         router.back();
         return;
     }
-
-    router.push("/catalogo");
+    router.push({ name: "Catalog" });
 }
-
 function openEntrepreneurProfile() {
     if (!product.value?.entrepreneurId) {
         return;
     }
-
     router.push({
-        name: "PerfilEmprendedor",
+        name: "Business",
         params: {
             id:
                 product.value.entrepreneurId
         }
     });
 }
-
 function nextImage() {
     if (
         productImages.value.length <= 1
     ) {
         return;
     }
-
     selectedImageIndex.value =
         (
             selectedImageIndex.value + 1
         ) %
         productImages.value.length;
 }
-
 function previousImage() {
     if (
         productImages.value.length <= 1
     ) {
         return;
     }
-
     selectedImageIndex.value =
         (
             selectedImageIndex.value -
@@ -195,29 +164,24 @@ function previousImage() {
         ) %
         productImages.value.length;
 }
-
 // Carga el usuario conectado para decidir si puede escribir una reseña.
 async function loadCurrentUser() {
     const {
         data: { user },
         error: userError
     } = await supabase.auth.getUser();
-
     if (userError || !user) {
         currentUserId.value = "";
         currentUserType.value = "";
         return;
     }
-
     currentUserId.value =
         user.id;
-
     const { data, error } = await supabase
         .from("profiles")
         .select("user_type")
         .eq("id", user.id)
         .maybeSingle();
-
     if (error) {
         console.error(
             "No se pudo cargar el tipo de usuario:",
@@ -225,17 +189,14 @@ async function loadCurrentUser() {
         );
         return;
     }
-
     currentUserType.value =
         data?.user_type || "";
 }
-
 // Carga el teléfono público del emprendimiento.
 async function loadWhatsapp(
     entrepreneurId
 ) {
     if (!entrepreneurId) return;
-
     try {
         const { data, error } =
             await supabase.rpc(
@@ -245,11 +206,9 @@ async function loadWhatsapp(
                         entrepreneurId
                 }
             );
-
         if (error) {
             throw error;
         }
-
         if (product.value) {
             product.value.whatsapp =
                 data?.[0]?.phone || "";
@@ -261,23 +220,19 @@ async function loadWhatsapp(
         );
     }
 }
-
 // Carga el producto junto con todas sus fotografías.
 async function loadProduct() {
     loading.value = true;
     loadError.value = "";
     selectedImageIndex.value = 0;
-
     try {
         const id =
             productId.value;
-
         if (!id) {
             loadError.value =
                 "El enlace del producto no es válido.";
             return;
         }
-
         const { data, error } = await supabase
             .from("products")
             .select(`
@@ -304,17 +259,14 @@ async function loadProduct() {
             `)
             .eq("id", id)
             .maybeSingle();
-
         if (error) {
             throw error;
         }
-
         if (!data) {
             loadError.value =
                 "No pudimos encontrar este producto.";
             return;
         }
-
         const images =
             (data.product_images || [])
                 .slice()
@@ -331,10 +283,8 @@ async function loadProduct() {
                         return image.image_url;
                     }
                 );
-
         const store =
             data.entrepreneurs;
-
         product.value = {
             id:
                 data.id,
@@ -362,7 +312,6 @@ async function loadProduct() {
                 store?.district || "",
             whatsapp: ""
         };
-
         await Promise.all([
             loadReviews(),
             loadWhatsapp(
@@ -374,18 +323,15 @@ async function loadProduct() {
             "Error al cargar producto:",
             error
         );
-
         loadError.value =
             "Ocurrió un problema al cargar el producto.";
     } finally {
         loading.value = false;
     }
 }
-
 // Obtiene las reseñas con el nombre y la foto pública del cliente.
 async function loadReviews() {
     reviewsLoading.value = true;
-
     try {
         const { data, error } =
             await supabase.rpc(
@@ -395,11 +341,9 @@ async function loadReviews() {
                         productId.value
                 }
             );
-
         if (error) {
             throw error;
         }
-
         reviews.value =
             (data || []).map(
                 function (review) {
@@ -424,20 +368,17 @@ async function loadReviews() {
                     };
                 }
             );
-
         // La interfaz detecta automáticamente si el cliente ya tiene una reseña.
     } catch (error) {
         console.error(
             "No se pudieron cargar las reseñas:",
             error
         );
-
         reviews.value = [];
     } finally {
         reviewsLoading.value = false;
     }
 }
-
 // Abre o cierra el menú de tres puntos de la reseña propia.
 function toggleReviewMenu(reviewId) {
     openReviewMenuId.value =
@@ -445,7 +386,6 @@ function toggleReviewMenu(reviewId) {
             ? ""
             : reviewId;
 }
-
 // Inicia la edición únicamente desde la reseña que pertenece al cliente.
 function startEditingReview(review) {
     if (
@@ -454,7 +394,6 @@ function startEditingReview(review) {
     ) {
         return;
     }
-
     openReviewMenuId.value = "";
     editingReviewId.value = review.id;
     editReviewForm.value = {
@@ -462,7 +401,6 @@ function startEditingReview(review) {
         comment: review.comment
     };
 }
-
 // Cancela la edición y vuelve a mostrar la reseña normalmente.
 function cancelEditingReview() {
     editingReviewId.value = "";
@@ -472,7 +410,6 @@ function cancelEditingReview() {
         comment: ""
     };
 }
-
 // Crea la única reseña permitida para este cliente y producto.
 async function saveReview() {
     if (
@@ -482,14 +419,11 @@ async function saveReview() {
     ) {
         return;
     }
-
     if (!reviewForm.value.comment.trim()) {
         alert("Escribe un comentario para publicar tu reseña.");
         return;
     }
-
     reviewSaving.value = true;
-
     try {
         /*
             La función de Supabase crea la reseña.
@@ -509,16 +443,13 @@ async function saveReview() {
                     reviewForm.value.comment.trim()
             }
         );
-
         if (error) {
             throw error;
         }
-
         reviewForm.value = {
             rating: 5,
             comment: ""
         };
-
         await loadReviews();
         alert("Reseña publicada correctamente.");
     } catch (error) {
@@ -526,7 +457,6 @@ async function saveReview() {
             "Error al guardar reseña:",
             error
         );
-
         alert(
             "No fue posible guardar la reseña: " +
             (error.message || "Error inesperado")
@@ -535,7 +465,6 @@ async function saveReview() {
         reviewSaving.value = false;
     }
 }
-
 // Guarda los cambios hechos desde el editor pequeño de la reseña.
 async function updateMyReview(review) {
     if (
@@ -545,14 +474,11 @@ async function updateMyReview(review) {
     ) {
         return;
     }
-
     if (!editReviewForm.value.comment.trim()) {
         alert("Escribe un comentario para guardar los cambios.");
         return;
     }
-
     reviewSaving.value = true;
-
     try {
         const { error } = await supabase.rpc(
             "save_my_product_review",
@@ -567,14 +493,11 @@ async function updateMyReview(review) {
                     editReviewForm.value.comment.trim()
             }
         );
-
         if (error) {
             throw error;
         }
-
         editingReviewId.value = "";
         openReviewMenuId.value = "";
-
         await loadReviews();
         alert("Reseña actualizada correctamente.");
     } catch (error) {
@@ -582,7 +505,6 @@ async function updateMyReview(review) {
             "Error al actualizar reseña:",
             error
         );
-
         alert(
             "No fue posible actualizar la reseña: " +
             (error.message || "Error inesperado")
@@ -591,7 +513,6 @@ async function updateMyReview(review) {
         reviewSaving.value = false;
     }
 }
-
 // El cliente solamente puede eliminar su propia reseña.
 async function deleteMyReview(review = myReview.value) {
     if (
@@ -601,19 +522,15 @@ async function deleteMyReview(review = myReview.value) {
     ) {
         return;
     }
-
     const confirmed =
         window.confirm(
             "¿Deseas eliminar tu reseña?"
         );
-
     if (!confirmed) {
         openReviewMenuId.value = "";
         return;
     }
-
     reviewSaving.value = true;
-
     try {
         /*
             Eliminamos usando el producto actual y el usuario autenticado.
@@ -626,17 +543,14 @@ async function deleteMyReview(review = myReview.value) {
                     productId.value
             }
         );
-
         if (error) {
             throw error;
         }
-
         if (data !== true) {
             throw new Error(
                 "No se encontró una reseña propia para eliminar."
             );
         }
-
         // Quitamos inmediatamente la reseña propia de la pantalla.
         reviews.value =
             reviews.value.filter(
@@ -644,25 +558,20 @@ async function deleteMyReview(review = myReview.value) {
                     return item.userId !== currentUserId.value;
                 }
             );
-
         reviewForm.value = {
             rating: 5,
             comment: ""
         };
-
         editingReviewId.value = "";
         openReviewMenuId.value = "";
-
         // Confirmamos el estado real con Supabase.
         await loadReviews();
-
         alert("Reseña eliminada correctamente.");
     } catch (error) {
         console.error(
             "Error al eliminar reseña:",
             error
         );
-
         alert(
             "No fue posible eliminar la reseña: " +
             (error.message || "Error inesperado")
@@ -671,16 +580,13 @@ async function deleteMyReview(review = myReview.value) {
         reviewSaving.value = false;
     }
 }
-
 // Abre WhatsApp con un mensaje preparado para el producto.
 function contactWhatsApp() {
     if (!product.value) return;
-
     const message =
         encodeURIComponent(
             `Hola, estoy interesado/a en "${product.value.name}" de ${product.value.store}. Quisiera obtener más información sobre el producto.`
         );
-
     const rawWhatsapp =
         String(
             product.value.whatsapp || ""
@@ -689,28 +595,23 @@ function contactWhatsApp() {
         rawWhatsapp.length === 8
             ? `503${rawWhatsapp}`
             : rawWhatsapp;
-
     const url =
         whatsapp
             ? `https://wa.me/${whatsapp}?text=${message}`
             : `https://wa.me/?text=${message}`;
-
     window.open(
         url,
         "_blank",
         "noopener,noreferrer"
     );
 }
-
 async function loadPage() {
     await loadCurrentUser();
     await loadProduct();
 }
-
 onMounted(function () {
     loadPage();
 });
-
 watch(
     function () {
         return route.params.id;
@@ -720,7 +621,6 @@ watch(
     }
 );
 </script>
-
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-10 text-gray-700">
     <!-- Cabecera -->
@@ -737,14 +637,12 @@ watch(
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6"></path>
                     </svg>
                 </button>
-
                 <p class="min-w-0 flex-1 truncate text-sm font-bold text-white">
                     {{ product?.name || "Detalle del producto" }}
                 </p>
             </div>
         </div>
     </header>
-
     <!-- Cargando -->
     <main
         v-if="loading"
@@ -755,7 +653,6 @@ watch(
             Cargando producto...
         </p>
     </main>
-
     <!-- Error -->
     <main
         v-else-if="loadError"
@@ -778,7 +675,6 @@ watch(
             Intentar nuevamente
         </button>
     </main>
-
     <!-- Producto -->
     <main
         v-else-if="product"
@@ -801,14 +697,12 @@ watch(
                         >
                             Sin fotografía
                         </div>
-
                         <span
                             v-if="productImages.length"
                             class="absolute right-3 top-3 rounded-full bg-black/55 px-3 py-1 text-xs font-bold text-white"
                         >
                             {{ selectedImageIndex + 1 }} / {{ productImages.length }}
                         </span>
-
                         <template v-if="productImages.length > 1">
                             <button
                                 type="button"
@@ -826,7 +720,6 @@ watch(
                             </button>
                         </template>
                     </div>
-
                     <div
                         v-if="productImages.length > 1"
                         class="mt-3 flex gap-2 overflow-x-auto pb-1"
@@ -851,7 +744,6 @@ watch(
                         </button>
                     </div>
                 </div>
-
                 <!-- Información -->
                 <div class="p-5 sm:p-7">
                     <button
@@ -880,7 +772,6 @@ watch(
                             </p>
                         </div>
                     </button>
-
                     <div class="mt-4 flex flex-wrap gap-2">
                         <span
                             v-for="category in product.categories"
@@ -890,11 +781,9 @@ watch(
                             {{ category }}
                         </span>
                     </div>
-
                     <h1 class="mt-4 text-2xl font-black leading-tight text-gray-700 sm:text-3xl">
                         {{ product.name }}
                     </h1>
-
                     <div class="mt-3 flex items-center gap-2">
                         <span class="text-lg text-amber-500">★</span>
                         <span class="font-black text-gray-700">
@@ -904,15 +793,12 @@ watch(
                             {{ reviewCountText }}
                         </span>
                     </div>
-
                     <p class="mt-3 text-3xl font-black text-[#4F7180]">
                         {{ formatPrice(product.price) }}
                     </p>
-
                     <p class="mt-6 whitespace-pre-line text-sm leading-6 text-gray-500">
                         {{ product.description || "Este producto no tiene una descripción." }}
                     </p>
-
                     <button
                         type="button"
                         class="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-5 py-3.5 font-bold text-white"
@@ -926,7 +812,6 @@ watch(
                 </div>
             </div>
         </section>
-
         <!-- Reseñas -->
         <section class="mt-6 bg-white p-5 sm:rounded-[28px] sm:p-7">
             <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -938,7 +823,6 @@ watch(
                         Reseñas del producto
                     </h2>
                 </div>
-
                 <div class="flex items-center gap-2 text-sm">
                     <span class="text-xl text-amber-500">★</span>
                     <span class="font-black text-gray-700">
@@ -949,7 +833,6 @@ watch(
                     </span>
                 </div>
             </div>
-
             <!-- El formulario solo aparece mientras el cliente todavía no ha reseñado. -->
             <div
                 v-if="canReview && !myReview"
@@ -958,7 +841,6 @@ watch(
                 <h3 class="font-black text-gray-700">
                     Escribir una reseña
                 </h3>
-
                 <div class="mt-3 flex items-center gap-1">
                     <button
                         v-for="star in 5"
@@ -976,7 +858,6 @@ watch(
                         ★
                     </button>
                 </div>
-
                 <textarea
                     v-model="reviewForm.comment"
                     rows="4"
@@ -984,7 +865,6 @@ watch(
                     placeholder="Cuéntanos qué te pareció este producto..."
                     class="mt-3 w-full resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-[#00B4D8]"
                 ></textarea>
-
                 <button
                     type="button"
                     :disabled="reviewSaving"
@@ -994,7 +874,6 @@ watch(
                     {{ reviewSaving ? "Publicando..." : "Publicar reseña" }}
                 </button>
             </div>
-
             <!-- Lista de reseñas -->
             <div
                 v-if="reviewsLoading"
@@ -1002,7 +881,6 @@ watch(
             >
                 Cargando reseñas...
             </div>
-
             <div
                 v-else-if="!reviews.length"
                 class="py-12 text-center"
@@ -1014,7 +892,6 @@ watch(
                     Sé la primera persona en compartir su experiencia.
                 </p>
             </div>
-
             <div
                 v-else
                 class="mt-6 divide-y divide-gray-100"
@@ -1031,14 +908,12 @@ watch(
                             :alt="review.fullName"
                             class="h-10 w-10 shrink-0 rounded-full object-cover"
                         >
-
                         <div
                             v-else
                             class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#CAF0F8] text-xs font-black text-[#0077B6]"
                         >
                             {{ getInitials(review.fullName) }}
                         </div>
-
                         <div class="min-w-0 flex-1">
                             <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0">
@@ -1046,7 +921,6 @@ watch(
                                         <p class="font-bold text-gray-700">
                                             {{ review.fullName }}
                                         </p>
-
                                         <span
                                             v-if="review.userId === currentUserId"
                                             class="rounded-full bg-[#CAF0F8] px-2 py-0.5 text-[10px] font-bold text-[#0077B6]"
@@ -1054,12 +928,10 @@ watch(
                                             Tu reseña
                                         </span>
                                     </div>
-
                                     <p class="mt-0.5 text-xs text-gray-400">
                                         {{ formatReviewDate(review.createdAt) }}
                                     </p>
                                 </div>
-
                                 <!-- Las opciones de la reseña propia se agrupan en un menú de tres puntos. -->
                                 <div
                                     v-if="
@@ -1084,7 +956,6 @@ watch(
                                             <circle cx="12" cy="19" r="1.8"></circle>
                                         </svg>
                                     </button>
-
                                     <div
                                         v-if="openReviewMenuId === review.id"
                                         class="absolute right-0 top-9 z-20 w-32 overflow-hidden rounded-xl border border-gray-100 bg-white py-1 shadow-lg"
@@ -1096,7 +967,6 @@ watch(
                                         >
                                             Editar
                                         </button>
-
                                         <button
                                             type="button"
                                             class="flex w-full items-center px-4 py-2.5 text-left text-sm font-semibold text-red-600 hover:bg-red-50"
@@ -1107,7 +977,6 @@ watch(
                                     </div>
                                 </div>
                             </div>
-
                             <!-- Vista normal de la reseña. -->
                             <template v-if="editingReviewId !== review.id">
                                 <div class="mt-1 text-sm text-amber-500">
@@ -1116,12 +985,10 @@ watch(
                                         "☆".repeat(5 - review.rating)
                                     }}
                                 </div>
-
                                 <p class="mt-2 whitespace-pre-line text-sm leading-6 text-gray-500">
                                     {{ review.comment }}
                                 </p>
                             </template>
-
                             <!-- Editor pequeño que aparece al tocar el lápiz. -->
                             <div
                                 v-else
@@ -1144,14 +1011,12 @@ watch(
                                         ★
                                     </button>
                                 </div>
-
                                 <textarea
                                     v-model="editReviewForm.comment"
                                     rows="3"
                                     maxlength="800"
                                     class="mt-3 w-full resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-[#00B4D8]"
                                 ></textarea>
-
                                 <div class="mt-3 flex flex-wrap gap-2">
                                     <button
                                         type="button"
@@ -1161,7 +1026,6 @@ watch(
                                     >
                                         {{ reviewSaving ? "Guardando..." : "Guardar" }}
                                     </button>
-
                                     <button
                                         type="button"
                                         :disabled="reviewSaving"
@@ -1170,7 +1034,6 @@ watch(
                                     >
                                         Cancelar
                                     </button>
-
                                 </div>
                             </div>
                         </div>

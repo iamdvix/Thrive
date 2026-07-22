@@ -5,7 +5,6 @@ import {
     computed,
     watch
 } from "vue";
-
 const props = defineProps({
     show: {
         type: Boolean,
@@ -20,21 +19,17 @@ const props = defineProps({
         default: false
     }
 });
-
 const emit = defineEmits([
     "close",
     "edit",
     "delete"
 ]);
-
 const currentImageIndex = ref(0);
-
 const images = computed(function () {
     const source =
         props.post?.images ||
         props.post?.imageRecords ||
         [];
-
     return source
         .map(function (image) {
             if (typeof image === "string") {
@@ -43,7 +38,6 @@ const images = computed(function () {
                     imageUrl: image
                 };
             }
-
             return {
                 id:
                     image.id ||
@@ -58,7 +52,6 @@ const images = computed(function () {
             return Boolean(image.imageUrl);
         });
 });
-
 const currentImage = computed(function () {
     return (
         images.value[
@@ -67,7 +60,6 @@ const currentImage = computed(function () {
         ""
     );
 });
-
 const isInformativePost = computed(function () {
     return [
         "noticia",
@@ -76,7 +68,6 @@ const isInformativePost = computed(function () {
         props.post?.postType
     );
 });
-
 const isAttendancePost = computed(function () {
     return [
         "taller",
@@ -87,7 +78,6 @@ const isAttendancePost = computed(function () {
         props.post?.postType
     );
 });
-
 const showContactButton = computed(function () {
     return (
         isAttendancePost.value &&
@@ -96,7 +86,6 @@ const showContactButton = computed(function () {
         )
     );
 });
-
 watch(
     function () {
         return [
@@ -108,7 +97,6 @@ watch(
         currentImageIndex.value = 0;
     }
 );
-
 function typeLabel(type) {
     const labels = {
         noticia: "Noticia",
@@ -118,16 +106,13 @@ function typeLabel(type) {
         oportunidad: "Oportunidad",
         anuncio: "Anuncio"
     };
-
     return (
         labels[type] ||
         "Publicación"
     );
 }
-
 function formatDate(date) {
     if (!date) return "Sin fecha";
-
     return new Intl.DateTimeFormat(
         "es-SV",
         {
@@ -139,10 +124,8 @@ function formatDate(date) {
         new Date(date)
     );
 }
-
 function formatDateTime(date) {
     if (!date) return "Sin fecha";
-
     return new Intl.DateTimeFormat(
         "es-SV",
         {
@@ -156,58 +139,46 @@ function formatDateTime(date) {
         new Date(date)
     );
 }
-
 function previousImage() {
     if (!images.value.length) return;
-
     currentImageIndex.value =
         currentImageIndex.value === 0
             ? images.value.length - 1
             : currentImageIndex.value - 1;
 }
-
 function nextImage() {
     if (!images.value.length) return;
-
     currentImageIndex.value =
         currentImageIndex.value ===
         images.value.length - 1
             ? 0
             : currentImageIndex.value + 1;
 }
-
 function selectImage(index) {
     currentImageIndex.value = index;
 }
-
 function normalizePhone(phone) {
     let digits =
         String(phone || "")
             .replace(/\D/g, "");
-
     if (digits.length === 8) {
         digits = `503${digits}`;
     }
-
     return digits;
 }
-
 function contactByWhatsApp() {
     const number =
         normalizePhone(
             props.post?.contactPhone
         );
-
     if (!number) {
         alert(
             "Esta publicación no tiene un teléfono de contacto."
         );
         return;
     }
-
     const message =
         `Hola, vi en Thrive la publicación "${props.post.title}" de ${props.post.institutionName}. Me gustaría recibir información para asistir.`;
-
     window.open(
         `https://wa.me/${number}?text=${encodeURIComponent(message)}`,
         "_blank",
@@ -215,7 +186,6 @@ function contactByWhatsApp() {
     );
 }
 </script>
-
 <template>
 <Teleport to="body">
     <div
@@ -234,7 +204,6 @@ function contactByWhatsApp() {
                         {{ post.title }}
                     </h2>
                 </div>
-
                 <button
                     type="button"
                     aria-label="Cerrar"
@@ -244,7 +213,6 @@ function contactByWhatsApp() {
                     ×
                 </button>
             </div>
-
             <!-- Galería igual a la visualización de productos. -->
             <div
                 v-if="images.length"
@@ -256,7 +224,6 @@ function contactByWhatsApp() {
                         :alt="post.title"
                         class="aspect-square w-full object-cover sm:aspect-[16/10]"
                     >
-
                     <template v-if="images.length > 1">
                         <button
                             type="button"
@@ -266,7 +233,6 @@ function contactByWhatsApp() {
                         >
                             ‹
                         </button>
-
                         <button
                             type="button"
                             aria-label="Imagen siguiente"
@@ -275,13 +241,11 @@ function contactByWhatsApp() {
                         >
                             ›
                         </button>
-
                         <span class="absolute bottom-3 right-3 rounded-full bg-black/55 px-3 py-1 text-xs font-bold text-white">
                             {{ currentImageIndex + 1 }}/{{ images.length }}
                         </span>
                     </template>
                 </div>
-
                 <div
                     v-if="images.length > 1"
                     class="mt-3 flex gap-2 overflow-x-auto"
@@ -302,7 +266,6 @@ function contactByWhatsApp() {
                     </button>
                 </div>
             </div>
-
             <!-- Información principal -->
             <div class="p-5 sm:p-7">
                 <div class="flex items-center gap-3">
@@ -312,19 +275,16 @@ function contactByWhatsApp() {
                         :alt="post.institutionName"
                         class="h-12 w-12 rounded-full border-2 border-[#CAF0F8] object-cover"
                     >
-
                     <div
                         v-else
                         class="flex h-12 w-12 items-center justify-center rounded-full bg-[#CAF0F8] font-black text-[#0077B6]"
                     >
                         {{ post.institutionName?.charAt(0).toUpperCase() || "I" }}
                     </div>
-
                     <div class="min-w-0">
                         <p class="truncate font-black text-gray-700">
                             {{ post.institutionName || "Institución Thrive" }}
                         </p>
-
                         <!-- Noticias y anuncios no muestran fecha de creación/publicación. -->
                         <p
                             v-if="!isInformativePost && post.publishedAt"
@@ -334,19 +294,16 @@ function contactByWhatsApp() {
                         </p>
                     </div>
                 </div>
-
                 <div class="mt-5 flex flex-wrap items-center gap-2">
                     <span class="rounded-full bg-[#CAF0F8] px-3 py-1.5 text-xs font-black text-[#0077B6]">
                         {{ typeLabel(post.postType) }}
                     </span>
-
                     <span
                         v-if="post.requiresRegistration"
                         class="rounded-full bg-amber-100 px-3 py-1.5 text-xs font-black text-amber-700"
                     >
                         Requiere inscripción
                     </span>
-
                     <span
                         v-if="post.requiresRegistration && post.availableSpots !== null && post.availableSpots !== undefined"
                         class="rounded-full px-3 py-1.5 text-xs font-black"
@@ -355,15 +312,12 @@ function contactByWhatsApp() {
                         {{ Number(post.availableSpots) > 0 ? `${post.availableSpots} cupos disponibles` : "Sin cupos" }}
                     </span>
                 </div>
-
                 <h1 class="mt-4 text-2xl font-black leading-tight text-gray-700 sm:text-3xl">
                     {{ post.title }}
                 </h1>
-
                 <p class="mt-4 whitespace-pre-line text-sm leading-7 text-gray-500 sm:text-base">
                     {{ post.description }}
                 </p>
-
                 <!-- Datos relevantes únicamente para actividades y oportunidades. -->
                 <div
                     v-if="!isInformativePost"
@@ -380,7 +334,6 @@ function contactByWhatsApp() {
                             {{ formatDateTime(post.eventDate) }}
                         </p>
                     </div>
-
                     <div
                         v-if="post.eventEndDate"
                         class="rounded-2xl bg-[#F8FBFC] p-4"
@@ -392,7 +345,6 @@ function contactByWhatsApp() {
                             {{ formatDateTime(post.eventEndDate) }}
                         </p>
                     </div>
-
                     <div
                         v-if="post.location"
                         class="rounded-2xl bg-[#F8FBFC] p-4"
@@ -404,7 +356,6 @@ function contactByWhatsApp() {
                             {{ post.location }}
                         </p>
                     </div>
-
                     <div
                         v-if="post.deadline"
                         class="rounded-2xl bg-[#F8FBFC] p-4"
@@ -417,7 +368,6 @@ function contactByWhatsApp() {
                         </p>
                     </div>
                 </div>
-
                 <!-- Acciones disponibles para el emprendedor. -->
                 <div
                     v-if="showContactButton || post.externalUrl"
@@ -435,7 +385,6 @@ function contactByWhatsApp() {
                         </svg>
                         Consultar por WhatsApp
                     </button>
-
                     <a
                         v-if="post.externalUrl"
                         :href="post.externalUrl"
@@ -446,7 +395,6 @@ function contactByWhatsApp() {
                         Abrir enlace de inscripción
                     </a>
                 </div>
-
                 <!-- Acciones exclusivas de la institución. -->
                 <div
                     v-if="canManage"
@@ -459,7 +407,6 @@ function contactByWhatsApp() {
                     >
                         Editar
                     </button>
-
                     <button
                         type="button"
                         class="rounded-xl border border-red-200 px-4 py-3 text-sm font-black text-red-600"

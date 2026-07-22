@@ -25,7 +25,6 @@ const profileForm = ref({
 const profilePhotoFile = ref(null);
 // Imagen que mostramos como vista previa.
 const profilePhotoPreview = ref("");
-
 // Campos opcionales para cambiar la contraseña desde el perfil.
 const currentPassword = ref("");
 const newPassword = ref("");
@@ -38,9 +37,7 @@ const productsError = ref("");
 // Controles de búsqueda.
 const searchText = ref("");
 const selectedDepartment = ref("Todos");
-// Seguimientos.
-// Por ahora continúan siendo locales hasta crear la tabla follows.
-// Emprendimientos que el cliente sigue realmente en Supabase.
+// Seguimientos guardados realmente en Supabase.
 const followedEntrepreneurs = ref([]);
 // Evita múltiples clics mientras se guarda o elimina un follow.
 const followLoading = ref([]);
@@ -58,7 +55,7 @@ async function loadClientProfile() {
                 "No se encontró una sesión activa:",
                 userError
             );
-            router.replace("/auth");
+            router.replace({ name: "Access" });
             return;
         }
         /*
@@ -105,7 +102,6 @@ function clearPasswordFields() {
     newPassword.value = "";
     confirmNewPassword.value = "";
 }
-
 // Abre y prepara la ventana del perfil del cliente.
 function openClientProfile() {
     if (!clientProfile.value) return;
@@ -172,30 +168,24 @@ async function saveClientProfile() {
     ) {
         return;
     }
-
     if (!profileForm.value.fullName.trim()) {
         alert("Escribe tu nombre antes de guardar.");
         return;
     }
-
     profileSaving.value = true;
-
     try {
         const {
             data: { user },
             error: userError
         } = await supabase.auth.getUser();
-
         if (userError || !user?.email) {
             alert("No fue posible verificar tu sesión.");
             return;
         }
-
         const wantsPasswordChange =
             currentPassword.value.length > 0 ||
             newPassword.value.length > 0 ||
             confirmNewPassword.value.length > 0;
-
         if (wantsPasswordChange) {
             if (
                 !currentPassword.value ||
@@ -205,39 +195,31 @@ async function saveClientProfile() {
                 alert("Para cambiar la contraseña debes completar los tres campos.");
                 return;
             }
-
             if (newPassword.value.length < 8) {
                 alert("La nueva contraseña debe tener al menos 8 caracteres.");
                 return;
             }
-
             if (newPassword.value !== confirmNewPassword.value) {
                 alert("Las nuevas contraseñas no coinciden.");
                 return;
             }
-
             // Comprobamos la contraseña actual antes de cambiar información sensible.
             const { error: passwordCheckError } =
                 await supabase.auth.signInWithPassword({
                     email: user.email,
                     password: currentPassword.value
                 });
-
             if (passwordCheckError) {
                 alert("La contraseña actual es incorrecta.");
                 return;
             }
         }
-
         const oldAvatarUrl =
             clientProfile.value.avatarUrl || null;
-
         const oldAvatarPath =
             getStoragePathFromPublicUrl(oldAvatarUrl);
-
         let avatarUrl = oldAvatarUrl;
         let uploadedPhoto = null;
-
         // Subimos una nueva foto únicamente cuando el cliente la seleccionó.
         if (profilePhotoFile.value) {
             uploadedPhoto =
@@ -245,11 +227,9 @@ async function saveClientProfile() {
                     user.id,
                     profilePhotoFile.value
                 );
-
             avatarUrl =
                 uploadedPhoto.publicUrl;
         }
-
         const { data, error } =
             await supabase
                 .from("profiles")
@@ -269,7 +249,6 @@ async function saveClientProfile() {
                     avatar_url
                 `)
                 .single();
-
         if (error) {
             // Si la foto nueva se subió pero el perfil falló, limpiamos ese archivo.
             if (uploadedPhoto?.path) {
@@ -282,10 +261,8 @@ async function saveClientProfile() {
                     );
                 }
             }
-
             throw error;
         }
-
         // Eliminamos la foto anterior solo cuando la nueva URL ya quedó guardada.
         if (
             uploadedPhoto?.path &&
@@ -301,7 +278,6 @@ async function saveClientProfile() {
                 );
             }
         }
-
         clientProfile.value = {
             ...clientProfile.value,
             fullName:
@@ -311,14 +287,12 @@ async function saveClientProfile() {
             avatarUrl:
                 data.avatar_url || ""
         };
-
         // La contraseña se cambia al final, cuando el resto del perfil ya se guardó.
         if (wantsPasswordChange) {
             const { error: passwordError } =
                 await supabase.auth.updateUser({
                     password: newPassword.value
                 });
-
             if (passwordError) {
                 alert(
                     "El perfil se actualizó, pero no fue posible cambiar la contraseña: " +
@@ -327,7 +301,6 @@ async function saveClientProfile() {
                 return;
             }
         }
-
         alert("Tu perfil fue actualizado correctamente.");
         closeClientProfile();
     } catch (error) {
@@ -340,7 +313,6 @@ async function saveClientProfile() {
         profileSaving.value = false;
     }
 }
-
 // Cierra la sesión actual y redirige al usuario.
 async function logout() {
     try {
@@ -364,7 +336,7 @@ async function logout() {
             return;
         }
         closeClientProfile();
-        router.replace("/auth");
+        router.replace({ name: "Access" });
     } catch (error) {
         console.error(
             "Error inesperado al cerrar sesión:",
@@ -399,7 +371,6 @@ async function loadReviewSummary(productIds) {
     }
     return summary;
 }
-
 // Obtiene el número público de WhatsApp de cada emprendimiento.
 async function loadWhatsappNumbers(entrepreneurIds) {
     const uniqueIds = [...new Set(entrepreneurIds.filter(Boolean))];
@@ -425,7 +396,6 @@ async function loadWhatsappNumbers(entrepreneurIds) {
     );
     return Object.fromEntries(entries);
 }
-
 // Carga los productos guardados en la base de datos.
 async function loadProducts() {
     loadingProducts.value = true;
@@ -463,7 +433,6 @@ async function loadProducts() {
                 ascending: false
             });
         if (error) throw error;
-
         const mappedProducts = (data || []).map(function (product) {
             const images = (product.product_images || [])
                 .slice()
@@ -494,19 +463,16 @@ async function loadProducts() {
                 whatsapp: ""
             };
         });
-
         const productIds = mappedProducts.map(function (product) {
             return product.id;
         });
         const entrepreneurIds = mappedProducts.map(function (product) {
             return product.entrepreneurId;
         });
-
         const [reviewSummary, whatsappNumbers] = await Promise.all([
             loadReviewSummary(productIds),
             loadWhatsappNumbers(entrepreneurIds)
         ]);
-
         products.value = mappedProducts.map(function (product) {
             const reviews = reviewSummary[product.id];
             return {
@@ -690,7 +656,7 @@ async function toggleFollow(entrepreneurId) {
             error: userError
         } = await supabase.auth.getUser();
         if (userError || !user) {
-            router.replace("/auth");
+            router.replace({ name: "Access" });
             return;
         }
         if (isFollowing(entrepreneurId)) {
@@ -738,7 +704,7 @@ function openEntrepreneurProfile(
     entrepreneurId
 ) {
     router.push({
-        name: "PerfilEmprendedor",
+        name: "Business",
         params: {
             id: entrepreneurId
         }
@@ -748,7 +714,7 @@ function openEntrepreneurProfile(
 function openProductDetail(product) {
     if (!product?.id) return;
     router.push({
-        name: "DetalleProducto",
+        name: "Product",
         params: {
             id: product.id
         }
@@ -947,7 +913,7 @@ onBeforeUnmount(function () {
             <nav class="hidden items-center justify-between border-t border-gray-100 py-3 lg:flex">
                 <div class="flex items-center gap-6">
                     <RouterLink
-                        to="/catalogo"
+                        to="/catalog"
                         class="font-bold text-[#0077B6]"
                     >
                         Inicio
@@ -1262,7 +1228,7 @@ onBeforeUnmount(function () {
     <nav class="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] border-t border-white/20 bg-[#00B4D8] px-2 shadow-[0_-6px_20px_rgba(0,0,0,0.12)] lg:hidden">
         <div class="mx-auto grid max-w-md grid-cols-4">
             <RouterLink
-                to="/catalogo"
+                to="/catalog"
                 class="flex flex-col items-center gap-0.5 py-2 text-white"
             >
                 <svg
@@ -1466,7 +1432,6 @@ onBeforeUnmount(function () {
                         <p class="mt-1 text-xs text-gray-400">
                             Deja estos campos vacíos si no deseas cambiarla.
                         </p>
-
                         <div class="mt-4 space-y-3">
                             <input
                                 v-model="currentPassword"

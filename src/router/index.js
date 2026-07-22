@@ -1,279 +1,98 @@
-// Router principal de Thrive.
-import {
-    createRouter,
-    createWebHashHistory
-} from "vue-router";
+// Rutas principales de Thrive. Los nombres están en inglés y cada función importante tiene su propia vista.
+import { createRouter, createWebHashHistory } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
-
-// Vistas principales.
-import Home from "../views/Home.vue";
-import Auth from "../views/Auth.vue";
-import Catalogo from "../views/Catalogo.vue";
-import DashboardEmprendedor from "../views/DashboardEmprendedor.vue";
-import DashboardInstitucion from "../views/DashboardInstitucion.vue";
-import Inventario from "../views/Inventario.vue";
-import Calculadora from "../views/Calculadora.vue";
-import PerfilEmprendedor from "../views/PerfilEmprendedor.vue";
-import DetalleProducto from "../views/DetalleProducto.vue";
-
+import Landing from "../views/Landing.vue";
+import Access from "../views/Access.vue";
+import Catalog from "../views/Catalog.vue";
+import Business from "../views/Business.vue";
+import Product from "../views/Product.vue";
+import BizHome from "../views/business/Home.vue";
+import BizProducts from "../views/business/Products.vue";
+import BizAddProduct from "../views/business/AddProduct.vue";
+import BizEditProduct from "../views/business/EditProduct.vue";
+import BizProfile from "../views/business/Profile.vue";
+import BizStock from "../views/business/Stock.vue";
+import BizOrders from "../views/business/Orders.vue";
+import BizProfit from "../views/business/Profit.vue";
+import BizNews from "../views/business/News.vue";
+import OrgHome from "../views/org/Home.vue";
+import OrgPosts from "../views/org/Posts.vue";
+import OrgBusinesses from "../views/org/Businesses.vue";
+import OrgProfile from "../views/org/Profile.vue";
+const customerOnly = { requiresAuth: true, roles: ["cliente"] };
+const businessOnly = { requiresAuth: true, roles: ["emprendedor"] };
+const orgOnly = { requiresAuth: true, roles: ["institucion"] };
+const signedUsers = { requiresAuth: true, roles: ["cliente", "emprendedor", "institucion"] };
 const routes = [
-    // Página principal.
-    {
-        path: "/",
-        name: "Home",
-        component: Home,
-        meta: {
-            title: "Thrive"
-        }
-    },
-
-    /*
-        Esta ruta siempre queda disponible.
-        Aunque exista una sesión iniciada, el botón
-        "Comenzar" de Home abrirá Auth.vue.
-    */
-    {
-        path: "/auth",
-        name: "Auth",
-        component: Auth,
-        meta: {
-            title: "Acceso | Thrive"
-        }
-    },
-
-    // Catálogo para clientes.
-    {
-        path: "/catalogo",
-        name: "Catalogo",
-        component: Catalogo,
-        meta: {
-            requiresAuth: true,
-            roles: ["cliente"],
-            title: "Catálogo | Thrive"
-        }
-    },
-
-    // Panel principal del emprendedor.
-    {
-        path: "/dashboard-emprendedor",
-        name: "DashboardEmprendedor",
-        component: DashboardEmprendedor,
-        meta: {
-            requiresAuth: true,
-            roles: ["emprendedor"],
-            title: "Panel emprendedor | Thrive"
-        }
-    },
-
-    // Inventario del emprendedor.
-    {
-        path: "/dashboard-emprendedor/inventario",
-        alias: "/inventario",
-        name: "Inventario",
-        component: Inventario,
-        meta: {
-            requiresAuth: true,
-            roles: ["emprendedor"],
-            title: "Inventario | Thrive"
-        }
-    },
-
-    // Calculadora del emprendedor.
-    {
-        path: "/dashboard-emprendedor/calculadora",
-        alias: "/calculadora",
-        name: "Calculadora",
-        component: Calculadora,
-        meta: {
-            requiresAuth: true,
-            roles: ["emprendedor"],
-            title: "Calculadora | Thrive"
-        }
-    },
-
-    // Panel principal de instituciones.
-    {
-        path: "/dashboard-institucion",
-        name: "DashboardInstitucion",
-        component: DashboardInstitucion,
-        meta: {
-            requiresAuth: true,
-            roles: ["institucion"],
-            title: "Panel institucional | Thrive"
-        }
-    },
-
-    // Perfil público de un emprendimiento.
-    {
-        path: "/emprendedor/:id",
-        name: "PerfilEmprendedor",
-        component: PerfilEmprendedor,
-        props: true,
-        meta: {
-            requiresAuth: true,
-            roles: [
-                "cliente",
-                "emprendedor",
-                "institucion"
-            ],
-            title: "Emprendimiento | Thrive"
-        }
-    },
-
-    // Detalle público interno de un producto.
-    {
-        path: "/producto/:id",
-        name: "DetalleProducto",
-        component: DetalleProducto,
-        props: true,
-        meta: {
-            requiresAuth: true,
-            roles: [
-                "cliente",
-                "emprendedor",
-                "institucion"
-            ],
-            title: "Producto | Thrive"
-        }
-    },
-
-    // Cualquier ruta inexistente vuelve al inicio.
-    {
-        path: "/:pathMatch(.*)*",
-        name: "NotFound",
-        redirect: "/"
-    }
+    // Páginas públicas.
+    { path: "/", name: "Landing", component: Landing, meta: { title: "Thrive" } },
+    { path: "/access", alias: "/auth", name: "Access", component: Access, meta: { title: "Acceso | Thrive" } },
+    // Cliente.
+    { path: "/catalog", alias: "/catalogo", name: "Catalog", component: Catalog, meta: { ...customerOnly, title: "Catálogo | Thrive" } },
+    // Emprendedor. Las rutas antiguas se conservan como alias para no romper enlaces guardados.
+    { path: "/biz", alias: "/dashboard-emprendedor", name: "BizHome", component: BizHome, meta: { ...businessOnly, title: "Panel | Thrive" } },
+    { path: "/biz/products", name: "BizProducts", component: BizProducts, meta: { ...businessOnly, title: "Productos | Thrive" } },
+    { path: "/biz/products/new", name: "BizAddProduct", component: BizAddProduct, meta: { ...businessOnly, title: "Nuevo producto | Thrive" } },
+    { path: "/biz/products/:id/edit", name: "BizEditProduct", component: BizEditProduct, meta: { ...businessOnly, title: "Editar producto | Thrive" } },
+    { path: "/biz/profile", name: "BizProfile", component: BizProfile, meta: { ...businessOnly, title: "Perfil | Thrive" } },
+    { path: "/biz/stock", alias: ["/inventario", "/dashboard-emprendedor/inventario"], name: "BizStock", component: BizStock, meta: { ...businessOnly, title: "Inventario | Thrive" } },
+    { path: "/biz/orders", name: "BizOrders", component: BizOrders, meta: { ...businessOnly, title: "Pedidos | Thrive" } },
+    { path: "/biz/profit", alias: ["/calculadora", "/dashboard-emprendedor/calculadora"], name: "BizProfit", component: BizProfit, meta: { ...businessOnly, title: "Calculadora | Thrive" } },
+    { path: "/biz/news", name: "BizNews", component: BizNews, meta: { ...businessOnly, title: "Novedades | Thrive" } },
+    // Institución.
+    { path: "/org", alias: "/dashboard-institucion", name: "OrgHome", component: OrgHome, meta: { ...orgOnly, title: "Institución | Thrive" } },
+    { path: "/org/posts", name: "OrgPosts", component: OrgPosts, meta: { ...orgOnly, title: "Publicaciones | Thrive" } },
+    { path: "/org/businesses", name: "OrgBusinesses", component: OrgBusinesses, meta: { ...orgOnly, title: "Emprendimientos | Thrive" } },
+    { path: "/org/profile", name: "OrgProfile", component: OrgProfile, meta: { ...orgOnly, title: "Perfil institucional | Thrive" } },
+    // Pantallas compartidas entre tipos de cuenta.
+    { path: "/business/:id", alias: "/emprendedor/:id", name: "Business", component: Business, props: true, meta: { ...signedUsers, title: "Emprendimiento | Thrive" } },
+    { path: "/product/:id", alias: "/producto/:id", name: "Product", component: Product, props: true, meta: { ...signedUsers, title: "Producto | Thrive" } },
+    // Una URL inexistente siempre vuelve a la portada.
+    { path: "/:pathMatch(.*)*", name: "NotFound", redirect: "/" }
 ];
-
 const router = createRouter({
-    /*
-        Hash History evita errores al recargar
-        rutas internas en GitHub Pages.
-    */
-    history: createWebHashHistory(
-        import.meta.env.BASE_URL
-    ),
-
+    // Hash History evita errores al recargar rutas internas en GitHub Pages.
+    history: createWebHashHistory(import.meta.env.BASE_URL),
     routes,
-
-    // Cada página nueva comienza desde arriba.
     scrollBehavior() {
-        return {
-            top: 0,
-            left: 0
-        };
+        return { top: 0, left: 0 };
     }
 });
-
-// Página principal de cada tipo de cuenta.
+// Pantalla inicial correspondiente a cada tipo de cuenta.
 const homeByRole = {
-    cliente: "Catalogo",
-    emprendedor: "DashboardEmprendedor",
-    institucion: "DashboardInstitucion"
+    cliente: "Catalog",
+    emprendedor: "BizHome",
+    institucion: "OrgHome"
 };
-
-// Consulta la sesión y el tipo de usuario conectado.
+// Lee la sesión y el rol antes de permitir la entrada a una ruta privada.
 async function getSessionAndRole() {
-    const {
-        data: { session },
-        error: sessionError
-    } = await supabase.auth.getSession();
-
-    if (
-        sessionError ||
-        !session?.user
-    ) {
-        return {
-            session: null,
-            role: null
-        };
-    }
-
-    const {
-        data: profile,
-        error: profileError
-    } = await supabase
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session?.user) return { session: null, role: null };
+    const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("user_type")
         .eq("id", session.user.id)
         .maybeSingle();
-
-    if (profileError) {
-        console.warn(
-            "No se pudo comprobar el tipo de usuario:",
-            profileError
-        );
-    }
-
-    return {
-        session,
-        role:
-            profile?.user_type ||
-            null
-    };
+    if (profileError) console.warn("No se pudo comprobar el tipo de usuario:", profileError);
+    return { session, role: profile?.user_type || null };
 }
-
-// Protege únicamente las rutas privadas.
 router.beforeEach(async function (to) {
-    const requiresAuth =
-        to.matched.some(
-            function (route) {
-                return (
-                    route.meta.requiresAuth
-                );
-            }
-        );
-
-    /*
-        Home y Auth son públicas.
-        No se redirigen aunque haya una sesión activa.
-    */
-    if (!requiresAuth) {
-        return true;
-    }
-
-    const {
-        session,
-        role
-    } = await getSessionAndRole();
-
-    // Sin sesión, enviamos al inicio de sesión.
+    const requiresAuth = to.matched.some(function (route) {
+        return route.meta.requiresAuth;
+    });
+    if (!requiresAuth) return true;
+    const { session, role } = await getSessionAndRole();
     if (!session) {
-        return {
-            name: "Auth",
-            query: {
-                redirect:
-                    to.fullPath
-            }
-        };
+        return { name: "Access", query: { redirect: to.fullPath } };
     }
-
-    const allowedRoles =
-        to.meta.roles || [];
-
-    /*
-        Si el usuario intenta entrar a una sección
-        de otro tipo de cuenta, vuelve a su panel.
-    */
-    if (
-        allowedRoles.length &&
-        !allowedRoles.includes(role)
-    ) {
-        return {
-            name:
-                homeByRole[role] ||
-                "Home"
-        };
+    const allowedRoles = to.meta.roles || [];
+    if (allowedRoles.length && !allowedRoles.includes(role)) {
+        return { name: homeByRole[role] || "Landing" };
     }
-
     return true;
 });
-
-// Cambia el título de la pestaña del navegador.
+// Mantiene el título del navegador sincronizado con la pantalla actual.
 router.afterEach(function (to) {
-    document.title =
-        to.meta.title ||
-        "Thrive";
+    document.title = to.meta.title || "Thrive";
 });
-
 export default router;

@@ -2,15 +2,30 @@
 // Panel principal del emprendedor; centraliza perfil, productos, seguidores y vistas de administración.
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
-import { supabase } from "../lib/supabaseClient";
+import { supabase } from "../../lib/supabaseClient";
 import {
     uploadEntrepreneurLogo,
     uploadProductImages,
     deleteImage
-} from "../lib/storage";
-import NovedadesEmprendedor from "../components/emprendedor/NovedadesEmprendedor.vue";
+} from "../../lib/storage";
+import NewsFeed from "./NewsFeed.vue";
+const props = defineProps({
+    // La vista de ruta decide qué parte del panel se muestra.
+    screen: {
+        type: String,
+        default: "home"
+    },
+    // Solo se utiliza cuando la ruta abre la edición de un producto.
+    productId: {
+        type: String,
+        default: ""
+    }
+});
 const router = useRouter();
-// Estados principales utilizados por el dashboard.
+const screenMode = computed(function () {
+    return props.screen;
+});
+// Estados principales compartidos por las pantallas del emprendedor.
 const entrepreneur = ref(null);
 const products = ref([]);
 const loading = ref(true);
@@ -18,8 +33,10 @@ const loadError = ref("");
 const profileSaving = ref(false);
 const productSaving = ref(false);
 const logoutLoading = ref(false);
-// Controla la sección visible del dashboard.
-const activeSection = ref("inicio");
+// La sección activa se obtiene de la pantalla actual.
+const activeSection = ref(
+    props.screen === "news" ? "novedades" : "inicio"
+);
 // Control de ventanas.
 const showProfileEditor = ref(false);
 const showProductEditor = ref(false);
@@ -146,25 +163,29 @@ function stockText(stock) {
     if (amount === 1) return "1 unidad";
     return `${amount} unidades`;
 }
-// Cambia la sección visible o abre las herramientas que tienen su propia página.
+// Cada opción del menú tiene su propia ruta y archivo de pantalla.
 function changeSection(section) {
-    // Inventario tiene su propia vista para gestionar stock y pedidos.
-    if (section === "inventario") {
-        router.push({ name: "Inventario" });
-        return;
+    const routeBySection = {
+        inicio: "BizHome",
+        productos: "BizProducts",
+        inventario: "BizStock",
+        pedidos: "BizOrders",
+        novedades: "BizNews",
+        calculadora: "BizProfit",
+        perfil: "BizProfile"
+    };
+    const routeName = routeBySection[section];
+    if (!routeName) return;
+    router.push({ name: routeName });
+}
+// Ayuda a remarcar únicamente la pantalla que de verdad está abierta.
+function isSectionActive(section) {
+    if (section === "inicio") return screenMode.value === "home";
+    if (section === "productos") {
+        return ["products", "add-product", "edit-product"].includes(screenMode.value);
     }
-
-    // La calculadora también funciona como una vista independiente.
-    if (section === "calculadora") {
-        router.push({ name: "Calculadora" });
-        return;
-    }
-
-    activeSection.value = section;
-    window.scrollTo({
-        top: 0,
-        behavior: "smooth"
-    });
+    if (section === "novedades") return screenMode.value === "news";
+    return false;
 }
 // Cierra la sesión actual y vuelve a la pantalla de autenticación.
 async function logout() {
@@ -182,7 +203,7 @@ async function logout() {
         showProductEditor.value = false;
         showFollowersModal.value = false;
         document.body.style.overflow = "";
-        router.replace("/auth");
+        router.replace({ name: "Access" });
     } catch (error) {
         console.error("Error al cerrar sesión:", error);
         alert("No fue posible cerrar la sesión. Intenta nuevamente.");
@@ -190,7 +211,7 @@ async function logout() {
         logoutLoading.value = false;
     }
 }
-// Carga la información necesaria para mostrar el dashboard.
+// Carga la información base que comparten las pantallas del emprendedor.
 async function loadDashboard() {
     loading.value = true;
     loadError.value = "";
@@ -234,14 +255,12 @@ async function loadDashboard() {
                 .select("phone")
                 .eq("id", user.id)
                 .single();
-
         if (accountError) {
             console.warn(
                 "No se pudo cargar el teléfono del perfil:",
                 accountError
             );
         }
-
         entrepreneur.value = {
             id: entrepreneurData.id,
             businessName: entrepreneurData.business_name,
@@ -252,15 +271,19 @@ async function loadDashboard() {
             district: entrepreneurData.district,
             avatar: entrepreneurData.logo_url
         };
-        // Cargamos productos y seguidores reales desde Supabase.
-        await Promise.all([
-            loadProducts(user.id),
-            loadFollowers()
-        ]);
+        // Cada pantalla carga únicamente la información que necesita.
+        const pendingLoads = [];
+        if (["home", "products", "edit-product"].includes(screenMode.value)) {
+            pendingLoads.push(loadProducts(user.id));
+        }
+        if (screenMode.value === "home") {
+            pendingLoads.push(loadFollowers());
+        }
+        await Promise.all(pendingLoads);
     } catch (error) {
-        console.error("Error al cargar el dashboard:", error);
+        console.error("Error al cargar el panel del emprendedor:", error);
         loadError.value =
-            "Ocurrió un problema inesperado al cargar el dashboard.";
+            "Ocurrió un problema inesperado al cargar el panel.";
     } finally {
         loading.value = false;
     }
@@ -289,7 +312,6 @@ async function loadReviewSummary(productIds) {
     }
     return summary;
 }
-
 // Carga todos los productos pertenecientes al emprendedor.
 async function loadProducts(userId) {
     const { data: productRows, error: productError } = await supabase
@@ -311,21 +333,17 @@ async function loadProducts(userId) {
         .order("created_at", {
             ascending: false
         });
-
     if (productError) {
         console.error("Error al cargar los productos:", productError);
         throw productError;
     }
-
     if (!productRows?.length) {
         products.value = [];
         return;
     }
-
     const productIds = productRows.map(function (product) {
         return product.id;
     });
-
     const [
         { data: imageRows, error: imageError },
         reviewSummary
@@ -345,12 +363,10 @@ async function loadProducts(userId) {
             }),
         loadReviewSummary(productIds)
     ]);
-
     if (imageError) {
         console.error("Error al cargar imágenes:", imageError);
         throw imageError;
     }
-
     products.value = productRows.map(function (product) {
         const productImages = (imageRows || [])
             .filter(function (image) {
@@ -367,9 +383,7 @@ async function loadProducts(userId) {
                     sortOrder: image.sort_order
                 };
             });
-
         const reviews = reviewSummary[product.id];
-
         return {
             id: product.id,
             entrepreneurId: product.entrepreneur_id,
@@ -406,16 +420,12 @@ async function loadFollowers() {
         const { data, error } = await supabase.rpc(
             "get_my_followers"
         );
-
         if (error) {
             throw error;
         }
-
         const rows = data || [];
-
         followerCount.value =
             rows.length;
-
         followers.value =
             rows.map(function (follower) {
                 return {
@@ -523,6 +533,10 @@ function closeProfileEditor() {
     profileLogoFile.value = null;
     clearPasswordFields();
     document.body.style.overflow = "";
+    // La pantalla Profile funciona como editor dedicado.
+    if (screenMode.value === "profile") {
+        router.replace({ name: "BizHome" });
+    }
 }
 // Valida y guarda los cambios realizados en el perfil del emprendimiento.
 async function saveProfile() {
@@ -622,7 +636,6 @@ async function saveProfile() {
             );
             return;
         }
-
         // El teléfono se guarda en profiles, igual que en la cuenta del cliente.
         const { error: accountUpdateError } =
             await supabase
@@ -635,7 +648,6 @@ async function saveProfile() {
                     "id",
                     entrepreneur.value.id
                 );
-
         if (accountUpdateError) {
             alert(
                 "El emprendimiento se actualizó, pero no fue posible guardar el teléfono: " +
@@ -643,7 +655,6 @@ async function saveProfile() {
             );
             return;
         }
-
         entrepreneur.value = {
             id: data.id,
             businessName: data.business_name,
@@ -824,6 +835,10 @@ function closeProductEditor() {
     originalProductImages.value = [];
     showCategoryDropdown.value = false;
     document.body.style.overflow = "";
+    // Al cerrar la pantalla de creación regresamos al listado.
+    if (["add-product", "edit-product"].includes(screenMode.value)) {
+        router.replace({ name: "BizProducts" });
+    }
 }
 // Guarda un producto nuevo o actualiza uno existente.
 async function saveProduct() {
@@ -1143,7 +1158,7 @@ async function updateProduct(user) {
 function openProductDetail(product) {
     if (!product?.id) return;
     router.push({
-        name: "DetalleProducto",
+        name: "Product",
         params: {
             id: product.id
         }
@@ -1164,19 +1179,26 @@ function handleEscape(event) {
         closeProfileEditor();
     }
 }
-onMounted(function () {
-    // Al regresar desde Inventario o Calculadora podemos volver directamente a Inicio o Novedades.
-    const pendingSection = sessionStorage.getItem("thriveDashboardSection");
-    if (["inicio", "novedades"].includes(pendingSection)) {
-        activeSection.value = pendingSection;
-        sessionStorage.removeItem("thriveDashboardSection");
+onMounted(async function () {
+    await loadDashboard();
+    // Algunas rutas abren directamente una herramienta concreta.
+    if (screenMode.value === "profile" && entrepreneur.value) {
+        openProfileEditor();
     }
-
-    loadDashboard();
-    document.addEventListener(
-        "keydown",
-        handleEscape
-    );
+    if (screenMode.value === "add-product" && entrepreneur.value) {
+        openAddProduct();
+    }
+    if (screenMode.value === "edit-product" && entrepreneur.value) {
+        const product = products.value.find(function (item) {
+            return String(item.id) === String(props.productId);
+        });
+        if (product) {
+            openProductEditor(product);
+        } else {
+            router.replace({ name: "BizProducts" });
+        }
+    }
+    document.addEventListener("keydown", handleEscape);
 });
 onBeforeUnmount(function () {
     document.removeEventListener(
@@ -1210,20 +1232,21 @@ onBeforeUnmount(function () {
                     </svg>
                 </button>
             </div>
-
-            <!-- Navbar principal para laptop. La antigua isla azul ahora sí se utiliza para navegar. -->
+            <!-- Navegación principal en pantallas grandes. -->
             <nav class="hidden items-center justify-center gap-2 rounded-[24px] bg-[#00B4D8] p-2 shadow-sm lg:flex">
                 <button
                     v-for="item in [
                         ['inicio', 'Inicio'],
+                        ['productos', 'Productos'],
                         ['inventario', 'Inventario'],
+                        ['pedidos', 'Pedidos'],
                         ['novedades', 'Novedades'],
                         ['calculadora', 'Calculadora']
                     ]"
                     :key="item[0]"
                     type="button"
                     class="rounded-full px-6 py-2.5 text-sm font-bold transition"
-                    :class="activeSection === item[0] ? 'bg-white text-[#0077B6] shadow-sm' : 'text-white/85 hover:bg-white/15 hover:text-white'"
+                    :class="isSectionActive(item[0]) ? 'bg-white text-[#0077B6] shadow-sm' : 'text-white/85 hover:bg-white/15 hover:text-white'"
                     @click="changeSection(item[0])"
                 >
                     {{ item[1] }}
@@ -1250,7 +1273,7 @@ onBeforeUnmount(function () {
             !
         </div>
         <p class="mt-4 font-black text-gray-700">
-            No pudimos cargar el dashboard
+            No pudimos cargar el panel
         </p>
         <p class="mt-2 text-sm text-gray-400">
             {{ loadError }}
@@ -1271,7 +1294,7 @@ onBeforeUnmount(function () {
         <!-- INICIO -->
         <section v-if="activeSection === 'inicio'">
             <!-- Perfil -->
-            <section class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
+            <section v-if="screenMode === 'home'" class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
                 <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                     <div class="flex flex-col items-center gap-5 text-center sm:flex-row sm:text-left">
                         <img
@@ -1319,7 +1342,7 @@ onBeforeUnmount(function () {
                         <button
                             type="button"
                             class="w-full rounded-xl border border-[#00B4D8] px-5 py-3 text-sm font-bold text-[#0077B6] transition hover:bg-[#CAF0F8] lg:w-auto"
-                            @click="openProfileEditor"
+                            @click="router.push({ name: 'BizProfile' })"
                         >
                             Editar perfil
                         </button>
@@ -1348,7 +1371,10 @@ onBeforeUnmount(function () {
                 </div>
             </section>
             <!-- Productos -->
-            <section class="mt-7">
+            <section
+                v-if="screenMode === 'home' || screenMode === 'products'"
+                :class="screenMode === 'home' ? 'mt-7' : ''"
+            >
                 <div class="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                         <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
@@ -1364,7 +1390,7 @@ onBeforeUnmount(function () {
                     <button
                         type="button"
                         class="flex w-full items-center justify-center gap-2 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#009CC0] sm:w-auto"
-                        @click="openAddProduct"
+                        @click="router.push({ name: 'BizAddProduct' })"
                     >
                         <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <path stroke-linecap="round" d="M12 5v14M5 12h14"></path>
@@ -1450,7 +1476,7 @@ onBeforeUnmount(function () {
                                 <button
                                     type="button"
                                     class="rounded-xl bg-[#CAF0F8] px-2 py-2 text-[10px] font-bold text-[#0077B6] sm:text-xs"
-                                    @click="openProductEditor(product)"
+                                    @click="router.push({ name: 'BizEditProduct', params: { id: product.id } })"
                                 >
                                     Editar
                                 </button>
@@ -1479,7 +1505,7 @@ onBeforeUnmount(function () {
                     <button
                         type="button"
                         class="mt-5 rounded-xl bg-[#00B4D8] px-6 py-3 text-sm font-bold text-white"
-                        @click="openAddProduct"
+                        @click="router.push({ name: 'BizAddProduct' })"
                     >
                         Añadir mi primer producto
                     </button>
@@ -1487,18 +1513,18 @@ onBeforeUnmount(function () {
             </section>
         </section>
         <!-- Las novedades institucionales viven en un componente independiente. -->
-        <NovedadesEmprendedor
-            v-else-if="activeSection === 'novedades'"
+        <NewsFeed
+            v-else-if="screenMode === 'news' || activeSection === 'novedades'"
         />
     </main>
     <!-- Menú móvil. -->
     <nav class="fixed rounded-t-[28px] inset-x-0 bottom-0 z-50 border-t border-white/20 bg-[#00B4D8] shadow-[0_-6px_20px_rgba(0,0,0,0.12)] lg:hidden">
-        <div class="mx-auto grid max-w-lg grid-cols-4">
+        <div class="mx-auto grid max-w-lg grid-cols-5">
             <!-- Inicio -->
             <button
                 type="button"
                 class="flex flex-col items-center gap-1 py-2 text-white"
-                :class="activeSection === 'inicio' ? 'bg-white/15' : 'text-white/75'"
+                :class="isSectionActive('inicio') ? 'bg-white/15' : 'text-white/75'"
                 @click="changeSection('inicio')"
             >
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -1508,6 +1534,19 @@ onBeforeUnmount(function () {
                 <span class="text-[9px] font-bold">
                     Inicio
                 </span>
+            </button>
+            <!-- Productos -->
+            <button
+                type="button"
+                class="flex flex-col items-center gap-1 py-2 text-white"
+                :class="isSectionActive('productos') ? 'bg-white/15' : 'text-white/75'"
+                @click="changeSection('productos')"
+            >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M4 7l8-4 8 4-8 4-8-4z"></path>
+                    <path d="M4 7v10l8 4 8-4V7"></path>
+                </svg>
+                <span class="text-[9px] font-bold">Productos</span>
             </button>
             <!-- Inventario -->
             <button
@@ -1528,7 +1567,7 @@ onBeforeUnmount(function () {
             <button
                 type="button"
                 class="flex flex-col items-center gap-1 py-2 text-white"
-                :class="activeSection === 'novedades' ? 'bg-white/15' : 'text-white/75'"
+                :class="isSectionActive('novedades') ? 'bg-white/15' : 'text-white/75'"
                 @click="changeSection('novedades')"
             >
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -1660,7 +1699,6 @@ onBeforeUnmount(function () {
                                             : "Cliente"
                                     }}
                                 </span>
-
                                 <span class="text-xs text-gray-400">
                                     Sigue tu emprendimiento
                                 </span>
@@ -1756,7 +1794,6 @@ onBeforeUnmount(function () {
                             El correo pertenece a tu cuenta de acceso.
                         </p>
                     </div>
-
                     <div>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
                             Teléfono

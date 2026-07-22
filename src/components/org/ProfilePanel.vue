@@ -6,8 +6,7 @@ import {
     uploadInstitutionLogo,
     deleteInstitutionImages,
     getInstitutionStoragePath
-} from "../../lib/institutionStorage";
-
+} from "../../lib/orgStorage";
 const props = defineProps({
     institution: {
         type: Object,
@@ -18,17 +17,14 @@ const props = defineProps({
         default: false
     }
 });
-
 const emit = defineEmits([
     "updated",
     "logout"
 ]);
-
 const showEditor = ref(false);
 const saving = ref(false);
 const logoFile = ref(null);
 const logoPreview = ref("");
-
 const form = ref({
     institutionName: "",
     phone: "",
@@ -37,11 +33,9 @@ const form = ref({
     department: "",
     district: ""
 });
-
 const currentPassword = ref("");
 const newPassword = ref("");
 const confirmPassword = ref("");
-
 const departments = [
     "Ahuachapán",
     "Cabañas",
@@ -58,7 +52,6 @@ const departments = [
     "Sonsonate",
     "Usulután"
 ];
-
 const initials = computed(function () {
     return props.institution.institutionName
         .trim()
@@ -69,13 +62,11 @@ const initials = computed(function () {
         })
         .join("");
 });
-
 function clearPasswordFields() {
     currentPassword.value = "";
     newPassword.value = "";
     confirmPassword.value = "";
 }
-
 function openEditor() {
     form.value = {
         institutionName:
@@ -91,16 +82,13 @@ function openEditor() {
         district:
             props.institution.district || ""
     };
-
     logoFile.value = null;
     logoPreview.value =
         props.institution.logoUrl || "";
-
     clearPasswordFields();
     showEditor.value = true;
     document.body.style.overflow = "hidden";
 }
-
 function closeEditor() {
     showEditor.value = false;
     logoFile.value = null;
@@ -108,52 +96,39 @@ function closeEditor() {
     clearPasswordFields();
     document.body.style.overflow = "";
 }
-
 function handleLogo(event) {
     const file = event.target.files?.[0];
-
     if (!file) return;
-
     if (!file.type.startsWith("image/")) {
         alert("Selecciona una imagen válida.");
         event.target.value = "";
         return;
     }
-
     if (file.size > 5 * 1024 * 1024) {
         alert("La imagen no puede superar los 5 MB.");
         event.target.value = "";
         return;
     }
-
     logoFile.value = file;
-
     const reader = new FileReader();
-
     reader.onload = function (loadEvent) {
         logoPreview.value = loadEvent.target.result;
     };
-
     reader.readAsDataURL(file);
 }
-
 async function saveProfile() {
     if (saving.value) return;
-
     if (!form.value.institutionName.trim()) {
         alert("Escribe el nombre de la institución.");
         return;
     }
-
     saving.value = true;
     let uploadedLogo = null;
-
     try {
         const {
             data: { user },
             error: userError
         } = await supabase.auth.getUser();
-
         if (
             userError ||
             !user?.email
@@ -162,12 +137,10 @@ async function saveProfile() {
                 "No fue posible verificar la sesión."
             );
         }
-
         const wantsPasswordChange =
             currentPassword.value ||
             newPassword.value ||
             confirmPassword.value;
-
         if (wantsPasswordChange) {
             if (
                 !currentPassword.value ||
@@ -179,14 +152,12 @@ async function saveProfile() {
                 );
                 return;
             }
-
             if (newPassword.value.length < 8) {
                 alert(
                     "La nueva contraseña debe tener al menos 8 caracteres."
                 );
                 return;
             }
-
             if (
                 newPassword.value !==
                 confirmPassword.value
@@ -196,13 +167,11 @@ async function saveProfile() {
                 );
                 return;
             }
-
             const { error } = await supabase.auth
                 .signInWithPassword({
                     email: user.email,
                     password: currentPassword.value
                 });
-
             if (error) {
                 alert(
                     "La contraseña actual es incorrecta."
@@ -210,25 +179,20 @@ async function saveProfile() {
                 return;
             }
         }
-
         const oldLogoPath =
             getInstitutionStoragePath(
                 props.institution.logoUrl
             );
-
         let logoUrl =
             props.institution.logoUrl || null;
-
         if (logoFile.value) {
             uploadedLogo =
                 await uploadInstitutionLogo(
                     user.id,
                     logoFile.value
                 );
-
             logoUrl = uploadedLogo.publicUrl;
         }
-
         const { data, error } = await supabase
             .from("institutions")
             .update({
@@ -247,9 +211,7 @@ async function saveProfile() {
             .eq("id", user.id)
             .select()
             .single();
-
         if (error) throw error;
-
         const { error: profileError } = await supabase
             .from("profiles")
             .update({
@@ -260,9 +222,7 @@ async function saveProfile() {
                 avatar_url: logoUrl
             })
             .eq("id", user.id);
-
         if (profileError) throw profileError;
-
         if (
             uploadedLogo?.path &&
             oldLogoPath &&
@@ -279,16 +239,13 @@ async function saveProfile() {
                 );
             }
         }
-
         if (wantsPasswordChange) {
             const { error: passwordError } =
                 await supabase.auth.updateUser({
                     password: newPassword.value
                 });
-
             if (passwordError) throw passwordError;
         }
-
         emit("updated", {
             institutionName: data.institution_name,
             description: data.description || "",
@@ -298,7 +255,6 @@ async function saveProfile() {
             logoUrl: data.logo_url || "",
             phone: form.value.phone.trim()
         });
-
         alert("Perfil institucional actualizado.");
         closeEditor();
     } catch (error) {
@@ -306,7 +262,6 @@ async function saveProfile() {
             "Error al guardar el perfil institucional:",
             error
         );
-
         if (uploadedLogo?.path) {
             try {
                 await deleteInstitutionImages([
@@ -316,7 +271,6 @@ async function saveProfile() {
                 // La limpieza no debe ocultar el error principal.
             }
         }
-
         alert(
             "No fue posible guardar los cambios: " +
             (error.message || "Error inesperado")
@@ -325,12 +279,10 @@ async function saveProfile() {
         saving.value = false;
     }
 }
-
 onBeforeUnmount(function () {
     document.body.style.overflow = "";
 });
 </script>
-
 <template>
 <section>
     <section class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
@@ -348,7 +300,6 @@ onBeforeUnmount(function () {
                 >
                     {{ initials }}
                 </div>
-
                 <div>
                     <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
                         Perfil institucional
@@ -364,7 +315,6 @@ onBeforeUnmount(function () {
                     </p>
                 </div>
             </div>
-
             <div class="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
                 <button
                     type="button"
@@ -373,7 +323,6 @@ onBeforeUnmount(function () {
                 >
                     Editar perfil
                 </button>
-
                 <button
                     type="button"
                     :disabled="logoutLoading"
@@ -388,7 +337,6 @@ onBeforeUnmount(function () {
             </div>
         </div>
     </section>
-
     <section class="mt-5 grid gap-4 md:grid-cols-2">
         <article class="rounded-[24px] bg-white p-5 shadow-sm sm:p-6">
             <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
@@ -398,7 +346,6 @@ onBeforeUnmount(function () {
                 {{ institution.description || "Sin descripción institucional." }}
             </p>
         </article>
-
         <article class="rounded-[24px] bg-white p-5 shadow-sm sm:p-6">
             <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
                 Información
@@ -430,7 +377,6 @@ onBeforeUnmount(function () {
             </div>
         </article>
     </section>
-
     <!-- Editor con el mismo estilo del perfil del emprendedor. -->
     <Teleport to="body">
         <div
@@ -456,7 +402,6 @@ onBeforeUnmount(function () {
                         ×
                     </button>
                 </div>
-
                 <form
                     class="space-y-5 p-5 sm:p-7"
                     @submit.prevent="saveProfile"
@@ -489,7 +434,6 @@ onBeforeUnmount(function () {
                             </label>
                         </div>
                     </div>
-
                     <div>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
                             Nombre de la institución
@@ -501,7 +445,6 @@ onBeforeUnmount(function () {
                             class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         >
                     </div>
-
                     <div>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
                             Correo electrónico
@@ -513,7 +456,6 @@ onBeforeUnmount(function () {
                             class="w-full cursor-not-allowed rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-gray-400"
                         >
                     </div>
-
                     <div>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
                             Teléfono
@@ -525,7 +467,6 @@ onBeforeUnmount(function () {
                             class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         >
                     </div>
-
                     <div>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
                             Sitio web
@@ -537,7 +478,6 @@ onBeforeUnmount(function () {
                             class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         >
                     </div>
-
                     <div>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
                             Descripción
@@ -548,7 +488,6 @@ onBeforeUnmount(function () {
                             class="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         ></textarea>
                     </div>
-
                     <div class="grid gap-4 sm:grid-cols-2">
                         <div>
                             <label class="mb-1.5 block text-sm font-bold text-gray-600">
@@ -570,7 +509,6 @@ onBeforeUnmount(function () {
                                 </option>
                             </select>
                         </div>
-
                         <div>
                             <label class="mb-1.5 block text-sm font-bold text-gray-600">
                                 Distrito
@@ -582,7 +520,6 @@ onBeforeUnmount(function () {
                             >
                         </div>
                     </div>
-
                     <div class="border-t border-gray-100 pt-5">
                         <h3 class="font-black text-gray-700">
                             Cambiar contraseña
@@ -590,7 +527,6 @@ onBeforeUnmount(function () {
                         <p class="mt-1 text-xs text-gray-400">
                             Deja estos campos vacíos si no deseas cambiarla.
                         </p>
-
                         <div class="mt-4 space-y-3">
                             <input
                                 v-model="currentPassword"
@@ -615,7 +551,6 @@ onBeforeUnmount(function () {
                             >
                         </div>
                     </div>
-
                     <button
                         type="submit"
                         :disabled="saving"

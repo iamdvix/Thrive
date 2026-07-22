@@ -1,20 +1,33 @@
 <script setup>
-// Vista principal de la institución; mantiene la misma navegación del dashboard del emprendedor.
+// Contenedor compartido por las pantallas de la cuenta institucional.
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
-import { supabase } from "../lib/supabaseClient.js";
-import InicioInstitucion from "../components/institucion/InicioInstitucion.vue";
-import PublicacionesInstitucion from "../components/institucion/PublicacionesInstitucion.vue";
-import EmprendedoresInstitucion from "../components/institucion/EmprendedoresInstitucion.vue";
-import PerfilInstitucion from "../components/institucion/PerfilInstitucion.vue";
-
+import { supabase } from "../../lib/supabaseClient.js";
+import Overview from "./Overview.vue";
+import PostsPanel from "./PostsPanel.vue";
+import BusinessesPanel from "./BusinessesPanel.vue";
+import ProfilePanel from "./ProfilePanel.vue";
+const props = defineProps({
+    // La ruta indica qué sección institucional debe mostrarse.
+    section: {
+        type: String,
+        default: "home"
+    }
+});
 const router = useRouter();
 const institution = ref(null);
 const loading = ref(true);
 const loadError = ref("");
 const logoutLoading = ref(false);
-const activeSection = ref("inicio");
-
+const activeSection = computed(function () {
+    const sectionMap = {
+        home: "inicio",
+        posts: "publicaciones",
+        businesses: "emprendedores",
+        profile: "perfil"
+    };
+    return sectionMap[props.section] || "inicio";
+});
 const institutionInitials = computed(function () {
     const name = institution.value?.institutionName || "Thrive";
     return name
@@ -26,37 +39,35 @@ const institutionInitials = computed(function () {
         })
         .join("");
 });
-
+// Mantiene cada área institucional en una URL y archivo de vista distintos.
 function changeSection(section) {
-    activeSection.value = section;
-    window.scrollTo({
-        top: 0,
-        behavior: "smooth"
-    });
+    const routeBySection = {
+        inicio: "OrgHome",
+        publicaciones: "OrgPosts",
+        emprendedores: "OrgBusinesses",
+        perfil: "OrgProfile"
+    };
+    const routeName = routeBySection[section];
+    if (routeName) router.push({ name: routeName });
 }
-
 function updateInstitution(updatedInstitution) {
     institution.value = {
         ...institution.value,
         ...updatedInstitution
     };
 }
-
 async function loadInstitution() {
     loading.value = true;
     loadError.value = "";
-
     try {
         const {
             data: { user },
             error: userError
         } = await supabase.auth.getUser();
-
         if (userError || !user) {
-            router.replace("/auth");
+            router.replace({ name: "Access" });
             return;
         }
-
         const { data: profile, error: profileError } = await supabase
             .from("profiles")
             .select(`
@@ -68,7 +79,6 @@ async function loadInstitution() {
             `)
             .eq("id", user.id)
             .single();
-
         if (
             profileError ||
             profile?.user_type !== "institucion"
@@ -81,7 +91,6 @@ async function loadInstitution() {
                 "Esta cuenta no tiene permisos para abrir el panel institucional.";
             return;
         }
-
         const { data, error } = await supabase
             .from("institutions")
             .select(`
@@ -97,7 +106,6 @@ async function loadInstitution() {
             `)
             .eq("id", user.id)
             .single();
-
         if (error || !data) {
             console.error(
                 "No se pudo cargar la institución:",
@@ -107,7 +115,6 @@ async function loadInstitution() {
                 "No encontramos el perfil institucional conectado a esta cuenta.";
             return;
         }
-
         institution.value = {
             id: data.id,
             institutionName:
@@ -133,18 +140,15 @@ async function loadInstitution() {
         loading.value = false;
     }
 }
-
 async function logout() {
     if (logoutLoading.value) return;
     logoutLoading.value = true;
-
     try {
         const { error } = await supabase.auth.signOut({
             scope: "local"
         });
-
         if (error) throw error;
-        router.replace("/auth");
+        router.replace({ name: "Access" });
     } catch (error) {
         console.error(
             "Error al cerrar sesión:",
@@ -155,27 +159,23 @@ async function logout() {
         logoutLoading.value = false;
     }
 }
-
 function handleEscape(event) {
     if (event.key === "Escape") {
         document.body.style.overflow = "";
     }
 }
-
 onMounted(function () {
     loadInstitution();
     document.addEventListener("keydown", handleEscape);
 });
-
 onBeforeUnmount(function () {
     document.removeEventListener("keydown", handleEscape);
     document.body.style.overflow = "";
 });
 </script>
-
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-0">
-    <!-- Cabecera igual a la del dashboard del emprendedor. -->
+    <!-- Cabecera de la cuenta institucional. -->
     <header class="sticky top-0 z-40 bg-[#F8FBFC]">
         <div class="mx-auto max-w-[1450px] px-2 pt-2 sm:px-5 lg:px-8 lg:pt-4">
             <!-- Cabecera móvil. -->
@@ -196,7 +196,6 @@ onBeforeUnmount(function () {
                         {{ institution?.institutionName || "Thrive" }}
                     </span>
                 </div>
-
                 <button
                     type="button"
                     aria-label="Notificaciones"
@@ -206,7 +205,6 @@ onBeforeUnmount(function () {
                         <path stroke-linecap="round" d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"></path>
                     </svg>
                 </button>
-
                 <button
                     type="button"
                     aria-label="Abrir perfil"
@@ -219,7 +217,6 @@ onBeforeUnmount(function () {
                     </svg>
                 </button>
             </div>
-
             <!-- Navbar principal para laptop. -->
             <nav class="hidden items-center justify-center gap-2 rounded-[24px] bg-[#00B4D8] p-2 shadow-sm lg:flex">
                 <button
@@ -240,7 +237,6 @@ onBeforeUnmount(function () {
             </nav>
         </div>
     </header>
-
     <!-- Cargando. -->
     <main
         v-if="loading"
@@ -251,7 +247,6 @@ onBeforeUnmount(function () {
             Cargando panel institucional...
         </p>
     </main>
-
     <!-- Error. -->
     <main
         v-else-if="loadError"
@@ -261,7 +256,7 @@ onBeforeUnmount(function () {
             !
         </div>
         <p class="mt-4 font-black text-gray-700">
-            No pudimos cargar el dashboard
+            No pudimos cargar el panel
         </p>
         <p class="mt-2 text-sm text-gray-400">
             {{ loadError }}
@@ -274,29 +269,25 @@ onBeforeUnmount(function () {
             Intentar nuevamente
         </button>
     </main>
-
-    <!-- Cada sección vive en su propio archivo para mantener el dashboard ligero. -->
+    <!-- El contenido cambia según la vista institucional que abrió la ruta. -->
     <main
         v-else-if="institution"
         class="mx-auto max-w-[1450px] px-3 pb-10 pt-3 sm:px-5 lg:px-8"
     >
-        <InicioInstitucion
+        <Overview
             v-if="activeSection === 'inicio'"
             :institution="institution"
             @change-section="changeSection"
         />
-
-        <PublicacionesInstitucion
+        <PostsPanel
             v-else-if="activeSection === 'publicaciones'"
             :institution="institution"
         />
-
-        <EmprendedoresInstitucion
+        <BusinessesPanel
             v-else-if="activeSection === 'emprendedores'"
             :institution="institution"
         />
-
-        <PerfilInstitucion
+        <ProfilePanel
             v-else
             :institution="institution"
             :logout-loading="logoutLoading"
@@ -304,8 +295,7 @@ onBeforeUnmount(function () {
             @logout="logout"
         />
     </main>
-
-    <!-- Menú móvil igual al del dashboard del emprendedor. -->
+    <!-- Menú móvil de la cuenta institucional. -->
     <nav class="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] border-t border-white/20 bg-[#00B4D8] shadow-[0_-6px_20px_rgba(0,0,0,0.12)] lg:hidden">
         <div class="mx-auto grid max-w-lg grid-cols-4">
             <button
@@ -322,7 +312,6 @@ onBeforeUnmount(function () {
                     Inicio
                 </span>
             </button>
-
             <button
                 type="button"
                 class="flex flex-col items-center gap-1 py-2 text-white"
@@ -337,7 +326,6 @@ onBeforeUnmount(function () {
                     Publicaciones
                 </span>
             </button>
-
             <button
                 type="button"
                 class="flex flex-col items-center gap-1 py-2 text-white"
@@ -353,7 +341,6 @@ onBeforeUnmount(function () {
                     Emprendedores
                 </span>
             </button>
-
             <button
                 type="button"
                 class="flex flex-col items-center gap-1 py-2 text-white"

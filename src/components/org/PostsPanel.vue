@@ -10,16 +10,14 @@ import { supabase } from "../../lib/supabaseClient";
 import {
     uploadInstitutionPostImages,
     deleteInstitutionImages
-} from "../../lib/institutionStorage";
-import NovedadDetalleModal from "../compartidos/NovedadDetalleModal.vue";
-
+} from "../../lib/orgStorage";
+import NewsModal from "../shared/NewsModal.vue";
 const props = defineProps({
     institution: {
         type: Object,
         required: true
     }
 });
-
 const posts = ref([]);
 const loading = ref(true);
 const loadError = ref("");
@@ -30,7 +28,6 @@ const editorMode = ref("add");
 const selectedPost = ref(null);
 const editorImages = ref([]);
 const originalImages = ref([]);
-
 const form = ref({
     title: "",
     description: "",
@@ -45,7 +42,6 @@ const form = ref({
     contactPhone: "",
     status: "draft"
 });
-
 const postTypes = [
     ["noticia", "Noticia"],
     ["taller", "Taller"],
@@ -54,18 +50,15 @@ const postTypes = [
     ["oportunidad", "Oportunidad"],
     ["anuncio", "Anuncio"]
 ];
-
 const editorTitle = computed(function () {
     return editorMode.value === "add"
         ? "Crear publicación"
         : "Editar publicación";
 });
-
 const previewPost = computed(function () {
     if (!selectedPost.value) {
         return null;
     }
-
     return {
         ...selectedPost.value,
         institutionName:
@@ -74,7 +67,6 @@ const previewPost = computed(function () {
             props.institution.logoUrl
     };
 });
-
 function typeLabel(type) {
     return (
         postTypes.find(function (item) {
@@ -83,38 +75,30 @@ function typeLabel(type) {
         "Publicación"
     );
 }
-
 function statusLabel(status) {
     if (status === "published") {
         return "Publicado";
     }
-
     if (status === "archived") {
         return "Archivado";
     }
-
     return "Borrador";
 }
-
 function statusClasses(status) {
     if (status === "published") {
         return "bg-green-100 text-green-700";
     }
-
     if (status === "archived") {
         return "bg-gray-100 text-gray-600";
     }
-
     return "bg-amber-100 text-amber-700";
 }
-
 function isInformativeType(type) {
     return [
         "noticia",
         "anuncio"
     ].includes(type);
 }
-
 function supportsAttendance(type) {
     return [
         "taller",
@@ -123,10 +107,8 @@ function supportsAttendance(type) {
         "oportunidad"
     ].includes(type);
 }
-
 function formatDate(date) {
     if (!date) return "";
-
     return new Intl.DateTimeFormat(
         "es-SV",
         {
@@ -138,7 +120,6 @@ function formatDate(date) {
         new Date(date)
     );
 }
-
 function cardDate(post) {
     if (
         isInformativeType(
@@ -147,34 +128,27 @@ function cardDate(post) {
     ) {
         return "";
     }
-
     if (post.eventDate) {
         return formatDate(
             post.eventDate
         );
     }
-
     if (post.deadline) {
         return `Hasta ${formatDate(
             post.deadline
         )}`;
     }
-
     return formatDate(
         post.createdAt
     );
 }
-
 function toInputDateTime(date) {
     if (!date) return "";
-
     const value =
         new Date(date);
-
     const offset =
         value.getTimezoneOffset() *
         60000;
-
     return new Date(
         value.getTime() -
         offset
@@ -182,17 +156,14 @@ function toInputDateTime(date) {
         .toISOString()
         .slice(0, 16);
 }
-
 function toIso(value) {
     return value
         ? new Date(value).toISOString()
         : null;
 }
-
 function createLocalPreview(file) {
     return URL.createObjectURL(file);
 }
-
 function revokeLocalPreview(image) {
     if (
         image?.kind === "new" &&
@@ -203,7 +174,6 @@ function revokeLocalPreview(image) {
         );
     }
 }
-
 function emptyForm() {
     return {
         title: "",
@@ -222,21 +192,17 @@ function emptyForm() {
         status: "draft"
     };
 }
-
 function resetForm() {
     editorImages.value.forEach(
         revokeLocalPreview
     );
-
     form.value = emptyForm();
     editorImages.value = [];
     originalImages.value = [];
 }
-
 async function loadPosts() {
     loading.value = true;
     loadError.value = "";
-
     try {
         const {
             data: postRows,
@@ -269,21 +235,16 @@ async function loadPosts() {
             .order("created_at", {
                 ascending: false
             });
-
         if (postError) {
             throw postError;
         }
-
         const rows =
             postRows || [];
-
         const postIds =
             rows.map(function (post) {
                 return post.id;
             });
-
         let imageRows = [];
-
         if (postIds.length) {
             const {
                 data,
@@ -301,15 +262,12 @@ async function loadPosts() {
                 .order("sort_order", {
                     ascending: true
                 });
-
             if (error) {
                 throw error;
             }
-
             imageRows =
                 data || [];
         }
-
         posts.value =
             rows.map(function (post) {
                 const imageRecords =
@@ -336,7 +294,6 @@ async function loadPosts() {
                                 };
                             }
                         );
-
                 return {
                     id:
                         post.id,
@@ -385,14 +342,12 @@ async function loadPosts() {
             "Error al cargar publicaciones:",
             error
         );
-
         loadError.value =
             "No fue posible cargar las publicaciones.";
     } finally {
         loading.value = false;
     }
 }
-
 function openAddPost() {
     editorMode.value = "add";
     selectedPost.value = null;
@@ -401,11 +356,9 @@ function openAddPost() {
     document.body.style.overflow =
         "hidden";
 }
-
 function openEditPost(post) {
     editorMode.value = "edit";
     selectedPost.value = post;
-
     form.value = {
         title:
             post.title,
@@ -441,7 +394,6 @@ function openEditPost(post) {
         status:
             post.status
     };
-
     editorImages.value =
         post.imageRecords.map(
             function (image) {
@@ -456,7 +408,6 @@ function openEditPost(post) {
                 };
             }
         );
-
     originalImages.value =
         post.imageRecords.map(
             function (image) {
@@ -468,80 +419,64 @@ function openEditPost(post) {
                 };
             }
         );
-
     showEditor.value = true;
     document.body.style.overflow =
         "hidden";
 }
-
 function closeEditor() {
     showEditor.value = false;
     selectedPost.value = null;
     resetForm();
     document.body.style.overflow = "";
 }
-
 function openPreview(post) {
     selectedPost.value = post;
     showPreview.value = true;
     document.body.style.overflow =
         "hidden";
 }
-
 function closePreview() {
     showPreview.value = false;
     selectedPost.value = null;
     document.body.style.overflow = "";
 }
-
 function editFromPreview() {
     const post =
         selectedPost.value;
-
     showPreview.value = false;
-
     if (post) {
         openEditPost(post);
     }
 }
-
 function deleteFromPreview() {
     const post =
         selectedPost.value;
-
     showPreview.value = false;
     selectedPost.value = null;
     document.body.style.overflow = "";
-
     if (post) {
         deletePost(post);
     }
 }
-
 function handleImages(event) {
     const files =
         Array.from(
             event.target.files ||
             []
         );
-
     if (!files.length) {
         return;
     }
-
     const available =
         6 -
         editorImages.value.length;
-
     if (available <= 0) {
         alert(
             "Puedes subir hasta 6 imágenes."
         );
-
         event.target.value = "";
         return;
     }
-
     const validFiles =
         files
             .filter(
@@ -556,7 +491,6 @@ function handleImages(event) {
                 }
             )
             .slice(0, available);
-
     if (
         validFiles.length !==
         files.slice(
@@ -568,7 +502,6 @@ function handleImages(event) {
             "Algunas imágenes no eran válidas o superaban los 5 MB."
         );
     }
-
     validFiles.forEach(
         function (file) {
             editorImages.value.push({
@@ -583,42 +516,34 @@ function handleImages(event) {
             });
         }
     );
-
     event.target.value = "";
 }
-
 function removeImage(index) {
     revokeLocalPreview(
         editorImages.value[index]
     );
-
     editorImages.value.splice(
         index,
         1
     );
 }
-
 function makeCover(index) {
     if (index <= 0) {
         return;
     }
-
     const image =
         editorImages.value.splice(
             index,
             1
         )[0];
-
     editorImages.value.unshift(
         image
     );
 }
-
 async function savePost() {
     if (saving.value) {
         return;
     }
-
     if (
         !form.value.title.trim() ||
         !form.value.description.trim()
@@ -628,12 +553,10 @@ async function savePost() {
         );
         return;
     }
-
     const attendancePost =
         supportsAttendance(
             form.value.postType
         );
-
     if (
         attendancePost &&
         !form.value.contactPhone.trim() &&
@@ -644,7 +567,6 @@ async function savePost() {
         );
         return;
     }
-
     if (
         form.value.requiresRegistration &&
         (
@@ -659,18 +581,14 @@ async function savePost() {
         );
         return;
     }
-
     saving.value = true;
-
     let createdPostId = "";
     let uploaded = [];
-
     try {
         const informativePost =
             isInformativeType(
                 form.value.postType
             );
-
         const payload = {
             institution_id:
                 props.institution.id,
@@ -733,9 +651,7 @@ async function savePost() {
                       new Date().toISOString()
                     : null
         };
-
         let postId = "";
-
         if (
             editorMode.value ===
             "add"
@@ -748,17 +664,14 @@ async function savePost() {
                 .insert(payload)
                 .select("id")
                 .single();
-
             if (error) {
                 throw error;
             }
-
             postId = data.id;
             createdPostId = data.id;
         } else {
             postId =
                 selectedPost.value.id;
-
             const { error } =
                 await supabase
                     .from("institution_posts")
@@ -768,12 +681,10 @@ async function savePost() {
                         "institution_id",
                         props.institution.id
                     );
-
             if (error) {
                 throw error;
             }
         }
-
         const newImages =
             editorImages.value.filter(
                 function (image) {
@@ -783,7 +694,6 @@ async function savePost() {
                     );
                 }
             );
-
         uploaded =
             await uploadInstitutionPostImages(
                 props.institution.id,
@@ -794,10 +704,8 @@ async function savePost() {
                     }
                 )
             );
-
         const uploadByFile =
             new Map();
-
         newImages.forEach(
             function (image, index) {
                 uploadByFile.set(
@@ -806,7 +714,6 @@ async function savePost() {
                 );
             }
         );
-
         const finalImages =
             editorImages.value.map(
                 function (
@@ -828,12 +735,10 @@ async function savePost() {
                                 index
                         };
                     }
-
                     const uploadedImage =
                         uploadByFile.get(
                             image.file
                         );
-
                     return {
                         kind:
                             "new",
@@ -846,7 +751,6 @@ async function savePost() {
                     };
                 }
             );
-
         const newRows =
             finalImages
                 .filter(
@@ -871,18 +775,15 @@ async function savePost() {
                         };
                     }
                 );
-
         if (newRows.length) {
             const { error } =
                 await supabase
                     .from("institution_post_images")
                     .insert(newRows);
-
             if (error) {
                 throw error;
             }
         }
-
         const existingImages =
             finalImages.filter(
                 function (image) {
@@ -892,7 +793,6 @@ async function savePost() {
                     );
                 }
             );
-
         for (
             const image of
             existingImages
@@ -905,12 +805,10 @@ async function savePost() {
                             image.sortOrder
                     })
                     .eq("id", image.id);
-
             if (error) {
                 throw error;
             }
         }
-
         if (
             editorMode.value ===
             "edit"
@@ -923,7 +821,6 @@ async function savePost() {
                         }
                     )
                 );
-
             const removed =
                 originalImages.value.filter(
                     function (image) {
@@ -932,7 +829,6 @@ async function savePost() {
                         );
                     }
                 );
-
             if (removed.length) {
                 const { error } =
                     await supabase
@@ -946,11 +842,9 @@ async function savePost() {
                                 }
                             )
                         );
-
                 if (error) {
                     throw error;
                 }
-
                 try {
                     await deleteInstitutionImages(
                         removed.map(
@@ -969,23 +863,19 @@ async function savePost() {
                 }
             }
         }
-
         await loadPosts();
-
         alert(
             editorMode.value ===
                 "add"
                 ? "Publicación creada correctamente."
                 : "Publicación actualizada correctamente."
         );
-
         closeEditor();
     } catch (error) {
         console.error(
             "Error al guardar publicación:",
             error
         );
-
         if (uploaded.length) {
             try {
                 await deleteInstitutionImages(
@@ -1002,7 +892,6 @@ async function savePost() {
                 );
             }
         }
-
         if (createdPostId) {
             await supabase
                 .from("institution_posts")
@@ -1012,7 +901,6 @@ async function savePost() {
                     createdPostId
                 );
         }
-
         alert(
             "No fue posible guardar la publicación: " +
             (
@@ -1024,7 +912,6 @@ async function savePost() {
         saving.value = false;
     }
 }
-
 async function deletePost(post) {
     if (
         !post ||
@@ -1032,18 +919,14 @@ async function deletePost(post) {
     ) {
         return;
     }
-
     const confirmed =
         window.confirm(
             `¿Deseas eliminar "${post.title}"?`
         );
-
     if (!confirmed) {
         return;
     }
-
     saving.value = true;
-
     try {
         const { error } =
             await supabase
@@ -1054,11 +937,9 @@ async function deletePost(post) {
                     "institution_id",
                     props.institution.id
                 );
-
         if (error) {
             throw error;
         }
-
         try {
             await deleteInstitutionImages(
                 post.imageRecords.map(
@@ -1075,7 +956,6 @@ async function deletePost(post) {
                 storageError
             );
         }
-
         posts.value =
             posts.value.filter(
                 function (item) {
@@ -1085,7 +965,6 @@ async function deletePost(post) {
                     );
                 }
             );
-
         alert(
             "Publicación eliminada."
         );
@@ -1094,7 +973,6 @@ async function deletePost(post) {
             "Error al eliminar publicación:",
             error
         );
-
         alert(
             "No fue posible eliminar la publicación."
         );
@@ -1102,46 +980,37 @@ async function deletePost(post) {
         saving.value = false;
     }
 }
-
 function handleEscape(event) {
     if (event.key !== "Escape") {
         return;
     }
-
     if (showPreview.value) {
         closePreview();
         return;
     }
-
     if (showEditor.value) {
         closeEditor();
     }
 }
-
 onMounted(function () {
     resetForm();
     loadPosts();
-
     document.addEventListener(
         "keydown",
         handleEscape
     );
 });
-
 onBeforeUnmount(function () {
     document.removeEventListener(
         "keydown",
         handleEscape
     );
-
     editorImages.value.forEach(
         revokeLocalPreview
     );
-
     document.body.style.overflow = "";
 });
 </script>
-
 <template>
 <section>
     <div class="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -1156,7 +1025,6 @@ onBeforeUnmount(function () {
                 Crea contenido y revisa exactamente cómo lo verá el emprendedor.
             </p>
         </div>
-
         <button
             type="button"
             class="flex w-full items-center justify-center gap-2 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#009CC0] sm:w-auto"
@@ -1168,7 +1036,6 @@ onBeforeUnmount(function () {
             Crear publicación
         </button>
     </div>
-
     <div
         v-if="loading"
         class="rounded-[24px] bg-white px-5 py-20 text-center shadow-sm"
@@ -1178,7 +1045,6 @@ onBeforeUnmount(function () {
             Cargando publicaciones...
         </p>
     </div>
-
     <div
         v-else-if="loadError"
         class="rounded-[24px] bg-white px-5 py-16 text-center shadow-sm"
@@ -1194,7 +1060,6 @@ onBeforeUnmount(function () {
             Intentar nuevamente
         </button>
     </div>
-
     <div
         v-else-if="posts.length"
         class="grid grid-cols-2 gap-x-2 gap-y-6 sm:gap-4 md:grid-cols-3 xl:grid-cols-4"
@@ -1215,18 +1080,15 @@ onBeforeUnmount(function () {
                     :alt="post.title"
                     class="aspect-square w-full object-cover transition duration-300 group-hover:scale-[1.02]"
                 >
-
                 <div
                     v-else
                     class="flex aspect-square items-center justify-center bg-gradient-to-br from-[#CAF0F8] to-[#EAF9FC] text-xs font-black text-[#0077B6]"
                 >
                     {{ typeLabel(post.postType) }}
                 </div>
-
                 <span class="absolute left-2 top-2 rounded-full bg-white/90 px-2.5 py-1 text-[9px] font-black uppercase text-[#0077B6] shadow-sm">
                     {{ typeLabel(post.postType) }}
                 </span>
-
                 <span
                     v-if="post.imageRecords.length > 1"
                     class="absolute bottom-2 right-2 rounded-full bg-black/55 px-2.5 py-1 text-[9px] font-bold text-white"
@@ -1234,7 +1096,6 @@ onBeforeUnmount(function () {
                     {{ post.imageRecords.length }} imágenes
                 </span>
             </button>
-
             <div class="pt-3 sm:px-1">
                 <div class="flex items-center justify-between gap-2">
                     <span
@@ -1243,7 +1104,6 @@ onBeforeUnmount(function () {
                     >
                         {{ statusLabel(post.status) }}
                     </span>
-
                     <span
                         v-if="post.requiresRegistration && post.availableSpots !== null"
                         class="text-[9px] font-black"
@@ -1252,11 +1112,9 @@ onBeforeUnmount(function () {
                         {{ Number(post.availableSpots) > 0 ? `${post.availableSpots} cupos` : "Sin cupos" }}
                     </span>
                 </div>
-
                 <h2 class="mt-2 line-clamp-2 min-h-[34px] text-xs font-black leading-tight text-gray-600 sm:min-h-[40px] sm:text-sm">
                     {{ post.title }}
                 </h2>
-
                 <!-- Noticias y anuncios no muestran la fecha de creación. -->
                 <p
                     v-if="cardDate(post)"
@@ -1264,7 +1122,6 @@ onBeforeUnmount(function () {
                 >
                     {{ cardDate(post) }}
                 </p>
-
                 <div class="mt-3 grid grid-cols-3 gap-2">
                     <button
                         type="button"
@@ -1273,7 +1130,6 @@ onBeforeUnmount(function () {
                     >
                         Vista
                     </button>
-
                     <button
                         type="button"
                         class="rounded-xl bg-[#CAF0F8] px-2 py-2 text-[10px] font-bold text-[#0077B6] sm:text-xs"
@@ -1281,7 +1137,6 @@ onBeforeUnmount(function () {
                     >
                         Editar
                     </button>
-
                     <button
                         type="button"
                         class="rounded-xl border border-red-200 px-2 py-2 text-[10px] font-bold text-red-600 sm:text-xs"
@@ -1293,7 +1148,6 @@ onBeforeUnmount(function () {
             </div>
         </article>
     </div>
-
     <div
         v-else
         class="rounded-[24px] border border-dashed border-[#90E0EF] bg-white px-5 py-16 text-center"
@@ -1312,7 +1166,6 @@ onBeforeUnmount(function () {
             Crear publicación
         </button>
     </div>
-
     <!-- Crear o editar publicación. -->
     <Teleport to="body">
         <div
@@ -1330,7 +1183,6 @@ onBeforeUnmount(function () {
                             {{ editorTitle }}
                         </h2>
                     </div>
-
                     <button
                         type="button"
                         class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
@@ -1339,7 +1191,6 @@ onBeforeUnmount(function () {
                         ×
                     </button>
                 </div>
-
                 <form
                     class="space-y-5 p-5 sm:p-7"
                     @submit.prevent="savePost"
@@ -1352,7 +1203,6 @@ onBeforeUnmount(function () {
                         <p class="mt-1 text-xs text-gray-400">
                             La primera será la portada. El emprendedor podrá desplazarse entre todas.
                         </p>
-
                         <div
                             v-if="editorImages.length"
                             class="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4"
@@ -1367,14 +1217,12 @@ onBeforeUnmount(function () {
                                     alt="Publicación"
                                     class="aspect-square w-full object-cover"
                                 >
-
                                 <span
                                     v-if="index === 0"
                                     class="absolute bottom-1 left-1 rounded-full bg-[#00B4D8] px-2 py-1 text-[9px] font-bold text-white"
                                 >
                                     Portada
                                 </span>
-
                                 <div class="absolute right-1 top-1 flex gap-1">
                                     <button
                                         v-if="index !== 0"
@@ -1385,7 +1233,6 @@ onBeforeUnmount(function () {
                                     >
                                         ★
                                     </button>
-
                                     <button
                                         type="button"
                                         title="Eliminar"
@@ -1397,7 +1244,6 @@ onBeforeUnmount(function () {
                                 </div>
                             </div>
                         </div>
-
                         <label class="mt-4 flex cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-[#90E0EF] bg-[#F7FCFD] px-4 py-5 text-sm font-bold text-[#0077B6] transition hover:bg-[#CAF0F8]">
                             Añadir imágenes
                             <input
@@ -1409,7 +1255,6 @@ onBeforeUnmount(function () {
                             >
                         </label>
                     </div>
-
                     <div>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
                             Título
@@ -1423,7 +1268,6 @@ onBeforeUnmount(function () {
                             class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         >
                     </div>
-
                     <div class="grid gap-4 sm:grid-cols-2">
                         <div>
                             <label class="mb-1.5 block text-sm font-bold text-gray-600">
@@ -1442,7 +1286,6 @@ onBeforeUnmount(function () {
                                 </option>
                             </select>
                         </div>
-
                         <div>
                             <label class="mb-1.5 block text-sm font-bold text-gray-600">
                                 Estado
@@ -1463,7 +1306,6 @@ onBeforeUnmount(function () {
                             </select>
                         </div>
                     </div>
-
                     <div>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
                             Descripción
@@ -1477,7 +1319,6 @@ onBeforeUnmount(function () {
                             class="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         ></textarea>
                     </div>
-
                     <!-- Estos datos no aparecen para noticias ni anuncios. -->
                     <template v-if="!isInformativeType(form.postType)">
                         <div class="grid gap-4 sm:grid-cols-2">
@@ -1492,7 +1333,6 @@ onBeforeUnmount(function () {
                                     class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                                 >
                             </div>
-
                             <div>
                                 <label class="mb-1.5 block text-sm font-bold text-gray-600">
                                     WhatsApp de contacto
@@ -1505,7 +1345,6 @@ onBeforeUnmount(function () {
                                 >
                             </div>
                         </div>
-
                         <div>
                             <label class="mb-1.5 block text-sm font-bold text-gray-600">
                                 Enlace externo o de inscripción
@@ -1517,7 +1356,6 @@ onBeforeUnmount(function () {
                                 class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                             >
                         </div>
-
                         <div class="grid gap-4 md:grid-cols-3">
                             <div>
                                 <label class="mb-1.5 block text-sm font-bold text-gray-600">
@@ -1529,7 +1367,6 @@ onBeforeUnmount(function () {
                                     class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                                 >
                             </div>
-
                             <div>
                                 <label class="mb-1.5 block text-sm font-bold text-gray-600">
                                     Finalización
@@ -1540,7 +1377,6 @@ onBeforeUnmount(function () {
                                     class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                                 >
                             </div>
-
                             <div>
                                 <label class="mb-1.5 block text-sm font-bold text-gray-600">
                                     Fecha límite
@@ -1552,7 +1388,6 @@ onBeforeUnmount(function () {
                                 >
                             </div>
                         </div>
-
                         <!-- Cupos -->
                         <div class="rounded-2xl bg-[#F8FBFC] p-4 sm:p-5">
                             <label class="flex cursor-pointer items-start gap-3">
@@ -1570,7 +1405,6 @@ onBeforeUnmount(function () {
                                     </span>
                                 </span>
                             </label>
-
                             <div
                                 v-if="form.requiresRegistration"
                                 class="mt-4"
@@ -1589,7 +1423,6 @@ onBeforeUnmount(function () {
                             </div>
                         </div>
                     </template>
-
                     <!-- Noticias y anuncios sí pueden tener un enlace informativo. -->
                     <div v-else>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
@@ -1602,7 +1435,6 @@ onBeforeUnmount(function () {
                             class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         >
                     </div>
-
                     <button
                         type="submit"
                         :disabled="saving"
@@ -1614,9 +1446,8 @@ onBeforeUnmount(function () {
             </section>
         </div>
     </Teleport>
-
     <!-- La misma visualización que recibe el emprendedor. -->
-    <NovedadDetalleModal
+    <NewsModal
         :show="showPreview"
         :post="previewPost"
         :can-manage="true"
