@@ -1,9 +1,8 @@
 <script setup>
 // Calculadora financiera del emprendedor; usa directamente el precio y stock de sus productos en Supabase.
 import { ref, computed, onMounted } from "vue";
-import { useRouter } from "vue-router";
 import { supabase } from "../../lib/supabaseClient";
-const router = useRouter();
+import BusinessNav from "../../components/business/BusinessNav.vue";
 // Información cargada desde la cuenta actual.
 const entrepreneur = ref(null);
 const products = ref([]);
@@ -184,21 +183,6 @@ function resetCalculator() {
     unitsToCalculate.value = currentStock.value;
     calculated.value = false;
 }
-// Navegación del emprendedor. Cada herramienta mantiene su propia ruta.
-function goDashboardSection(section) {
-    const routeBySection = {
-        inicio: "BizHome",
-        productos: "BizProducts",
-        inventario: "BizStock",
-        pedidos: "BizOrders",
-        novedades: "BizNews",
-        calculadora: "BizProfit"
-    };
-    const routeName = routeBySection[section];
-    if (routeName && routeName !== "BizProfit") {
-        router.push({ name: routeName });
-    }
-}
 async function loadCalculator() {
     loading.value = true;
     loadError.value = "";
@@ -269,45 +253,11 @@ onMounted(function () {
 </script>
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-10">
-    <!-- Cabecera. En móvil conserva la vista de la aplicación y en laptop funciona como navbar principal. -->
-    <header class="sticky top-0 z-40 bg-[#F8FBFC]">
-        <div class="mx-auto max-w-[1450px] px-2 pt-2 sm:px-5 lg:px-8 lg:pt-4">
-            <!-- Cabecera móvil -->
-            <div class="flex items-center gap-1 rounded-[24px] bg-[#00B4D8] p-1.5 shadow-sm sm:gap-2 sm:p-2 lg:hidden">
-                <div class="flex min-w-0 flex-1 items-center px-3">
-                    <span class="truncate text-sm font-bold text-white sm:text-base">
-                        {{ entrepreneur?.businessName || "Thrive" }}
-                    </span>
-                </div>
-                <button type="button" aria-label="Mensajes" class="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/20">
-                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                        <path stroke-linejoin="round" d="M4 5h16v12H8l-4 3V5z"></path>
-                        <path stroke-linecap="round" d="M8 9h8M8 13h5"></path>
-                    </svg>
-                </button>
-                <button type="button" aria-label="Notificaciones" class="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/20">
-                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"></path>
-                    </svg>
-                </button>
-            </div>
-            <!-- Navbar principal para laptop -->
-            <nav class="hidden items-center justify-center gap-2 rounded-[24px] bg-[#00B4D8] p-2 shadow-sm lg:flex">
-                <button type="button" class="rounded-full px-6 py-2.5 text-sm font-bold text-white/85 transition hover:bg-white/15 hover:text-white" @click="goDashboardSection('inicio')">
-                    Inicio
-                </button>
-                <button type="button" class="rounded-full px-6 py-2.5 text-sm font-bold text-white/85 transition hover:bg-white/15 hover:text-white" @click="goDashboardSection('inventario')">
-                    Inventario
-                </button>
-                <button type="button" class="rounded-full px-6 py-2.5 text-sm font-bold text-white/85 transition hover:bg-white/15 hover:text-white" @click="goDashboardSection('novedades')">
-                    Novedades
-                </button>
-                <button type="button" class="rounded-full bg-white px-6 py-2.5 text-sm font-bold text-[#0077B6] shadow-sm">
-                    Calculadora
-                </button>
-            </nav>
-        </div>
-    </header>
+    <!-- Navbar compartido: mismas opciones, tamaño y posición que el resto del panel. -->
+    <BusinessNav
+        active="profit"
+        :business-name="entrepreneur?.businessName || 'Thrive'"
+    />
     <!-- Estado de carga -->
     <main v-if="loading" class="mx-auto max-w-[1450px] px-5 py-24 text-center">
         <div class="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div>
@@ -340,7 +290,7 @@ onMounted(function () {
             </div>
             <h2 class="mt-4 text-lg font-black text-gray-700">Todavía no tienes productos</h2>
             <p class="mx-auto mt-2 max-w-md text-sm leading-relaxed text-gray-400">
-                Crea tu primer producto desde Productos para comenzar a calcular sus posibles ganancias.
+                Crea tu primer producto desde el dashboard para comenzar a calcular sus posibles ganancias.
             </p>
         </section>
         <template v-else>
@@ -541,26 +491,5 @@ onMounted(function () {
             </div>
         </template>
     </main>
-    <!-- Menú móvil del área de emprendimiento. -->
-    <nav class="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] border-t border-white/20 bg-[#00B4D8] shadow-[0_-6px_20px_rgba(0,0,0,0.12)] lg:hidden">
-        <div class="mx-auto grid max-w-lg grid-cols-4">
-            <button type="button" class="flex flex-col items-center gap-1 py-2 text-white/75" @click="goDashboardSection('inicio')">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"></path><path d="M5 10v10h14V10"></path></svg>
-                <span class="text-[9px] font-bold">Inicio</span>
-            </button>
-            <button type="button" class="flex flex-col items-center gap-1 py-2 text-white/75" @click="goDashboardSection('inventario')">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 7l8-4 8 4-8 4-8-4z"></path><path d="M4 7v10l8 4 8-4V7"></path></svg>
-                <span class="text-[9px] font-bold">Inventario</span>
-            </button>
-            <button type="button" class="flex flex-col items-center gap-1 py-2 text-white/75" @click="goDashboardSection('novedades')">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path></svg>
-                <span class="text-[9px] font-bold">Novedades</span>
-            </button>
-            <button type="button" class="flex flex-col items-center gap-1 bg-white/15 py-2 text-white">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"></rect><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"></path></svg>
-                <span class="text-[9px] font-bold">Calculadora</span>
-            </button>
-        </div>
-    </nav>
 </div>
 </template>

@@ -7,10 +7,8 @@ import Catalog from "../views/Catalog.vue";
 import Business from "../views/Business.vue";
 import Product from "../views/Product.vue";
 import BizHome from "../views/business/Home.vue";
-import BizProducts from "../views/business/Products.vue";
 import BizProfile from "../views/business/Profile.vue";
 import BizStock from "../views/business/Stock.vue";
-import BizOrders from "../views/business/Orders.vue";
 import BizProfit from "../views/business/Profit.vue";
 import BizNews from "../views/business/News.vue";
 import OrgHome from "../views/org/Home.vue";
@@ -29,7 +27,8 @@ const routes = [
     { path: "/catalog", alias: "/catalogo", name: "Catalog", component: Catalog, meta: { ...customerOnly, title: "Catálogo | Thrive" } },
     // Emprendedor. Las rutas antiguas se conservan como alias para no romper enlaces guardados.
     { path: "/biz", alias: "/dashboard-emprendedor", name: "BizHome", component: BizHome, meta: { ...businessOnly, title: "Panel | Thrive" } },
-    { path: "/biz/products", name: "BizProducts", component: BizProducts, meta: { ...businessOnly, title: "Productos | Thrive" } },
+    // Productos forma parte del dashboard; esta URL antigua vuelve a Inicio.
+    { path: "/biz/products", redirect: { name: "BizHome" } },
     // Estas URLs antiguas vuelven al dashboard y abren el editor allí mismo.
     { path: "/biz/products/new", redirect: { name: "BizHome", query: { product: "new" } } },
     { path: "/biz/products/:id/edit", redirect: function (to) {
@@ -37,7 +36,8 @@ const routes = [
     } },
     { path: "/biz/profile", name: "BizProfile", component: BizProfile, meta: { ...businessOnly, title: "Perfil | Thrive" } },
     { path: "/biz/stock", alias: ["/inventario", "/dashboard-emprendedor/inventario"], name: "BizStock", component: BizStock, meta: { ...businessOnly, title: "Inventario | Thrive" } },
-    { path: "/biz/orders", name: "BizOrders", component: BizOrders, meta: { ...businessOnly, title: "Pedidos | Thrive" } },
+    // Pedidos es una pestaña interna de Inventario, no una pantalla separada.
+    { path: "/biz/orders", redirect: { name: "BizStock", query: { tab: "orders" } } },
     { path: "/biz/profit", alias: ["/calculadora", "/dashboard-emprendedor/calculadora"], name: "BizProfit", component: BizProfit, meta: { ...businessOnly, title: "Calculadora | Thrive" } },
     { path: "/biz/news", name: "BizNews", component: BizNews, meta: { ...businessOnly, title: "Novedades | Thrive" } },
     // Institución.

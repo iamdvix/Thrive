@@ -1,24 +1,29 @@
 <script setup>
 // Inventario del emprendedor: administra stock y pedidos registrados manualmente.
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { supabase } from "../../lib/supabaseClient";
+import BusinessNav from "./BusinessNav.vue";
 const props = defineProps({
-    // Cada ruta abre directamente inventario o pedidos.
+    // Define qué pestaña interna se abre al entrar a Inventario.
     initialTab: {
         type: String,
         default: "stock"
     }
 });
+const route = useRoute();
 const router = useRouter();
 // Información principal.
 const entrepreneur = ref(null);
 const products = ref([]);
 const orders = ref([]);
+const ordersLoaded = ref(false);
 const loading = ref(true);
 const loadError = ref("");
 // Control de pestañas, búsquedas y filtros.
-const activeTab = ref(props.initialTab === "orders" ? "orders" : "stock");
+const activeTab = ref(
+    route.query.tab === "orders" || props.initialTab === "orders" ? "orders" : "stock"
+);
 const productSearch = ref("");
 const stockFilter = ref("all");
 const orderSearch = ref("");
@@ -243,23 +248,22 @@ function orderStatusClasses(status) {
     );
 }
 // Navegación del área de emprendimiento. Cada función abre su propia pantalla.
-function goSection(section) {
-    const routeBySection = {
-        inicio: "BizHome",
-        productos: "BizProducts",
-        inventario: "BizStock",
-        pedidos: "BizOrders",
-        novedades: "BizNews",
-        calculadora: "BizProfit"
-    };
-    const routeName = routeBySection[section];
-    if (routeName) router.push({ name: routeName });
-}
-// Cambia entre inventario y pedidos sin mezclar las URLs.
-function openTab(tab) {
-    router.push({
-        name: tab === "orders" ? "BizOrders" : "BizStock"
+// Stock y pedidos pertenecen al mismo módulo de Inventario.
+// Solo cambiamos la pestaña interna y mantenemos una única ruta principal.
+async function openTab(tab) {
+    activeTab.value = tab === "orders" ? "orders" : "stock";
+    router.replace({
+        name: "BizStock",
+        query: activeTab.value === "orders" ? { tab: "orders" } : {}
     });
+    // Los pedidos se cargan únicamente cuando el usuario abre esa pestaña.
+    if (activeTab.value === "orders" && entrepreneur.value && !ordersLoaded.value) {
+        try {
+            await loadOrders(entrepreneur.value.id);
+        } catch (error) {
+            console.error("Error al cargar pedidos:", error);
+        }
+    }
 }
 // Carga los productos del emprendimiento.
 async function loadProducts(userId) {
@@ -410,6 +414,7 @@ async function loadOrders(userId) {
                         })
             };
         });
+    ordersLoaded.value = true;
 }
 // Carga toda la pantalla.
 async function loadInventory() {
@@ -1075,88 +1080,11 @@ onBeforeUnmount(function () {
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-10">
     <!-- Cabecera móvil y navbar para computadora. -->
-    <header class="sticky top-0 z-40 bg-[#F8FBFC]">
-        <div class="mx-auto max-w-[1450px] px-2 pt-2 sm:px-5 lg:px-8 lg:pt-4">
-            <!-- En celular se conserva la cabecera original. -->
-            <div class="flex items-center rounded-[24px] bg-[#00B4D8] p-2 shadow-sm lg:hidden">
-                <div class="min-w-0 flex-1 px-3">
-                    <span class="block truncate text-sm font-bold text-white">
-                        {{ entrepreneur?.businessName || "Thrive" }}
-                    </span>
-                </div>
-                <button
-                    type="button"
-                    aria-label="Mensajes"
-                    class="flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-white/20"
-                >
-                    <svg
-                        class="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                        viewBox="0 0 24 24"
-                    >
-                        <path
-                            stroke-linejoin="round"
-                            d="M4 5h16v12H8l-4 3V5z"
-                        ></path>
-                        <path
-                            stroke-linecap="round"
-                            d="M8 9h8M8 13h5"
-                        ></path>
-                    </svg>
-                </button>
-                <button
-                    type="button"
-                    aria-label="Notificaciones"
-                    class="flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-white/20"
-                >
-                    <svg
-                        class="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                        viewBox="0 0 24 24"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"
-                        ></path>
-                    </svg>
-                </button>
-            </div>
-            <!-- Navbar principal para laptop. -->
-            <nav class="hidden items-center justify-center gap-2 rounded-[24px] bg-[#00B4D8] p-2 shadow-sm lg:flex">
-                <button
-                    type="button"
-                    class="rounded-full px-6 py-2.5 text-sm font-bold text-white/85 hover:bg-white/15 hover:text-white"
-                    @click="goSection('inicio')"
-                >
-                    Inicio
-                </button>
-                <button
-                    type="button"
-                    class="rounded-full bg-white px-6 py-2.5 text-sm font-bold text-[#0077B6] shadow-sm"
-                >
-                    Inventario
-                </button>
-                <button
-                    type="button"
-                    class="rounded-full px-6 py-2.5 text-sm font-bold text-white/85 hover:bg-white/15 hover:text-white"
-                    @click="goSection('novedades')"
-                >
-                    Novedades
-                </button>
-                <button
-                    type="button"
-                    class="rounded-full px-6 py-2.5 text-sm font-bold text-white/85 hover:bg-white/15 hover:text-white"
-                    @click="goSection('calculadora')"
-                >
-                    Calculadora
-                </button>
-            </nav>
-        </div>
-    </header>
+    <!-- El mismo navbar se usa en todo el panel del emprendedor. -->
+    <BusinessNav
+        active="stock"
+        :business-name="entrepreneur?.businessName || 'Thrive'"
+    />
     <!-- Estado de carga. -->
     <main
         v-if="loading"
@@ -1872,94 +1800,6 @@ onBeforeUnmount(function () {
             </section>
         </template>
     </main>
-    <!-- Menú móvil. -->
-    <nav class="fixed inset-x-0 bottom-0 z-50 overflow-hidden rounded-t-[28px] border-t border-white/20 bg-[#00B4D8] shadow-[0_-6px_20px_rgba(0,0,0,0.12)] lg:hidden">
-        <div class="mx-auto grid max-w-md grid-cols-4">
-            <button
-                type="button"
-                class="flex flex-col items-center gap-1 py-2 text-white/75"
-                @click="goSection('inicio')"
-            >
-                <svg
-                    class="h-5 w-5"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                >
-                    <path d="M3 11l9-8 9 8"></path>
-                    <path d="M5 10v10h14V10"></path>
-                </svg>
-                <span class="text-[9px] font-bold">
-                    Inicio
-                </span>
-            </button>
-            <button
-                type="button"
-                class="flex flex-col items-center gap-1 bg-white/15 py-2 text-white"
-            >
-                <svg
-                    class="h-5 w-5"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                >
-                    <path d="M4 7l8-4 8 4-8 4-8-4z"></path>
-                    <path d="M4 7v10l8 4 8-4V7"></path>
-                </svg>
-                <span class="text-[9px] font-bold">
-                    Inventario
-                </span>
-            </button>
-            <button
-                type="button"
-                class="flex flex-col items-center gap-1 py-2 text-white/75"
-                @click="goSection('novedades')"
-            >
-                <svg
-                    class="h-5 w-5"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                >
-                    <path
-                        stroke-linecap="round"
-                        d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"
-                    ></path>
-                </svg>
-                <span class="text-[9px] font-bold">
-                    Novedades
-                </span>
-            </button>
-            <button
-                type="button"
-                class="flex flex-col items-center gap-1 py-2 text-white/75"
-                @click="goSection('calculadora')"
-            >
-                <svg
-                    class="h-5 w-5"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                >
-                    <rect
-                        x="5"
-                        y="3"
-                        width="14"
-                        height="18"
-                        rx="2"
-                    ></rect>
-                    <path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"></path>
-                </svg>
-                <span class="text-[9px] font-bold">
-                    Calculadora
-                </span>
-            </button>
-        </div>
-    </nav>
     <!-- Ventana para modificar el stock exacto. -->
     <Teleport to="body">
         <div

@@ -9,6 +9,7 @@ import {
     deleteImage
 } from "../../lib/storage";
 import NewsFeed from "./NewsFeed.vue";
+import BusinessNav from "./BusinessNav.vue";
 const props = defineProps({
     // La vista de ruta decide qué parte del panel se muestra.
     screen: {
@@ -29,10 +30,6 @@ const loadError = ref("");
 const profileSaving = ref(false);
 const productSaving = ref(false);
 const logoutLoading = ref(false);
-// La sección activa se obtiene de la pantalla actual.
-const activeSection = ref(
-    props.screen === "news" ? "novedades" : "inicio"
-);
 // Control de ventanas.
 const showProfileEditor = ref(false);
 const showProductEditor = ref(false);
@@ -159,30 +156,6 @@ function stockText(stock) {
     if (amount === 1) return "1 unidad";
     return `${amount} unidades`;
 }
-// Cada opción del menú tiene su propia ruta y archivo de pantalla.
-function changeSection(section) {
-    const routeBySection = {
-        inicio: "BizHome",
-        productos: "BizProducts",
-        inventario: "BizStock",
-        pedidos: "BizOrders",
-        novedades: "BizNews",
-        calculadora: "BizProfit",
-        perfil: "BizProfile"
-    };
-    const routeName = routeBySection[section];
-    if (!routeName) return;
-    router.push({ name: routeName });
-}
-// Ayuda a remarcar únicamente la pantalla que de verdad está abierta.
-function isSectionActive(section) {
-    if (section === "inicio") return screenMode.value === "home";
-    if (section === "productos") {
-        return screenMode.value === "products";
-    }
-    if (section === "novedades") return screenMode.value === "news";
-    return false;
-}
 // Cierra la sesión actual y vuelve a la pantalla de autenticación.
 async function logout() {
     if (logoutLoading.value) return;
@@ -269,7 +242,7 @@ async function loadDashboard() {
         };
         // Cada pantalla carga únicamente la información que necesita.
         const pendingLoads = [];
-        if (["home", "products"].includes(screenMode.value)) {
+        if (screenMode.value === "home") {
             pendingLoads.push(loadProducts(user.id));
         }
         if (screenMode.value === "home") {
@@ -1207,50 +1180,11 @@ onBeforeUnmount(function () {
 </script>
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-0">
-    <!-- Cabecera. En móvil conserva la vista original y en laptop funciona como navegación principal. -->
-    <header class="sticky top-0 z-40 bg-[#F8FBFC]">
-        <div class="mx-auto max-w-[1450px] px-2 pt-2 sm:px-5 lg:px-8 lg:pt-4">
-            <!-- Cabecera móvil: mantiene el nombre y los accesos rápidos de la aplicación. -->
-            <div class="flex items-center gap-1 rounded-[24px] bg-[#00B4D8] p-1.5 shadow-sm sm:gap-2 sm:p-2 lg:hidden">
-                <div class="flex min-w-0 flex-1 items-center px-3">
-                    <span class="truncate text-sm font-bold text-white sm:text-base">
-                        {{ entrepreneur?.businessName || "Thrive" }}
-                    </span>
-                </div>
-                <button type="button" aria-label="Mensajes" class="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/20">
-                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                        <path stroke-linejoin="round" d="M4 5h16v12H8l-4 3V5z"></path>
-                        <path stroke-linecap="round" d="M8 9h8M8 13h5"></path>
-                    </svg>
-                </button>
-                <button type="button" aria-label="Notificaciones" class="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/20">
-                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"></path>
-                    </svg>
-                </button>
-            </div>
-            <!-- Navegación principal en pantallas grandes. -->
-            <nav class="hidden items-center justify-center gap-2 rounded-[24px] bg-[#00B4D8] p-2 shadow-sm lg:flex">
-                <button
-                    v-for="item in [
-                        ['inicio', 'Inicio'],
-                        ['productos', 'Productos'],
-                        ['inventario', 'Inventario'],
-                        ['pedidos', 'Pedidos'],
-                        ['novedades', 'Novedades'],
-                        ['calculadora', 'Calculadora']
-                    ]"
-                    :key="item[0]"
-                    type="button"
-                    class="rounded-full px-6 py-2.5 text-sm font-bold transition"
-                    :class="isSectionActive(item[0]) ? 'bg-white text-[#0077B6] shadow-sm' : 'text-white/85 hover:bg-white/15 hover:text-white'"
-                    @click="changeSection(item[0])"
-                >
-                    {{ item[1] }}
-                </button>
-            </nav>
-        </div>
-    </header>
+    <!-- Un solo navbar compartido mantiene la navegación idéntica en todas las pantallas. -->
+    <BusinessNav
+        :active="screenMode === 'news' ? 'news' : 'home'"
+        :business-name="entrepreneur?.businessName || 'Thrive'"
+    />
     <!-- Cargando. -->
     <main
         v-if="loading"
@@ -1286,10 +1220,10 @@ onBeforeUnmount(function () {
     <!-- Contenido. -->
     <main
         v-else-if="entrepreneur"
-        class="mx-auto max-w-[1450px] px-3 pb-10 pt-3 sm:px-5 lg:px-8"
+        class="mx-auto max-w-[1450px] px-3 pb-10 pt-4 sm:px-5 lg:px-8 lg:pt-6"
     >
         <!-- INICIO -->
-        <section v-if="activeSection === 'inicio'">
+        <section v-if="screenMode === 'home' || screenMode === 'profile'">
             <!-- Perfil -->
             <section v-if="screenMode === 'home'" class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
                 <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
@@ -1369,8 +1303,8 @@ onBeforeUnmount(function () {
             </section>
             <!-- Productos -->
             <section
-                v-if="screenMode === 'home' || screenMode === 'products'"
-                :class="screenMode === 'home' ? 'mt-7' : ''"
+                v-if="screenMode === 'home'"
+                class="mt-7"
             >
                 <div class="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
@@ -1511,86 +1445,9 @@ onBeforeUnmount(function () {
         </section>
         <!-- Las novedades institucionales viven en un componente independiente. -->
         <NewsFeed
-            v-else-if="screenMode === 'news' || activeSection === 'novedades'"
+            v-else-if="screenMode === 'news'"
         />
     </main>
-    <!-- Menú móvil. -->
-    <nav class="fixed rounded-t-[28px] inset-x-0 bottom-0 z-50 border-t border-white/20 bg-[#00B4D8] shadow-[0_-6px_20px_rgba(0,0,0,0.12)] lg:hidden">
-        <div class="mx-auto grid max-w-lg grid-cols-5">
-            <!-- Inicio -->
-            <button
-                type="button"
-                class="flex flex-col items-center gap-1 py-2 text-white"
-                :class="isSectionActive('inicio') ? 'bg-white/15' : 'text-white/75'"
-                @click="changeSection('inicio')"
-            >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path d="M3 11l9-8 9 8"></path>
-                    <path d="M5 10v10h14V10"></path>
-                </svg>
-                <span class="text-[9px] font-bold">
-                    Inicio
-                </span>
-            </button>
-            <!-- Productos -->
-            <button
-                type="button"
-                class="flex flex-col items-center gap-1 py-2 text-white"
-                :class="isSectionActive('productos') ? 'bg-white/15' : 'text-white/75'"
-                @click="changeSection('productos')"
-            >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path d="M4 7l8-4 8 4-8 4-8-4z"></path>
-                    <path d="M4 7v10l8 4 8-4V7"></path>
-                </svg>
-                <span class="text-[9px] font-bold">Productos</span>
-            </button>
-            <!-- Inventario -->
-            <button
-                type="button"
-                class="flex flex-col items-center gap-1 py-2 text-white"
-                :class="activeSection === 'inventario' ? 'bg-white/15' : 'text-white/75'"
-                @click="changeSection('inventario')"
-            >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path d="M4 7l8-4 8 4-8 4-8-4z"></path>
-                    <path d="M4 7v10l8 4 8-4V7"></path>
-                </svg>
-                <span class="text-[9px] font-bold">
-                    Inventario
-                </span>
-            </button>
-            <!-- Novedades -->
-            <button
-                type="button"
-                class="flex flex-col items-center gap-1 py-2 text-white"
-                :class="isSectionActive('novedades') ? 'bg-white/15' : 'text-white/75'"
-                @click="changeSection('novedades')"
-            >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path>
-                </svg>
-                <span class="text-[9px] font-bold">
-                    Novedades
-                </span>
-            </button>
-            <!-- Calculadora -->
-            <button
-                type="button"
-                class="flex flex-col items-center gap-1 py-2 text-white"
-                :class="activeSection === 'calculadora' ? 'bg-white/15' : 'text-white/75'"
-                @click="changeSection('calculadora')"
-            >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <rect x="5" y="3" width="14" height="18" rx="2"></rect>
-                    <path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"></path>
-                </svg>
-                <span class="text-[9px] font-bold">
-                    Calculadora
-                </span>
-            </button>
-        </div>
-    </nav>
     <!-- Seguidores. -->
     <Teleport to="body">
         <div
