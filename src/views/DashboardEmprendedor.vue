@@ -400,31 +400,44 @@ async function loadFollowers() {
     followersLoading.value = true;
     try {
         /*
-            Esta función RPC devuelve solamente los seguidores
-            del emprendimiento que tiene la sesión iniciada.
-            Así evitamos abrir profiles públicamente y evitamos
-            políticas RLS que se consulten entre sí.
+            La función devuelve en una sola lista a clientes e instituciones.
+            El contador del dashboard usa exactamente esa misma información.
         */
         const { data, error } = await supabase.rpc(
             "get_my_followers"
         );
+
         if (error) {
             throw error;
         }
+
         const rows = data || [];
-        followerCount.value = rows.length;
-        followers.value = rows.map(function (follower) {
-            return {
-                id: follower.id,
-                fullName:
-                    follower.full_name ||
-                    "Usuario de Thrive",
-                avatarUrl:
-                    follower.avatar_url || "",
-                followedAt:
-                    follower.created_at
-            };
-        });
+
+        followerCount.value =
+            rows.length;
+
+        followers.value =
+            rows.map(function (follower) {
+                return {
+                    id:
+                        follower.id,
+                    fullName:
+                        follower.full_name ||
+                        (
+                            follower.follower_type ===
+                            "institucion"
+                                ? "Institución de Thrive"
+                                : "Usuario de Thrive"
+                        ),
+                    avatarUrl:
+                        follower.avatar_url || "",
+                    followedAt:
+                        follower.created_at,
+                    followerType:
+                        follower.follower_type ||
+                        "cliente"
+                };
+            });
     } catch (error) {
         console.error(
             "Error al cargar seguidores:",
@@ -1603,7 +1616,7 @@ onBeforeUnmount(function () {
                         Aún no tienes seguidores
                     </h3>
                     <p class="mt-1 text-sm text-gray-400">
-                        Aquí aparecerán las personas que sigan tu emprendimiento.
+                        Aquí aparecerán los clientes e instituciones que sigan tu emprendimiento.
                     </p>
                 </div>
                 <!-- Lista de seguidores -->
@@ -1632,9 +1645,26 @@ onBeforeUnmount(function () {
                             <p class="truncate text-sm font-bold text-gray-700">
                                 {{ follower.fullName }}
                             </p>
-                            <p class="text-xs text-gray-400">
-                                Sigue tu emprendimiento
-                            </p>
+                            <div class="mt-0.5 flex items-center gap-2">
+                                <span
+                                    class="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                                    :class="
+                                        follower.followerType === 'institucion'
+                                            ? 'bg-[#CAF0F8] text-[#0077B6]'
+                                            : 'bg-gray-100 text-gray-500'
+                                    "
+                                >
+                                    {{
+                                        follower.followerType === "institucion"
+                                            ? "Institución"
+                                            : "Cliente"
+                                    }}
+                                </span>
+
+                                <span class="text-xs text-gray-400">
+                                    Sigue tu emprendimiento
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>

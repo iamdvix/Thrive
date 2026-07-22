@@ -456,8 +456,8 @@ async function toggleFollow() {
 
         /*
             La institución sigue el emprendimiento con su propia tabla.
-            Este seguimiento funciona como una lista institucional y no
-            aumenta el contador de seguidores de clientes.
+            Para el contador público, clientes e instituciones sí cuentan
+            juntos como seguidores del emprendimiento.
         */
         if (viewerType.value === "institucion") {
             const { data, error } = await supabase.rpc(
@@ -475,8 +475,15 @@ async function toggleFollow() {
             isFollowing.value =
                 data === true;
 
-            // Confirmamos inmediatamente el estado real guardado.
-            await loadFollowState(id);
+            /*
+                Volvemos a consultar el estado y el contador total.
+                Así se incluyen tanto clientes como instituciones.
+            */
+            await Promise.all([
+                loadFollowState(id),
+                loadFollowerCount(id)
+            ]);
+
             return;
         }
 
@@ -511,11 +518,8 @@ async function toggleFollow() {
 
             isFollowing.value = false;
 
-            followerCount.value =
-                Math.max(
-                    0,
-                    followerCount.value - 1
-                );
+            // Leemos el total real para no perder los seguidores institucionales.
+            await loadFollowerCount(id);
 
             return;
         }
@@ -540,7 +544,9 @@ async function toggleFollow() {
         }
 
         isFollowing.value = true;
-        followerCount.value += 1;
+
+        // El total público se vuelve a leer desde Supabase.
+        await loadFollowerCount(id);
     } catch (error) {
         console.error(
             "Error al actualizar follow:",
