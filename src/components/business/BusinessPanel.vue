@@ -1,7 +1,7 @@
 <script setup>
 // Panel principal del emprendedor; centraliza perfil, productos, seguidores y vistas de administración.
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { supabase } from "../../lib/supabaseClient";
 import {
     uploadEntrepreneurLogo,
@@ -14,13 +14,9 @@ const props = defineProps({
     screen: {
         type: String,
         default: "home"
-    },
-    // Solo se utiliza cuando la ruta abre la edición de un producto.
-    productId: {
-        type: String,
-        default: ""
     }
 });
+const route = useRoute();
 const router = useRouter();
 const screenMode = computed(function () {
     return props.screen;
@@ -182,7 +178,7 @@ function changeSection(section) {
 function isSectionActive(section) {
     if (section === "inicio") return screenMode.value === "home";
     if (section === "productos") {
-        return ["products", "add-product", "edit-product"].includes(screenMode.value);
+        return screenMode.value === "products";
     }
     if (section === "novedades") return screenMode.value === "news";
     return false;
@@ -273,7 +269,7 @@ async function loadDashboard() {
         };
         // Cada pantalla carga únicamente la información que necesita.
         const pendingLoads = [];
-        if (["home", "products", "edit-product"].includes(screenMode.value)) {
+        if (["home", "products"].includes(screenMode.value)) {
             pendingLoads.push(loadProducts(user.id));
         }
         if (screenMode.value === "home") {
@@ -835,9 +831,9 @@ function closeProductEditor() {
     originalProductImages.value = [];
     showCategoryDropdown.value = false;
     document.body.style.overflow = "";
-    // Al cerrar la pantalla de creación regresamos al listado.
-    if (["add-product", "edit-product"].includes(screenMode.value)) {
-        router.replace({ name: "BizProducts" });
+    // Si se llegó desde una URL antigua, limpiamos el parámetro al cerrar.
+    if (route.query.product || route.query.editProduct) {
+        router.replace({ name: "BizHome" });
     }
 }
 // Guarda un producto nuevo o actualiza uno existente.
@@ -1185,17 +1181,18 @@ onMounted(async function () {
     if (screenMode.value === "profile" && entrepreneur.value) {
         openProfileEditor();
     }
-    if (screenMode.value === "add-product" && entrepreneur.value) {
+    // Crear y editar productos siempre sucede dentro del dashboard.
+    if (screenMode.value === "home" && route.query.product === "new") {
         openAddProduct();
     }
-    if (screenMode.value === "edit-product" && entrepreneur.value) {
+    if (screenMode.value === "home" && route.query.editProduct) {
         const product = products.value.find(function (item) {
-            return String(item.id) === String(props.productId);
+            return String(item.id) === String(route.query.editProduct);
         });
         if (product) {
             openProductEditor(product);
         } else {
-            router.replace({ name: "BizProducts" });
+            router.replace({ name: "BizHome" });
         }
     }
     document.addEventListener("keydown", handleEscape);
@@ -1390,7 +1387,7 @@ onBeforeUnmount(function () {
                     <button
                         type="button"
                         class="flex w-full items-center justify-center gap-2 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#009CC0] sm:w-auto"
-                        @click="router.push({ name: 'BizAddProduct' })"
+                        @click="openAddProduct"
                     >
                         <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <path stroke-linecap="round" d="M12 5v14M5 12h14"></path>
@@ -1476,7 +1473,7 @@ onBeforeUnmount(function () {
                                 <button
                                     type="button"
                                     class="rounded-xl bg-[#CAF0F8] px-2 py-2 text-[10px] font-bold text-[#0077B6] sm:text-xs"
-                                    @click="router.push({ name: 'BizEditProduct', params: { id: product.id } })"
+                                    @click="openProductEditor(product)"
                                 >
                                     Editar
                                 </button>
@@ -1505,7 +1502,7 @@ onBeforeUnmount(function () {
                     <button
                         type="button"
                         class="mt-5 rounded-xl bg-[#00B4D8] px-6 py-3 text-sm font-bold text-white"
-                        @click="router.push({ name: 'BizAddProduct' })"
+                        @click="openAddProduct"
                     >
                         Añadir mi primer producto
                     </button>

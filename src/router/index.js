@@ -1,4 +1,4 @@
-// Rutas principales de Thrive. Los nombres están en inglés y cada función importante tiene su propia vista.
+// Rutas principales de Thrive. Las pantallas están separadas por función, excepto crear y editar productos, que viven dentro del dashboard.
 import { createRouter, createWebHashHistory } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
 import Landing from "../views/Landing.vue";
@@ -8,8 +8,6 @@ import Business from "../views/Business.vue";
 import Product from "../views/Product.vue";
 import BizHome from "../views/business/Home.vue";
 import BizProducts from "../views/business/Products.vue";
-import BizAddProduct from "../views/business/AddProduct.vue";
-import BizEditProduct from "../views/business/EditProduct.vue";
 import BizProfile from "../views/business/Profile.vue";
 import BizStock from "../views/business/Stock.vue";
 import BizOrders from "../views/business/Orders.vue";
@@ -32,8 +30,11 @@ const routes = [
     // Emprendedor. Las rutas antiguas se conservan como alias para no romper enlaces guardados.
     { path: "/biz", alias: "/dashboard-emprendedor", name: "BizHome", component: BizHome, meta: { ...businessOnly, title: "Panel | Thrive" } },
     { path: "/biz/products", name: "BizProducts", component: BizProducts, meta: { ...businessOnly, title: "Productos | Thrive" } },
-    { path: "/biz/products/new", name: "BizAddProduct", component: BizAddProduct, meta: { ...businessOnly, title: "Nuevo producto | Thrive" } },
-    { path: "/biz/products/:id/edit", name: "BizEditProduct", component: BizEditProduct, meta: { ...businessOnly, title: "Editar producto | Thrive" } },
+    // Estas URLs antiguas vuelven al dashboard y abren el editor allí mismo.
+    { path: "/biz/products/new", redirect: { name: "BizHome", query: { product: "new" } } },
+    { path: "/biz/products/:id/edit", redirect: function (to) {
+        return { name: "BizHome", query: { editProduct: String(to.params.id) } };
+    } },
     { path: "/biz/profile", name: "BizProfile", component: BizProfile, meta: { ...businessOnly, title: "Perfil | Thrive" } },
     { path: "/biz/stock", alias: ["/inventario", "/dashboard-emprendedor/inventario"], name: "BizStock", component: BizStock, meta: { ...businessOnly, title: "Inventario | Thrive" } },
     { path: "/biz/orders", name: "BizOrders", component: BizOrders, meta: { ...businessOnly, title: "Pedidos | Thrive" } },
