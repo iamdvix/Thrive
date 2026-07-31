@@ -41,6 +41,11 @@ const selectedDepartment = ref("Todos");
 const followedEntrepreneurs = ref([]);
 // Evita múltiples clics mientras se guarda o elimina un follow.
 const followLoading = ref([]);
+
+// Favoritos del cliente y sección activa del catálogo.
+const favoriteProductIds = ref([]);
+const favoriteLoading = ref([]);
+const activeCatalogSection = ref("home");
 // Carga la información del perfil del cliente conectado.
 async function loadClientProfile() {
     profileLoading.value = true;
@@ -541,6 +546,23 @@ const filteredProducts = computed(function () {
         }
     );
 });
+const visibleProducts = computed(function () {
+    if (
+        activeCatalogSection.value ===
+        "favorites"
+    ) {
+        return filteredProducts.value.filter(
+            function (product) {
+                return favoriteProductIds.value.includes(
+                    product.id
+                );
+            }
+        );
+    }
+
+    return filteredProducts.value;
+});
+
 const featuredProducts = computed(function () {
     return products.value.filter(
         function (product) {
@@ -548,12 +570,18 @@ const featuredProducts = computed(function () {
         }
     );
 });
+
 const productCountText = computed(function () {
     const total =
-        filteredProducts.value.length;
+        visibleProducts.value.length;
+
     return total === 1
         ? "1 producto encontrado"
         : `${total} productos encontrados`;
+});
+
+const favoriteCount = computed(function () {
+    return favoriteProductIds.value.length;
 });
 // Muestra la foto del cliente o sus iniciales cuando no tiene imagen.
 const clientInitials = computed(function () {
@@ -699,6 +727,171 @@ async function toggleFollow(entrepreneurId) {
             });
     }
 }
+// Carga los productos favoritos del cliente.
+async function loadFavorites() {
+    try {
+        const {
+            data: { user },
+            error: userError
+        } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+            favoriteProductIds.value = [];
+            return;
+        }
+
+        const { data, error } = await supabase
+            .from("product_favorites")
+            .select("product_id")
+            .eq("user_id", user.id);
+
+        if (error) {
+            throw error;
+        }
+
+        favoriteProductIds.value =
+            (data || []).map(function (row) {
+                return row.product_id;
+            });
+    } catch (error) {
+        console.error(
+            "Error al cargar favoritos:",
+            error
+        );
+
+        favoriteProductIds.value = [];
+    }
+}
+
+// Comprueba si el producto ya está guardado.
+function isFavorite(productId) {
+    return favoriteProductIds.value.includes(
+        productId
+    );
+}
+
+// Indica si el corazón de un producto está procesando un cambio.
+function isFavoriteLoading(productId) {
+    return favoriteLoading.value.includes(
+        productId
+    );
+}
+
+// Guarda o elimina un producto de favoritos.
+async function toggleFavorite(productId) {
+    if (
+        !productId ||
+        isFavoriteLoading(productId)
+    ) {
+        return;
+    }
+
+    favoriteLoading.value.push(
+        productId
+    );
+
+    try {
+        const {
+            data: { user },
+            error: userError
+        } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+            router.replace({
+                name: "Access"
+            });
+            return;
+        }
+
+        if (isFavorite(productId)) {
+            const { error } = await supabase
+                .from("product_favorites")
+                .delete()
+                .eq("user_id", user.id)
+                .eq("product_id", productId);
+
+            if (error) {
+                throw error;
+            }
+
+            favoriteProductIds.value =
+                favoriteProductIds.value.filter(
+                    function (id) {
+                        return id !== productId;
+                    }
+                );
+
+            return;
+        }
+
+        const { error } = await supabase
+            .from("product_favorites")
+            .insert({
+                user_id: user.id,
+                product_id: productId
+            });
+
+        if (error) {
+            if (error.code === "23505") {
+                await loadFavorites();
+                return;
+            }
+
+            throw error;
+        }
+
+        favoriteProductIds.value.push(
+            productId
+        );
+    } catch (error) {
+        console.error(
+            "Error al actualizar favorito:",
+            error
+        );
+
+        alert(
+            "No fue posible actualizar tus favoritos."
+        );
+    } finally {
+        favoriteLoading.value =
+            favoriteLoading.value.filter(
+                function (id) {
+                    return id !== productId;
+                }
+            );
+    }
+}
+
+// Cambia de sección sin modificar el hash del router.
+function showCatalogSection(section, scrollToProducts = true) {
+    activeCatalogSection.value = section;
+
+    if (!scrollToProducts) {
+        return;
+    }
+
+    window.setTimeout(function () {
+        document
+            .getElementById("productos")
+            ?.scrollIntoView({
+                behavior: "smooth",
+                block: "start"
+            });
+    }, 0);
+}
+
+// Vuelve al inicio del catálogo y limpia los filtros.
+function goCatalogHome() {
+    activeCatalogSection.value = "home";
+    searchText.value = "";
+    selectedDepartment.value = "Todos";
+
+    window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+    });
+}
+
 // Abre el perfil público del emprendimiento seleccionado.
 function openEntrepreneurProfile(
     entrepreneurId
@@ -760,7 +953,8 @@ onMounted(async function () {
     await Promise.all([
         loadClientProfile(),
         loadProducts(),
-        loadFollows()
+        loadFollows(),
+        loadFavorites()
     ]);
     document.addEventListener(
         "keydown",
@@ -777,13 +971,12 @@ onBeforeUnmount(function () {
 </script>
 <template>
 <div class="min-h-screen bg-white pb-[72px] text-gray-700 lg:pb-0">
-    <!-- Cabecera. -->
-    <header class="sticky top-0 z-40 border-b border-gray-100 bg-white">
-        <div class="mx-auto max-w-[1450px] px-2 pt-2 sm:px-5 lg:px-8 lg:pt-4">
-            <!-- Isla superior -->
-            <div class="flex items-center gap-1 rounded-[24px] bg-[#00B4D8] p-1.5 sm:gap-2 sm:p-2">
-                <!-- Buscador -->
-                <div class="flex min-w-0 flex-1 items-center rounded-full bg-white px-3 py-2">
+    <!-- El celular ya no usa la isla azul flotante; conserva solo búsqueda y filtros. -->
+    <header class="border-b border-gray-100 bg-white lg:sticky lg:top-0 lg:z-40">
+        <div class="mx-auto max-w-[1450px] px-2 py-2 sm:px-5 lg:px-8 lg:pb-0 lg:pt-4">
+            <!-- Búsqueda móvil sencilla y no flotante. -->
+            <div class="flex items-center gap-2 lg:hidden">
+                <div class="flex min-w-0 flex-1 items-center rounded-xl border border-gray-200 bg-white px-3 py-2.5">
                     <svg
                         class="mr-2 h-5 w-5 shrink-0 text-gray-400"
                         fill="none"
@@ -791,45 +984,41 @@ onBeforeUnmount(function () {
                         stroke-width="2"
                         viewBox="0 0 24 24"
                     >
-                        <circle
-                            cx="11"
-                            cy="11"
-                            r="7"
-                        ></circle>
+                        <circle cx="11" cy="11" r="7"></circle>
                         <path
                             stroke-linecap="round"
                             d="m20 20-3.5-3.5"
                         ></path>
                     </svg>
+
                     <input
                         v-model="searchText"
-                        type="text"
+                        type="search"
                         placeholder="Buscar productos o tiendas"
                         class="min-w-0 flex-1 bg-transparent text-sm text-gray-700 outline-none placeholder:text-gray-400"
                     >
                 </div>
-                <!-- Perfil del cliente -->
+
                 <button
                     type="button"
                     aria-label="Mi perfil"
-                    class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full text-white transition hover:bg-white/20"
+                    class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#CAF0F8] text-[#0077B6]"
                     @click="openClientProfile"
                 >
-                    <!-- Foto real -->
                     <img
                         v-if="clientProfile?.avatarUrl"
                         :src="clientProfile.avatarUrl"
                         :alt="clientProfile.fullName"
-                        class="h-8 w-8 rounded-full border-2 border-white/70 object-cover"
+                        class="h-full w-full object-cover"
                     >
-                    <!-- Iniciales -->
+
                     <span
                         v-else-if="clientProfile"
-                        class="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-[10px] font-black text-white"
+                        class="text-[10px] font-black"
                     >
                         {{ clientInitials }}
                     </span>
-                    <!-- Icono mientras carga -->
+
                     <svg
                         v-else
                         class="h-5 w-5"
@@ -838,61 +1027,78 @@ onBeforeUnmount(function () {
                         stroke-width="1.8"
                         viewBox="0 0 24 24"
                     >
-                        <circle
-                            cx="12"
-                            cy="8"
-                            r="4"
-                        ></circle>
+                        <circle cx="12" cy="8" r="4"></circle>
                         <path
                             stroke-linecap="round"
                             d="M4 21a8 8 0 0116 0"
                         ></path>
                     </svg>
                 </button>
-                <!-- Mensajes -->
-                <button
-                    type="button"
-                    aria-label="Mensajes"
-                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white hover:bg-white/20"
-                >
+            </div>
+
+            <!-- Barra completa para computadora. -->
+            <div class="hidden items-center gap-2 rounded-[24px] bg-[#00B4D8] p-2 shadow-sm lg:flex">
+                <div class="flex min-w-0 flex-1 items-center rounded-full bg-white px-4 py-2.5">
                     <svg
-                        class="h-5 w-5"
+                        class="mr-2 h-5 w-5 shrink-0 text-gray-400"
                         fill="none"
                         stroke="currentColor"
-                        stroke-width="1.8"
+                        stroke-width="2"
                         viewBox="0 0 24 24"
                     >
-                        <path
-                            stroke-linejoin="round"
-                            d="M4 5h16v12H8l-4 3V5z"
-                        ></path>
+                        <circle cx="11" cy="11" r="7"></circle>
                         <path
                             stroke-linecap="round"
-                            d="M8 9h8M8 13h5"
+                            d="m20 20-3.5-3.5"
                         ></path>
                     </svg>
-                </button>
-                <!-- Notificaciones -->
+
+                    <input
+                        v-model="searchText"
+                        type="search"
+                        placeholder="Buscar productos o tiendas"
+                        class="min-w-0 flex-1 bg-transparent text-sm text-gray-700 outline-none placeholder:text-gray-400"
+                    >
+                </div>
+
                 <button
                     type="button"
-                    aria-label="Notificaciones"
-                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white hover:bg-white/20"
+                    aria-label="Mi perfil"
+                    class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-white transition hover:bg-white/20"
+                    @click="openClientProfile"
                 >
+                    <img
+                        v-if="clientProfile?.avatarUrl"
+                        :src="clientProfile.avatarUrl"
+                        :alt="clientProfile.fullName"
+                        class="h-9 w-9 rounded-full border-2 border-white/70 object-cover"
+                    >
+
+                    <span
+                        v-else-if="clientProfile"
+                        class="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-[10px] font-black text-white"
+                    >
+                        {{ clientInitials }}
+                    </span>
+
                     <svg
+                        v-else
                         class="h-5 w-5"
                         fill="none"
                         stroke="currentColor"
                         stroke-width="1.8"
                         viewBox="0 0 24 24"
                     >
+                        <circle cx="12" cy="8" r="4"></circle>
                         <path
                             stroke-linecap="round"
-                            d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"
+                            d="M4 21a8 8 0 0116 0"
                         ></path>
                     </svg>
                 </button>
             </div>
-            <!-- Departamentos -->
+
+            <!-- Filtro por departamentos. -->
             <div class="mt-2 flex gap-2 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <button
                     v-for="department in departments"
@@ -909,28 +1115,65 @@ onBeforeUnmount(function () {
                     {{ department }}
                 </button>
             </div>
-            <!-- Navegación computadora -->
+
+            <!-- Navegación de computadora sin enlaces hash. -->
             <nav class="hidden items-center justify-between border-t border-gray-100 py-3 lg:flex">
                 <div class="flex items-center gap-6">
-                    <RouterLink
-                        to="/catalog"
-                        class="font-bold text-[#0077B6]"
+                    <button
+                        type="button"
+                        class="text-sm font-semibold transition"
+                        :class="
+                            activeCatalogSection === 'home'
+                                ? 'font-bold text-[#0077B6]'
+                                : 'text-gray-500 hover:text-[#0077B6]'
+                        "
+                        @click="goCatalogHome"
                     >
                         Inicio
-                    </RouterLink>
-                    <a
-                        href="#productos"
-                        class="text-sm font-semibold text-gray-500 hover:text-[#0077B6]"
+                    </button>
+
+                    <button
+                        type="button"
+                        class="text-sm font-semibold transition"
+                        :class="
+                            activeCatalogSection === 'explore'
+                                ? 'font-bold text-[#0077B6]'
+                                : 'text-gray-500 hover:text-[#0077B6]'
+                        "
+                        @click="showCatalogSection('explore')"
                     >
                         Explorar
-                    </a>
-                    <a
-                        href="#"
-                        class="text-sm font-semibold text-gray-500 hover:text-[#0077B6]"
+                    </button>
+
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 text-sm font-semibold transition"
+                        :class="
+                            activeCatalogSection === 'favorites'
+                                ? 'text-red-500'
+                                : 'text-gray-500 hover:text-red-500'
+                        "
+                        @click="showCatalogSection('favorites')"
                     >
-                        Bandeja
-                    </a>
-                    <!-- Perfil -->
+                        <svg
+                            class="h-4 w-4"
+                            viewBox="0 0 24 24"
+                            :fill="activeCatalogSection === 'favorites' ? 'currentColor' : 'none'"
+                            stroke="currentColor"
+                            stroke-width="1.8"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 000-7.8z"
+                            ></path>
+                        </svg>
+                        Favoritos
+                        <span class="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-black text-red-500">
+                            {{ favoriteCount }}
+                        </span>
+                    </button>
+
                     <button
                         type="button"
                         class="text-sm font-semibold text-gray-500 hover:text-[#0077B6]"
@@ -939,6 +1182,7 @@ onBeforeUnmount(function () {
                         Mi perfil
                     </button>
                 </div>
+
                 <p class="text-sm text-gray-400">
                     Descubre productos de emprendimientos salvadoreños
                 </p>
@@ -952,7 +1196,7 @@ onBeforeUnmount(function () {
     >
         <!-- Destacados -->
         <section
-            v-if="featuredProducts.length"
+            v-if="activeCatalogSection === 'home' && featuredProducts.length"
             class="mb-7"
         >
             <div class="mb-3 flex items-end justify-between px-1">
@@ -995,8 +1239,31 @@ onBeforeUnmount(function () {
                                 {{ product.store }}
                             </span>
                         </button>
-                        <!-- Imagen -->
-                        <div class="overflow-hidden rounded-xl bg-gray-100">
+                        <!-- Imagen y favorito -->
+                        <div class="relative overflow-hidden rounded-xl bg-gray-100">
+                            <button
+                                type="button"
+                                :disabled="isFavoriteLoading(product.id)"
+                                :aria-label="isFavorite(product.id) ? 'Quitar de favoritos' : 'Agregar a favoritos'"
+                                class="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/95 shadow-sm transition disabled:opacity-50"
+                                :class="isFavorite(product.id) ? 'text-red-500' : 'text-gray-500 hover:text-red-500'"
+                                @click.stop="toggleFavorite(product.id)"
+                            >
+                                <svg
+                                    class="h-5 w-5"
+                                    viewBox="0 0 24 24"
+                                    :fill="isFavorite(product.id) ? 'currentColor' : 'none'"
+                                    stroke="currentColor"
+                                    stroke-width="1.8"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 000-7.8z"
+                                    ></path>
+                                </svg>
+                            </button>
+
                             <img
                                 v-if="product.image"
                                 :src="product.image"
@@ -1057,10 +1324,10 @@ onBeforeUnmount(function () {
         <div class="mb-5 flex items-end justify-between border-t border-gray-100 pt-5">
             <div>
                 <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                    Explorar
+                    {{ activeCatalogSection === "favorites" ? "Guardados" : "Explorar" }}
                 </p>
                 <h2 class="mt-0.5 text-xl font-black text-gray-700 sm:text-2xl">
-                    Todos los productos
+                    {{ activeCatalogSection === "favorites" ? "Mis productos favoritos" : "Todos los productos" }}
                 </h2>
             </div>
             <span class="hidden text-sm text-gray-400 sm:block">
@@ -1098,14 +1365,22 @@ onBeforeUnmount(function () {
         </div>
         <!-- Sin resultados -->
         <div
-            v-else-if="!filteredProducts.length"
+            v-else-if="!visibleProducts.length"
             class="py-20 text-center"
         >
             <p class="font-bold text-gray-700">
-                No encontramos productos
+                {{
+                    activeCatalogSection === "favorites"
+                        ? "Todavía no tienes productos favoritos"
+                        : "No encontramos productos"
+                }}
             </p>
             <p class="mt-1 text-sm text-gray-400">
-                Prueba otra búsqueda o departamento.
+                {{
+                    activeCatalogSection === "favorites"
+                        ? "Presiona el corazón de un producto para guardarlo aquí."
+                        : "Prueba otra búsqueda o departamento."
+                }}
             </p>
         </div>
         <!-- Productos -->
@@ -1114,7 +1389,7 @@ onBeforeUnmount(function () {
             class="grid grid-cols-2 gap-x-2 gap-y-5 sm:gap-4 md:grid-cols-3 xl:grid-cols-4"
         >
             <article
-                v-for="product in filteredProducts"
+                v-for="product in visibleProducts"
                 :key="product.id"
                 class="min-w-0 cursor-pointer overflow-hidden bg-white sm:rounded-2xl sm:border sm:border-gray-100 sm:p-2"
                 @click="openProductDetail(product)"
@@ -1162,8 +1437,31 @@ onBeforeUnmount(function () {
                         }}
                     </button>
                 </div>
-                <!-- Portada -->
-                <div class="overflow-hidden rounded-xl bg-gray-100 sm:rounded-2xl">
+                <!-- Portada y favorito -->
+                <div class="relative overflow-hidden rounded-xl bg-gray-100 sm:rounded-2xl">
+                    <button
+                        type="button"
+                        :disabled="isFavoriteLoading(product.id)"
+                        :aria-label="isFavorite(product.id) ? 'Quitar de favoritos' : 'Agregar a favoritos'"
+                        class="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/95 shadow-sm transition disabled:opacity-50 sm:h-10 sm:w-10"
+                        :class="isFavorite(product.id) ? 'text-red-500' : 'text-gray-500 hover:text-red-500'"
+                        @click.stop="toggleFavorite(product.id)"
+                    >
+                        <svg
+                            class="h-5 w-5"
+                            viewBox="0 0 24 24"
+                            :fill="isFavorite(product.id) ? 'currentColor' : 'none'"
+                            stroke="currentColor"
+                            stroke-width="1.8"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 000-7.8z"
+                            ></path>
+                        </svg>
+                    </button>
+
                     <img
                         v-if="product.image"
                         :src="product.image"
@@ -1224,12 +1522,14 @@ onBeforeUnmount(function () {
             </article>
         </section>
     </main>
-    <!-- Menú móvil. -->
+    <!-- Menú móvil sin enlaces hash que interfieran con Vue Router. -->
     <nav class="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] border-t border-white/20 bg-[#00B4D8] px-2 shadow-[0_-6px_20px_rgba(0,0,0,0.12)] lg:hidden">
         <div class="mx-auto grid max-w-md grid-cols-4">
-            <RouterLink
-                to="/catalog"
-                class="flex flex-col items-center gap-0.5 py-2 text-white"
+            <button
+                type="button"
+                class="flex min-h-[62px] flex-col items-center justify-center gap-0.5 text-white"
+                :class="activeCatalogSection === 'home' ? 'bg-white/15' : 'text-white/80'"
+                @click="goCatalogHome"
             >
                 <svg
                     class="h-6 w-6"
@@ -1244,13 +1544,16 @@ onBeforeUnmount(function () {
                         d="M3 10.5L12 3l9 7.5M5 9.5V21h14V9.5"
                     ></path>
                 </svg>
-                <span class="border-b-2 border-white text-[10px] font-bold">
+                <span class="text-[10px] font-bold">
                     Inicio
                 </span>
-            </RouterLink>
-            <a
-                href="#productos"
-                class="flex flex-col items-center gap-0.5 py-2 text-white/90"
+            </button>
+
+            <button
+                type="button"
+                class="flex min-h-[62px] flex-col items-center justify-center gap-0.5 text-white"
+                :class="activeCatalogSection === 'explore' ? 'bg-white/15' : 'text-white/80'"
+                @click="showCatalogSection('explore')"
             >
                 <svg
                     class="h-6 w-6"
@@ -1259,11 +1562,7 @@ onBeforeUnmount(function () {
                     stroke-width="1.8"
                     viewBox="0 0 24 24"
                 >
-                    <circle
-                        cx="11"
-                        cy="11"
-                        r="6"
-                    ></circle>
+                    <circle cx="11" cy="11" r="6"></circle>
                     <path
                         stroke-linecap="round"
                         d="m20 20-4.5-4.5"
@@ -1272,31 +1571,43 @@ onBeforeUnmount(function () {
                 <span class="text-[10px] font-bold">
                     Explorar
                 </span>
-            </a>
+            </button>
+
             <button
                 type="button"
-                class="flex flex-col items-center gap-0.5 py-2 text-white/90"
+                class="relative flex min-h-[62px] flex-col items-center justify-center gap-0.5 text-white"
+                :class="activeCatalogSection === 'favorites' ? 'bg-white/15' : 'text-white/80'"
+                @click="showCatalogSection('favorites')"
             >
                 <svg
                     class="h-6 w-6"
-                    fill="none"
+                    viewBox="0 0 24 24"
+                    :fill="activeCatalogSection === 'favorites' ? 'currentColor' : 'none'"
                     stroke="currentColor"
                     stroke-width="1.8"
-                    viewBox="0 0 24 24"
                 >
                     <path
+                        stroke-linecap="round"
                         stroke-linejoin="round"
-                        d="M4 5h16v12H8l-4 3V5z"
+                        d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 000-7.8z"
                     ></path>
                 </svg>
+
+                <span
+                    v-if="favoriteCount"
+                    class="absolute right-[18%] top-1 rounded-full bg-white px-1.5 py-0.5 text-[8px] font-black text-red-500"
+                >
+                    {{ favoriteCount }}
+                </span>
+
                 <span class="text-[10px] font-bold">
-                    Bandeja
+                    Favoritos
                 </span>
             </button>
-            <!-- Abre el perfil -->
+
             <button
                 type="button"
-                class="flex flex-col items-center gap-0.5 py-2 text-white/90"
+                class="flex min-h-[62px] flex-col items-center justify-center gap-0.5 text-white/90"
                 @click="openClientProfile"
             >
                 <svg
@@ -1306,11 +1617,7 @@ onBeforeUnmount(function () {
                     stroke-width="1.8"
                     viewBox="0 0 24 24"
                 >
-                    <circle
-                        cx="12"
-                        cy="8"
-                        r="4"
-                    ></circle>
+                    <circle cx="12" cy="8" r="4"></circle>
                     <path
                         stroke-linecap="round"
                         d="M4 21a8 8 0 0116 0"

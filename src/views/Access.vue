@@ -488,7 +488,11 @@ async function registerEntrepreneur() {
                     district:
                         businessDistrict.value,
                     logo_url:
-                        logoUrl
+                        logoUrl,
+                    subscription_status:
+                        "inactive",
+                    subscription_price:
+                        4.99
                 });
         if (entrepreneurError) {
             console.error(
@@ -502,7 +506,7 @@ async function registerEntrepreneur() {
             return;
         }
         alert(
-            "Tu cuenta de emprendedor fue creada correctamente." +
+            "Tu cuenta de emprendedor fue creada correctamente. Puedes conocer el panel y activar el plan de $4.99 al mes cuando quieras utilizar todas las herramientas." +
             logoWarning
         );
         // Limpiamos los datos.
@@ -985,6 +989,17 @@ async function registerEntrepreneur() {
                                         </div>
                                     </div>
                                 </div>
+                                <!-- Información clara sobre el plan del emprendedor. -->
+                                <div class="rounded-2xl border border-[#00B4D8]/35 bg-[#00B4D8]/10 p-4">
+                                    <p class="text-sm font-black text-white">
+                                        Plan Thrive para emprendedores
+                                    </p>
+                                    <p class="mt-1 text-xs leading-5 text-white/65">
+                                        Crear la cuenta es gratuito. Para publicar productos, administrar inventario y utilizar la calculadora debes activar la suscripción de
+                                        <span class="font-black text-[#90E0EF]">$4.99 al mes</span>.
+                                    </p>
+                                </div>
+
                                 <!-- Botones -->
                                 <div class="grid grid-cols-2 gap-3">
                                     <button

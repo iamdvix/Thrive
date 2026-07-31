@@ -175,50 +175,10 @@ onBeforeUnmount(function () {
 </script>
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-0">
-    <!-- Cabecera de la cuenta institucional. -->
-    <header class="sticky top-0 z-40 bg-[#F8FBFC]">
-        <div class="mx-auto max-w-[1450px] px-2 pt-2 sm:px-5 lg:px-8 lg:pt-4">
-            <!-- Cabecera móvil. -->
-            <div class="flex items-center gap-1 rounded-[24px] bg-[#00B4D8] p-1.5 shadow-sm sm:gap-2 sm:p-2 lg:hidden">
-                <div class="flex min-w-0 flex-1 items-center gap-2 px-3">
-                    <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/20 text-xs font-black text-white">
-                        <img
-                            v-if="institution?.logoUrl"
-                            :src="institution.logoUrl"
-                            :alt="institution.institutionName"
-                            class="h-full w-full object-cover"
-                        >
-                        <span v-else>
-                            {{ institutionInitials }}
-                        </span>
-                    </div>
-                    <span class="truncate text-sm font-bold text-white sm:text-base">
-                        {{ institution?.institutionName || "Thrive" }}
-                    </span>
-                </div>
-                <button
-                    type="button"
-                    aria-label="Notificaciones"
-                    class="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/20"
-                >
-                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"></path>
-                    </svg>
-                </button>
-                <button
-                    type="button"
-                    aria-label="Abrir perfil"
-                    class="flex h-9 w-9 items-center justify-center rounded-full text-white transition hover:bg-white/20"
-                    @click="changeSection('perfil')"
-                >
-                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                        <circle cx="12" cy="8" r="4"></circle>
-                        <path stroke-linecap="round" d="M4 21a8 8 0 0116 0"></path>
-                    </svg>
-                </button>
-            </div>
-            <!-- Navbar principal para laptop. -->
-            <nav class="hidden items-center justify-center gap-2 rounded-[24px] bg-[#00B4D8] p-2 shadow-sm lg:flex">
+    <!-- En celular se eliminó la barra superior; el menú inferior sigue disponible. -->
+    <header class="sticky top-0 z-40 hidden bg-[#F8FBFC] lg:block">
+        <div class="mx-auto max-w-[1450px] px-8 pt-4">
+            <nav class="flex items-center justify-center gap-2 rounded-[24px] bg-[#00B4D8] p-2 shadow-sm">
                 <button
                     v-for="item in [
                         ['inicio', 'Inicio'],
@@ -229,7 +189,11 @@ onBeforeUnmount(function () {
                     :key="item[0]"
                     type="button"
                     class="rounded-full px-6 py-2.5 text-sm font-bold transition"
-                    :class="activeSection === item[0] ? 'bg-white text-[#0077B6] shadow-sm' : 'text-white/85 hover:bg-white/15 hover:text-white'"
+                    :class="
+                        activeSection === item[0]
+                            ? 'bg-white text-[#0077B6] shadow-sm'
+                            : 'text-white/85 hover:bg-white/15 hover:text-white'
+                    "
                     @click="changeSection(item[0])"
                 >
                     {{ item[1] }}
