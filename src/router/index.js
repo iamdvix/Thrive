@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import Landing from "../views/Landing.vue";
 import Access from "../views/Access.vue";
 import Catalog from "../views/Catalog.vue";
+import CustomerProfile from "../views/customer/Profile.vue";
 import Business from "../views/Business.vue";
 import Product from "../views/Product.vue";
 import BizHome from "../views/business/Home.vue";
@@ -25,6 +26,7 @@ const routes = [
     { path: "/access", alias: "/auth", name: "Access", component: Access, meta: { title: "Acceso | Thrive" } },
     // Cliente.
     { path: "/catalog", alias: "/catalogo", name: "Catalog", component: Catalog, meta: { ...customerOnly, title: "Catálogo | Thrive" } },
+    { path: "/catalog/profile", alias: "/perfil-cliente", name: "CustomerProfile", component: CustomerProfile, meta: { ...customerOnly, title: "Perfil | Thrive" } },
     // Emprendedor. Las rutas antiguas se conservan como alias para no romper enlaces guardados.
     { path: "/biz", alias: "/dashboard-emprendedor", name: "BizHome", component: BizHome, meta: { ...businessOnly, title: "Panel | Thrive" } },
     // Productos forma parte del dashboard; esta URL antigua vuelve a Inicio.

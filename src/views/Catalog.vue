@@ -1,7 +1,7 @@
 <script setup>
 // Catálogo principal del cliente; reúne perfil, productos, filtros, seguimiento y detalle de cada publicación.
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
 import {
     uploadProfileImage,
@@ -12,6 +12,7 @@ import {
     loadMyFavoriteProductIds,
     setProductFavorite
 } from "../lib/favorites";
+const route = useRoute();
 const router = useRouter();
 // Datos y controles del perfil del cliente conectado.
 // Información real del cliente conectado.
@@ -115,24 +116,11 @@ function clearPasswordFields() {
     showNewPassword.value = false;
     showConfirmPassword.value = false;
 }
-// Abre y prepara la ventana del perfil del cliente.
+// Abre la pantalla dedicada del perfil del cliente.
 function openClientProfile() {
-    if (!clientProfile.value) return;
-    // Copiamos los datos actuales al formulario.
-    profileForm.value = {
-        fullName:
-            clientProfile.value.fullName || "",
-        phone:
-            clientProfile.value.phone || ""
-    };
-    // Mostramos inicialmente la fotografía actual.
-    profilePhotoPreview.value =
-        clientProfile.value.avatarUrl || "";
-    // No existe una nueva fotografía hasta que se seleccione.
-    profilePhotoFile.value = null;
-    clearPasswordFields();
-    showClientProfile.value = true;
-    document.body.style.overflow = "hidden";
+    router.push({
+        name: "CustomerProfile"
+    });
 }
 // Cierra la ventana del perfil.
 function closeClientProfile() {
@@ -834,6 +822,10 @@ function handleEscape(event) {
 }
 // Carga inicial de los datos necesarios para mostrar la página.
 onMounted(async function () {
+    if (route.query.mode === "favorites") {
+        catalogMode.value = "favorites";
+    }
+
     /*
         Cargamos perfil y productos al mismo tiempo
         para que el catálogo aparezca más rápido.
@@ -862,24 +854,60 @@ onBeforeUnmount(function () {
     <!-- Cabecera: en celular queda solo el buscador útil, sin navbar flotante. -->
     <header class="border-b border-gray-100 bg-white lg:sticky lg:top-0 lg:z-40">
         <div class="mx-auto max-w-[1450px] px-2 pt-2 sm:px-5 lg:px-8 lg:pt-4">
-            <!-- Buscador sencillo para celular. -->
-            <div class="flex items-center rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm lg:hidden">
-                <svg
-                    class="mr-2 h-5 w-5 shrink-0 text-gray-400"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
+            <!-- Isla dinámica para celular, como en el diseño original. -->
+            <div class="flex items-center gap-1 rounded-[24px] bg-[#00B4D8] p-1.5 shadow-sm sm:gap-2 sm:p-2 lg:hidden">
+                <div class="flex min-w-0 flex-1 items-center rounded-full bg-white px-3 py-2">
+                    <svg
+                        class="mr-2 h-5 w-5 shrink-0 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                    >
+                        <circle cx="11" cy="11" r="7"></circle>
+                        <path stroke-linecap="round" d="m20 20-3.5-3.5"></path>
+                    </svg>
+
+                    <input
+                        v-model="searchText"
+                        type="search"
+                        placeholder="Buscar productos o tiendas"
+                        class="min-w-0 flex-1 bg-transparent text-sm text-gray-700 outline-none placeholder:text-gray-400"
+                    >
+                </div>
+
+                <button
+                    type="button"
+                    aria-label="Mi perfil"
+                    class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full text-white transition hover:bg-white/20"
+                    @click="openClientProfile"
                 >
-                    <circle cx="11" cy="11" r="7"></circle>
-                    <path stroke-linecap="round" d="m20 20-3.5-3.5"></path>
-                </svg>
-                <input
-                    v-model="searchText"
-                    type="search"
-                    placeholder="Buscar productos o tiendas"
-                    class="min-w-0 flex-1 bg-transparent text-sm text-gray-700 outline-none placeholder:text-gray-400"
-                >
+                    <img
+                        v-if="clientProfile?.avatarUrl"
+                        :src="clientProfile.avatarUrl"
+                        :alt="clientProfile.fullName"
+                        class="h-8 w-8 rounded-full border-2 border-white/70 object-cover"
+                    >
+
+                    <span
+                        v-else-if="clientProfile"
+                        class="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-[10px] font-black text-white"
+                    >
+                        {{ clientInitials }}
+                    </span>
+
+                    <svg
+                        v-else
+                        class="h-5 w-5"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        viewBox="0 0 24 24"
+                    >
+                        <circle cx="12" cy="8" r="4"></circle>
+                        <path stroke-linecap="round" d="M4 21a8 8 0 0116 0"></path>
+                    </svg>
+                </button>
             </div>
 
             <!-- Barra completa reservada para computadora. -->

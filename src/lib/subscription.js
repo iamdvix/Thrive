@@ -4,7 +4,13 @@ export function subscriptionIsActive(subscription) {
     if (!subscription) return false;
     if (subscription.status !== "active") return false;
     if (!subscription.expiresAt) return true;
-    return new Date(subscription.expiresAt).getTime() > Date.now();
+
+    return (
+        new Date(
+            subscription.expiresAt
+        ).getTime() >
+        Date.now()
+    );
 }
 
 export function subscriptionStatusLabel(status) {
@@ -15,18 +21,54 @@ export function subscriptionStatusLabel(status) {
         canceled: "Plan cancelado",
         inactive: "Sin suscripción"
     };
-    return labels[status] || "Sin suscripción";
+
+    return (
+        labels[status] ||
+        "Sin suscripción"
+    );
 }
 
-export async function startSubscriptionCheckout() {
-    const { data, error } = await supabase.functions.invoke(
-        "create-subscription-checkout"
+// Activa el plan de demostración desde una función segura de Supabase.
+// Ningún dato de tarjeta se envía ni se almacena.
+export async function activateDemoSubscription() {
+    const { data, error } = await supabase.rpc(
+        "activate_demo_subscription"
     );
-    if (error) throw error;
-    if (!data?.url) {
+
+    if (error) {
+        throw error;
+    }
+
+    const result =
+        Array.isArray(data)
+            ? data[0]
+            : data;
+
+    if (!result) {
         throw new Error(
-            "No se recibió el enlace de pago. Revisa la configuración de Stripe en Supabase."
+            "Supabase no devolvió la información del plan."
         );
     }
-    window.location.assign(data.url);
+
+    return {
+        status:
+            result.status ||
+            "active",
+        price:
+            Number(
+                result.price
+            ) || 4.99,
+        startedAt:
+            result.started_at ||
+            null,
+        expiresAt:
+            result.expires_at ||
+            null
+    };
+}
+
+// Se conserva este nombre para evitar errores en código antiguo.
+// La nueva versión ya no depende de Stripe ni de Edge Functions.
+export async function startSubscriptionCheckout() {
+    return activateDemoSubscription();
 }

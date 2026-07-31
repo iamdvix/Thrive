@@ -95,13 +95,13 @@ function formatDate(date) {
                 class="w-full rounded-xl bg-white px-6 py-3.5 text-sm font-black text-[#0077B6] shadow-sm transition hover:bg-[#EAF9FC] disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
                 @click="emit('subscribe')"
             >
-                {{ loading ? "Abriendo pago seguro..." : "Suscribirme por $4.99" }}
+                {{ loading ? "Activando plan..." : "Probar suscripción por $4.99" }}
             </button>
             <p
                 v-if="showButton && !active"
                 class="mt-2 text-center text-[10px] font-semibold text-white/70"
             >
-                Tarjeta y facturación se completan en una pantalla de pago segura.
+                La demostración utiliza una tarjeta de prueba y no procesa dinero real.
             </p>
             <div
                 v-else-if="active"

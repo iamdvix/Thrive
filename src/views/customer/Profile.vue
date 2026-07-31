@@ -1,5 +1,5 @@
 <script setup>
-// Perfil completo del emprendedor, separado del inicio del dashboard.
+// Perfil dedicado del cliente, con el mismo orden visual de institución y emprendedor.
 import {
     ref,
     computed,
@@ -9,40 +9,27 @@ import {
 import { useRouter } from "vue-router";
 import { supabase } from "../../lib/supabaseClient";
 import {
-    uploadEntrepreneurLogo,
+    uploadProfileImage,
     deleteImage,
     getStoragePathFromPublicUrl
 } from "../../lib/storage";
-import BusinessNav from "../../components/business/BusinessNav.vue";
-import SubscriptionCard from "../../components/shared/SubscriptionCard.vue";
-import DemoSubscriptionModal from "../../components/shared/DemoSubscriptionModal.vue";
-import {
-    subscriptionIsActive,
-    activateDemoSubscription
-} from "../../lib/subscription";
 
 const router = useRouter();
 
-const entrepreneur = ref(null);
+const profile = ref(null);
 const loading = ref(true);
 const loadError = ref("");
 const saving = ref(false);
 const logoutLoading = ref(false);
-const paymentLoading = ref(false);
-
 const showEditor = ref(false);
-const showPayment = ref(false);
-
-const logoFile = ref(null);
-const logoPreview = ref("");
 
 const form = ref({
-    businessName: "",
-    phone: "",
-    description: "",
-    department: "",
-    district: ""
+    fullName: "",
+    phone: ""
 });
+
+const photoFile = ref(null);
+const photoPreview = ref("");
 
 const currentPassword = ref("");
 const newPassword = ref("");
@@ -51,27 +38,10 @@ const showCurrentPassword = ref(false);
 const showNewPassword = ref(false);
 const showConfirmPassword = ref(false);
 
-const departments = [
-    "Ahuachapán",
-    "Cabañas",
-    "Chalatenango",
-    "Cuscatlán",
-    "La Libertad",
-    "La Paz",
-    "La Unión",
-    "Morazán",
-    "San Miguel",
-    "San Salvador",
-    "San Vicente",
-    "Santa Ana",
-    "Sonsonate",
-    "Usulután"
-];
-
 const initials = computed(function () {
     const name =
-        entrepreneur.value?.businessName ||
-        "Thrive";
+        profile.value?.fullName ||
+        "Cliente Thrive";
 
     return name
         .trim()
@@ -83,30 +53,6 @@ const initials = computed(function () {
                 .toUpperCase();
         })
         .join("");
-});
-
-const subscription = computed(function () {
-    return {
-        status:
-            entrepreneur.value?.subscriptionStatus ||
-            "inactive",
-        price:
-            Number(
-                entrepreneur.value?.subscriptionPrice
-            ) || 4.99,
-        startedAt:
-            entrepreneur.value?.subscriptionStartedAt ||
-            null,
-        expiresAt:
-            entrepreneur.value?.subscriptionExpiresAt ||
-            null
-    };
-});
-
-const hasActiveSubscription = computed(function () {
-    return subscriptionIsActive(
-        subscription.value
-    );
 });
 
 async function loadProfile() {
@@ -129,85 +75,45 @@ async function loadProfile() {
             return;
         }
 
-        const [
-            businessResponse,
-            profileResponse
-        ] = await Promise.all([
-            supabase
-                .from("entrepreneurs")
+        const { data, error } =
+            await supabase
+                .from("profiles")
                 .select(`
                     id,
-                    business_name,
-                    description,
-                    department,
-                    district,
-                    logo_url,
-                    subscription_status,
-                    subscription_price,
-                    subscription_started_at,
-                    subscription_expires_at
+                    full_name,
+                    phone,
+                    avatar_url,
+                    user_type,
+                    created_at
                 `)
                 .eq("id", user.id)
-                .single(),
-            supabase
-                .from("profiles")
-                .select("phone")
-                .eq("id", user.id)
-                .single()
-        ]);
+                .single();
 
-        if (businessResponse.error) {
-            throw businessResponse.error;
+        if (error) {
+            throw error;
         }
 
-        if (profileResponse.error) {
-            throw profileResponse.error;
-        }
-
-        const business =
-            businessResponse.data;
-
-        entrepreneur.value = {
+        profile.value = {
             id:
-                business.id,
-            businessName:
-                business.business_name ||
-                "Mi emprendimiento",
+                data.id,
+            fullName:
+                data.full_name ||
+                "Cliente Thrive",
             phone:
-                profileResponse.data?.phone ||
+                data.phone ||
+                "",
+            avatarUrl:
+                data.avatar_url ||
                 "",
             email:
                 user.email ||
                 "",
-            description:
-                business.description ||
-                "",
-            department:
-                business.department ||
-                "",
-            district:
-                business.district ||
-                "",
-            avatar:
-                business.logo_url ||
-                "",
-            subscriptionStatus:
-                business.subscription_status ||
-                "inactive",
-            subscriptionPrice:
-                Number(
-                    business.subscription_price
-                ) || 4.99,
-            subscriptionStartedAt:
-                business.subscription_started_at ||
-                null,
-            subscriptionExpiresAt:
-                business.subscription_expires_at ||
-                null
+            createdAt:
+                data.created_at
         };
     } catch (error) {
         console.error(
-            "Error al cargar el perfil del emprendedor:",
+            "Error al cargar el perfil del cliente:",
             error
         );
 
@@ -228,29 +134,20 @@ function clearPasswordFields() {
 }
 
 function openEditor() {
-    if (!entrepreneur.value) return;
+    if (!profile.value) return;
 
     form.value = {
-        businessName:
-            entrepreneur.value.businessName ||
+        fullName:
+            profile.value.fullName ||
             "",
         phone:
-            entrepreneur.value.phone ||
-            "",
-        description:
-            entrepreneur.value.description ||
-            "",
-        department:
-            entrepreneur.value.department ||
-            "",
-        district:
-            entrepreneur.value.district ||
+            profile.value.phone ||
             ""
     };
 
-    logoFile.value = null;
-    logoPreview.value =
-        entrepreneur.value.avatar ||
+    photoFile.value = null;
+    photoPreview.value =
+        profile.value.avatarUrl ||
         "";
 
     clearPasswordFields();
@@ -262,13 +159,13 @@ function openEditor() {
 
 function closeEditor() {
     showEditor.value = false;
-    logoFile.value = null;
-    logoPreview.value = "";
+    photoFile.value = null;
+    photoPreview.value = "";
     clearPasswordFields();
     document.body.style.overflow = "";
 }
 
-function handleLogo(event) {
+function handlePhoto(event) {
     const file =
         event.target.files?.[0];
 
@@ -291,20 +188,20 @@ function handleLogo(event) {
         5 * 1024 * 1024
     ) {
         alert(
-            "La imagen no puede superar los 5 MB."
+            "La fotografía no puede superar los 5 MB."
         );
         event.target.value = "";
         return;
     }
 
-    logoFile.value = file;
+    photoFile.value = file;
 
     const reader =
         new FileReader();
 
     reader.onload =
         function (loadEvent) {
-            logoPreview.value =
+            photoPreview.value =
                 loadEvent.target.result;
         };
 
@@ -314,23 +211,23 @@ function handleLogo(event) {
 async function saveProfile() {
     if (
         saving.value ||
-        !entrepreneur.value
+        !profile.value
     ) {
         return;
     }
 
     if (
-        !form.value.businessName.trim()
+        !form.value.fullName.trim()
     ) {
         alert(
-            "Escribe el nombre del emprendimiento."
+            "Escribe tu nombre antes de guardar."
         );
         return;
     }
 
     saving.value = true;
 
-    let uploadedLogo = null;
+    let uploadedPhoto = null;
 
     try {
         const {
@@ -343,7 +240,7 @@ async function saveProfile() {
             !user?.email
         ) {
             throw new Error(
-                "No fue posible verificar la sesión."
+                "No fue posible verificar tu sesión."
             );
         }
 
@@ -401,79 +298,62 @@ async function saveProfile() {
             }
         }
 
-        const oldLogoPath =
+        const oldPhotoPath =
             getStoragePathFromPublicUrl(
-                entrepreneur.value.avatar
+                profile.value.avatarUrl
             );
 
-        let logoUrl =
-            entrepreneur.value.avatar ||
+        let avatarUrl =
+            profile.value.avatarUrl ||
             null;
 
-        if (logoFile.value) {
-            uploadedLogo =
-                await uploadEntrepreneurLogo(
+        if (photoFile.value) {
+            uploadedPhoto =
+                await uploadProfileImage(
                     user.id,
-                    logoFile.value
+                    photoFile.value
                 );
 
-            logoUrl =
-                uploadedLogo.publicUrl;
+            avatarUrl =
+                uploadedPhoto.publicUrl;
         }
 
-        const { error: businessError } =
-            await supabase
-                .from("entrepreneurs")
-                .update({
-                    business_name:
-                        form.value.businessName.trim(),
-                    description:
-                        form.value.description.trim(),
-                    department:
-                        form.value.department ||
-                        null,
-                    district:
-                        form.value.district.trim() ||
-                        null,
-                    logo_url:
-                        logoUrl
-                })
-                .eq("id", user.id);
-
-        if (businessError) {
-            throw businessError;
-        }
-
-        const { error: profileError } =
+        const { data, error } =
             await supabase
                 .from("profiles")
                 .update({
                     full_name:
-                        form.value.businessName.trim(),
+                        form.value.fullName.trim(),
                     phone:
                         form.value.phone.trim(),
                     avatar_url:
-                        logoUrl
+                        avatarUrl
                 })
-                .eq("id", user.id);
+                .eq("id", user.id)
+                .select(`
+                    full_name,
+                    phone,
+                    avatar_url
+                `)
+                .single();
 
-        if (profileError) {
-            throw profileError;
+        if (error) {
+            throw error;
         }
 
         if (
-            uploadedLogo?.path &&
-            oldLogoPath &&
-            uploadedLogo.path !==
-            oldLogoPath
+            uploadedPhoto?.path &&
+            oldPhotoPath &&
+            uploadedPhoto.path !==
+            oldPhotoPath
         ) {
             try {
                 await deleteImage(
-                    oldLogoPath
+                    oldPhotoPath
                 );
             } catch (deleteError) {
                 console.warn(
-                    "No se pudo borrar el logo anterior:",
+                    "No se pudo borrar la fotografía anterior:",
                     deleteError
                 );
             }
@@ -492,20 +372,16 @@ async function saveProfile() {
             }
         }
 
-        entrepreneur.value = {
-            ...entrepreneur.value,
-            businessName:
-                form.value.businessName.trim(),
+        profile.value = {
+            ...profile.value,
+            fullName:
+                data.full_name ||
+                "",
             phone:
-                form.value.phone.trim(),
-            description:
-                form.value.description.trim(),
-            department:
-                form.value.department,
-            district:
-                form.value.district.trim(),
-            avatar:
-                logoUrl ||
+                data.phone ||
+                "",
+            avatarUrl:
+                data.avatar_url ||
                 ""
         };
 
@@ -516,16 +392,16 @@ async function saveProfile() {
         closeEditor();
     } catch (error) {
         console.error(
-            "Error al guardar el perfil del emprendedor:",
+            "Error al guardar el perfil del cliente:",
             error
         );
 
         if (
-            uploadedLogo?.path
+            uploadedPhoto?.path
         ) {
             try {
                 await deleteImage(
-                    uploadedLogo.path
+                    uploadedPhoto.path
                 );
             } catch {
                 // La limpieza no debe ocultar el error principal.
@@ -544,62 +420,19 @@ async function saveProfile() {
     }
 }
 
-function openPayment() {
-    showPayment.value = true;
-    document.body.style.overflow =
-        "hidden";
+function goCatalog() {
+    router.push({
+        name: "Catalog"
+    });
 }
 
-function closePayment() {
-    if (paymentLoading.value) return;
-
-    showPayment.value = false;
-    document.body.style.overflow = "";
-}
-
-async function confirmDemoPayment() {
-    if (paymentLoading.value) return;
-
-    paymentLoading.value = true;
-
-    try {
-        const result =
-            await activateDemoSubscription();
-
-        entrepreneur.value = {
-            ...entrepreneur.value,
-            subscriptionStatus:
-                result.status,
-            subscriptionPrice:
-                result.price,
-            subscriptionStartedAt:
-                result.startedAt,
-            subscriptionExpiresAt:
-                result.expiresAt
-        };
-
-        showPayment.value = false;
-        document.body.style.overflow = "";
-
-        alert(
-            "Plan de demostración activado correctamente."
-        );
-    } catch (error) {
-        console.error(
-            "Error al activar el plan de demostración:",
-            error
-        );
-
-        alert(
-            "No fue posible activar el plan: " +
-            (
-                error.message ||
-                "Error inesperado"
-            )
-        );
-    } finally {
-        paymentLoading.value = false;
-    }
+function goFavorites() {
+    router.push({
+        name: "Catalog",
+        query: {
+            mode: "favorites"
+        }
+    });
 }
 
 async function logout() {
@@ -637,16 +470,10 @@ async function logout() {
 }
 
 function handleEscape(event) {
-    if (event.key !== "Escape") {
-        return;
-    }
-
-    if (showPayment.value) {
-        closePayment();
-        return;
-    }
-
-    if (showEditor.value) {
+    if (
+        event.key === "Escape" &&
+        showEditor.value
+    ) {
         closeEditor();
     }
 }
@@ -672,10 +499,45 @@ onBeforeUnmount(function () {
 
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-10">
-    <BusinessNav
-        active="profile"
-        :business-name="entrepreneur?.businessName || 'Thrive'"
-    />
+    <!-- Navegación de computadora del cliente. -->
+    <header class="sticky top-0 z-40 hidden bg-[#F8FBFC] lg:block">
+        <div class="mx-auto max-w-[1450px] px-8 pt-4">
+            <nav class="rounded-[24px] bg-[#00B4D8] p-2 shadow-sm">
+                <div class="mx-auto grid max-w-[720px] grid-cols-4 gap-2">
+                    <button
+                        type="button"
+                        class="rounded-full px-4 py-2.5 text-sm font-bold text-white/85 hover:bg-white/15"
+                        @click="goCatalog"
+                    >
+                        Inicio
+                    </button>
+
+                    <button
+                        type="button"
+                        class="rounded-full px-4 py-2.5 text-sm font-bold text-white/85 hover:bg-white/15"
+                        @click="goCatalog"
+                    >
+                        Explorar
+                    </button>
+
+                    <button
+                        type="button"
+                        class="rounded-full px-4 py-2.5 text-sm font-bold text-white/85 hover:bg-white/15"
+                        @click="goFavorites"
+                    >
+                        Favoritos
+                    </button>
+
+                    <button
+                        type="button"
+                        class="rounded-full bg-white px-4 py-2.5 text-sm font-bold text-[#0077B6] shadow-sm"
+                    >
+                        Perfil
+                    </button>
+                </div>
+            </nav>
+        </div>
+    </header>
 
     <main
         v-if="loading"
@@ -706,16 +568,16 @@ onBeforeUnmount(function () {
     </main>
 
     <main
-        v-else-if="entrepreneur"
+        v-else-if="profile"
         class="mx-auto max-w-[1450px] px-3 pb-10 pt-4 sm:px-5 lg:px-8 lg:pt-6"
     >
         <section class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
             <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                 <div class="flex flex-col items-center gap-5 text-center sm:flex-row sm:text-left">
                     <img
-                        v-if="entrepreneur.avatar"
-                        :src="entrepreneur.avatar"
-                        :alt="entrepreneur.businessName"
+                        v-if="profile.avatarUrl"
+                        :src="profile.avatarUrl"
+                        :alt="profile.fullName"
                         class="h-24 w-24 rounded-full border-4 border-[#CAF0F8] object-cover sm:h-28 sm:w-28"
                     >
 
@@ -728,19 +590,19 @@ onBeforeUnmount(function () {
 
                     <div>
                         <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                            Perfil del emprendimiento
+                            Perfil del cliente
                         </p>
 
                         <h1 class="mt-1 text-2xl font-black text-gray-700 sm:text-3xl">
-                            {{ entrepreneur.businessName }}
+                            {{ profile.fullName }}
                         </h1>
 
                         <p class="mt-1 text-sm text-gray-400">
-                            {{ entrepreneur.email }}
+                            {{ profile.email }}
                         </p>
 
                         <p class="mt-1 text-sm text-gray-400">
-                            {{ entrepreneur.phone || "Teléfono no registrado" }}
+                            {{ profile.phone || "Teléfono no registrado" }}
                         </p>
                     </div>
                 </div>
@@ -780,51 +642,109 @@ onBeforeUnmount(function () {
             </div>
         </section>
 
-        <SubscriptionCard
-            class="mt-5"
-            :subscription="subscription"
-            :loading="paymentLoading"
-            @subscribe="openPayment"
-        />
-
         <section class="mt-5 grid gap-4 md:grid-cols-2">
             <article class="rounded-[24px] bg-white p-5 shadow-sm sm:p-6">
                 <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                    Acerca del emprendimiento
-                </p>
-
-                <p class="mt-3 whitespace-pre-line text-sm leading-7 text-gray-500">
-                    {{ entrepreneur.description || "Agrega una descripción para presentar tu emprendimiento." }}
-                </p>
-            </article>
-
-            <article class="rounded-[24px] bg-white p-5 shadow-sm sm:p-6">
-                <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                    Información
+                    Mi cuenta
                 </p>
 
                 <div class="mt-3 space-y-3 text-sm text-gray-500">
                     <p>
                         <span class="font-bold text-gray-600">
-                            Ubicación:
+                            Tipo de cuenta:
                         </span>
 
-                        {{ entrepreneur.district || entrepreneur.department || "No registrada" }}
+                        Cliente
                     </p>
 
                     <p>
                         <span class="font-bold text-gray-600">
-                            Acceso:
+                            Correo:
                         </span>
 
-                        {{ hasActiveSubscription ? "Herramientas completas" : "Vista previa de herramientas" }}
+                        {{ profile.email }}
                     </p>
+                </div>
+            </article>
+
+            <article class="rounded-[24px] bg-white p-5 shadow-sm sm:p-6">
+                <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
+                    Accesos rápidos
+                </p>
+
+                <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                    <button
+                        type="button"
+                        class="rounded-xl bg-[#CAF0F8] px-4 py-3 text-sm font-bold text-[#0077B6]"
+                        @click="goCatalog"
+                    >
+                        Explorar productos
+                    </button>
+
+                    <button
+                        type="button"
+                        class="rounded-xl bg-[#CAF0F8] px-4 py-3 text-sm font-bold text-[#0077B6]"
+                        @click="goFavorites"
+                    >
+                        Ver favoritos
+                    </button>
                 </div>
             </article>
         </section>
     </main>
 
-    <!-- Editor del perfil. -->
+    <!-- Navegación móvil del cliente. -->
+    <nav class="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] border-t border-white/20 bg-[#00B4D8] shadow-[0_-6px_20px_rgba(0,0,0,0.12)] lg:hidden">
+        <div class="mx-auto grid max-w-md grid-cols-4">
+            <button
+                type="button"
+                class="flex flex-col items-center gap-1 py-2 text-white/75"
+                @click="goCatalog"
+            >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M3 11l9-8 9 8"></path>
+                    <path d="M5 10v10h14V10"></path>
+                </svg>
+                <span class="text-[9px] font-bold">Inicio</span>
+            </button>
+
+            <button
+                type="button"
+                class="flex flex-col items-center gap-1 py-2 text-white/75"
+                @click="goCatalog"
+            >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path stroke-linecap="round" d="m20 20-3.5-3.5"></path>
+                </svg>
+                <span class="text-[9px] font-bold">Explorar</span>
+            </button>
+
+            <button
+                type="button"
+                class="flex flex-col items-center gap-1 py-2 text-white/75"
+                @click="goFavorites"
+            >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M12 20s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.6-7 10-7 10z"></path>
+                </svg>
+                <span class="text-[9px] font-bold">Favoritos</span>
+            </button>
+
+            <button
+                type="button"
+                class="flex flex-col items-center gap-1 bg-white/15 py-2 text-white"
+            >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <circle cx="12" cy="8" r="4"></circle>
+                    <path stroke-linecap="round" d="M4 21a8 8 0 0116 0"></path>
+                </svg>
+                <span class="text-[9px] font-bold">Perfil</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Editor del cliente. -->
     <Teleport to="body">
         <div
             v-if="showEditor"
@@ -858,14 +778,14 @@ onBeforeUnmount(function () {
                 >
                     <div>
                         <label class="block text-sm font-bold text-gray-600">
-                            Foto del emprendimiento
+                            Fotografía
                         </label>
 
                         <div class="mt-3 flex flex-col items-center gap-4 sm:flex-row">
                             <img
-                                v-if="logoPreview"
-                                :src="logoPreview"
-                                alt="Foto del emprendimiento"
+                                v-if="photoPreview"
+                                :src="photoPreview"
+                                alt="Fotografía del cliente"
                                 class="h-24 w-24 rounded-full border-4 border-[#CAF0F8] object-cover"
                             >
 
@@ -883,7 +803,7 @@ onBeforeUnmount(function () {
                                     type="file"
                                     accept="image/*"
                                     class="hidden"
-                                    @change="handleLogo"
+                                    @change="handlePhoto"
                                 >
                             </label>
                         </div>
@@ -891,13 +811,14 @@ onBeforeUnmount(function () {
 
                     <div>
                         <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                            Nombre del emprendimiento
+                            Nombre completo
                         </label>
 
                         <input
-                            v-model="form.businessName"
+                            v-model="form.fullName"
                             required
                             type="text"
+                            autocomplete="name"
                             class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         >
                     </div>
@@ -908,7 +829,7 @@ onBeforeUnmount(function () {
                         </label>
 
                         <input
-                            :value="entrepreneur.email"
+                            :value="profile.email"
                             disabled
                             type="email"
                             class="w-full cursor-not-allowed rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-gray-400 outline-none"
@@ -927,51 +848,6 @@ onBeforeUnmount(function () {
                             placeholder="0000 0000"
                             class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         >
-                    </div>
-
-                    <div>
-                        <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                            Descripción
-                        </label>
-
-                        <textarea
-                            v-model="form.description"
-                            rows="4"
-                            class="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                        ></textarea>
-                    </div>
-
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <div>
-                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                                Departamento
-                            </label>
-
-                            <select
-                                v-model="form.department"
-                                class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 outline-none focus:border-[#00B4D8]"
-                            >
-                                <option
-                                    v-for="department in departments"
-                                    :key="department"
-                                    :value="department"
-                                >
-                                    {{ department }}
-                                </option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="mb-1.5 block text-sm font-bold text-gray-600">
-                                Distrito
-                            </label>
-
-                            <input
-                                v-model="form.district"
-                                type="text"
-                                class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
-                            >
-                        </div>
                     </div>
 
                     <div class="border-t border-gray-100 pt-5">
@@ -1048,13 +924,5 @@ onBeforeUnmount(function () {
             </section>
         </div>
     </Teleport>
-
-    <DemoSubscriptionModal
-        :show="showPayment"
-        :loading="paymentLoading"
-        :price="subscription.price"
-        @close="closePayment"
-        @confirm="confirmDemoPayment"
-    />
 </div>
 </template>
