@@ -3,6 +3,7 @@
 import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
+import LegalTermsModal from "../components/shared/LegalTermsModal.vue";
 import {
     uploadProfileImage,
     uploadEntrepreneurLogo
@@ -125,6 +126,7 @@ const clientPhone = ref("");
 const clientPassword = ref("");
 const clientLoading = ref(false);
 const showClientPassword = ref(false);
+const clientAcceptedPolicies = ref(false);
 // Archivo real que se enviará a Supabase Storage.
 const clientPhotoFile = ref(null);
 // Vista previa mostrada antes del registro.
@@ -141,6 +143,9 @@ const businessDepartment = ref("");
 const businessDistrict = ref("");
 const entrepreneurLoading = ref(false);
 const showBusinessPassword = ref(false);
+const entrepreneurAcceptedPolicies = ref(false);
+const showLegalModal = ref(false);
+const legalRole = ref("cliente");
 // Archivo real del logo.
 const businessLogoFile = ref(null);
 // Vista previa del logo.
@@ -159,6 +164,25 @@ const businessDistricts = computed(function () {
 function changeBusinessDepartment() {
     businessDistrict.value = "";
 }
+
+function openLegalPolicies(role) {
+    legalRole.value = role === "emprendedor" ? "emprendedor" : "cliente";
+    showLegalModal.value = true;
+    document.body.style.overflow = "hidden";
+}
+function closeLegalPolicies() {
+    showLegalModal.value = false;
+    document.body.style.overflow = "";
+}
+function acceptLegalPolicies() {
+    if (legalRole.value === "emprendedor") {
+        entrepreneurAcceptedPolicies.value = true;
+    } else {
+        clientAcceptedPolicies.value = true;
+    }
+    closeLegalPolicies();
+}
+
 // Maneja la selección y vista previa de las imágenes.
 function handleImagePreview(event, type) {
     const file = event.target.files?.[0];
@@ -270,6 +294,10 @@ async function loginUser() {
 // Proceso utilizado para registrar una cuenta de cliente.
 async function registerClient() {
     if (clientLoading.value) return;
+    if (!clientAcceptedPolicies.value) {
+        alert("Debes aceptar los términos y la política de privacidad para crear tu cuenta.");
+        return;
+    }
     clientLoading.value = true;
     try {
         // Primero creamos el usuario en Supabase Authentication.
@@ -315,7 +343,12 @@ async function registerClient() {
                 full_name: clientName.value.trim(),
                 phone: clientPhone.value.trim(),
                 user_type: "cliente",
-                avatar_url: null
+                avatar_url: null,
+                terms_accepted_at: new Date().toISOString(),
+                terms_version: "2026-07",
+                privacy_accepted_at: new Date().toISOString(),
+                privacy_version: "2026-07",
+                role_terms: "cliente"
             });
         if (profileError) {
             console.error(
@@ -373,6 +406,7 @@ async function registerClient() {
         clientPhotoFile.value = null;
         clientPhotoPreview.value = "";
         clientPhotoName.value = "Ningún archivo seleccionado";
+        clientAcceptedPolicies.value = false;
         clientStep.value = 1;
         // El cliente entra al catálogo con su sesión activa.
         router.push({ name: "Catalog" });
@@ -391,6 +425,10 @@ async function registerClient() {
 // Proceso utilizado para registrar una cuenta de emprendedor.
 async function registerEntrepreneur() {
     if (entrepreneurLoading.value) return;
+    if (!entrepreneurAcceptedPolicies.value) {
+        alert("Debes aceptar los términos, la política de privacidad y las condiciones del plan.");
+        return;
+    }
     entrepreneurLoading.value = true;
     try {
         // Creamos la cuenta de Authentication.
@@ -432,7 +470,12 @@ async function registerEntrepreneur() {
                 full_name: null,
                 phone: businessPhone.value.trim(),
                 user_type: "emprendedor",
-                avatar_url: null
+                avatar_url: null,
+                terms_accepted_at: new Date().toISOString(),
+                terms_version: "2026-07",
+                privacy_accepted_at: new Date().toISOString(),
+                privacy_version: "2026-07",
+                role_terms: "emprendedor"
             });
         if (profileError) {
             console.error(
@@ -489,10 +532,8 @@ async function registerEntrepreneur() {
                         businessDistrict.value,
                     logo_url:
                         logoUrl,
-                    subscription_status:
-                        "inactive",
-                    subscription_price:
-                        4.99
+                    subscription_status: "inactive",
+                    subscription_price: 4.99
                 });
         if (entrepreneurError) {
             console.error(
@@ -506,7 +547,7 @@ async function registerEntrepreneur() {
             return;
         }
         alert(
-            "Tu cuenta de emprendedor fue creada correctamente. Puedes conocer el panel y activar el plan de $4.99 al mes cuando quieras utilizar todas las herramientas." +
+            "Tu cuenta de emprendedor fue creada correctamente." +
             logoWarning
         );
         // Limpiamos los datos.
@@ -520,6 +561,7 @@ async function registerEntrepreneur() {
         businessLogoFile.value = null;
         businessLogoPreview.value = "";
         businessLogoName.value = "Ningún archivo seleccionado";
+        entrepreneurAcceptedPolicies.value = false;
         entrepreneurStep.value = 1;
         // Entramos directamente al panel.
         router.push({ name: "BizHome" });
@@ -989,17 +1031,24 @@ async function registerEntrepreneur() {
                                         </div>
                                     </div>
                                 </div>
-                                <!-- Información clara sobre el plan del emprendedor. -->
-                                <div class="rounded-2xl border border-[#00B4D8]/35 bg-[#00B4D8]/10 p-4">
-                                    <p class="text-sm font-black text-white">
-                                        Plan Thrive para emprendedores
-                                    </p>
-                                    <p class="mt-1 text-xs leading-5 text-white/65">
-                                        Crear la cuenta es gratuito. Para publicar productos, administrar inventario y utilizar la calculadora debes activar la suscripción de
-                                        <span class="font-black text-[#90E0EF]">$4.99 al mes</span>.
-                                    </p>
-                                </div>
-
+                                <label class="flex items-start gap-3 rounded-2xl border border-white/15 bg-black/15 p-4">
+                                    <input
+                                        v-model="clientAcceptedPolicies"
+                                        type="checkbox"
+                                        required
+                                        class="mt-1 h-4 w-4 accent-[#00B4D8]"
+                                    >
+                                    <span class="text-xs leading-5 text-white/65">
+                                        Acepto los
+                                        <button
+                                            type="button"
+                                            class="font-bold text-[#90E0EF] underline"
+                                            @click="openLegalPolicies('cliente')"
+                                        >
+                                            términos, responsabilidades y política de privacidad
+                                        </button>.
+                                    </span>
+                                </label>
                                 <!-- Botones -->
                                 <div class="grid grid-cols-2 gap-3">
                                     <button
@@ -1319,6 +1368,24 @@ async function registerEntrepreneur() {
                                         </div>
                                     </div>
                                 </div>
+                                <label class="flex items-start gap-3 rounded-2xl border border-white/15 bg-black/15 p-4">
+                                    <input
+                                        v-model="entrepreneurAcceptedPolicies"
+                                        type="checkbox"
+                                        required
+                                        class="mt-1 h-4 w-4 accent-[#00B4D8]"
+                                    >
+                                    <span class="text-xs leading-5 text-white/65">
+                                        Acepto los
+                                        <button
+                                            type="button"
+                                            class="font-bold text-[#90E0EF] underline"
+                                            @click="openLegalPolicies('emprendedor')"
+                                        >
+                                            términos, política de privacidad y condiciones del plan de $4.99
+                                        </button>.
+                                    </span>
+                                </label>
                                 <!-- Botones -->
                                 <div class="grid grid-cols-2 gap-3">
                                     <button
@@ -1346,6 +1413,12 @@ async function registerEntrepreneur() {
                 </section>
             </section>
         </main>
+        <LegalTermsModal
+            :show="showLegalModal"
+            :role="legalRole"
+            @close="closeLegalPolicies"
+            @accept="acceptLegalPolicies"
+        />
     </div>
 </template>
 <style scoped>

@@ -4,6 +4,8 @@ import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { supabase } from "../../lib/supabaseClient";
 import BusinessNav from "./BusinessNav.vue";
+import SubscriptionCard from "../shared/SubscriptionCard.vue";
+import { subscriptionIsActive } from "../../lib/subscription";
 const props = defineProps({
     // Define qué pestaña interna se abre al entrar a Inventario.
     initialTab: {
@@ -94,6 +96,23 @@ const inventoryValue = computed(function () {
     return products.value.reduce(function (total, product) {
         return total + product.price * product.stock;
     }, 0);
+});
+const subscription = computed(function () {
+    return {
+        status:
+            entrepreneur.value?.subscriptionStatus ||
+            "inactive",
+        price:
+            Number(
+                entrepreneur.value?.subscriptionPrice
+            ) || 4.99,
+        expiresAt:
+            entrepreneur.value?.subscriptionExpiresAt ||
+            null
+    };
+});
+const hasActiveSubscription = computed(function () {
+    return subscriptionIsActive(subscription.value);
 });
 // Coloca primero los productos que requieren atención.
 const attentionProducts = computed(function () {
@@ -416,6 +435,10 @@ async function loadOrders(userId) {
         });
     ordersLoaded.value = true;
 }
+function openPlan() {
+    router.push({ name: "BizProfile" });
+}
+
 // Carga toda la pantalla.
 async function loadInventory() {
     loading.value = true;
@@ -438,7 +461,10 @@ async function loadInventory() {
             .select(`
                 id,
                 business_name,
-                logo_url
+                logo_url,
+                subscription_status,
+                subscription_price,
+                subscription_expires_at
             `)
             .eq("id", user.id)
             .single();
@@ -455,7 +481,17 @@ async function loadInventory() {
             businessName:
                 business.business_name,
             avatar:
-                business.logo_url || ""
+                business.logo_url || "",
+            subscriptionStatus:
+                business.subscription_status ||
+                "inactive",
+            subscriptionPrice:
+                Number(
+                    business.subscription_price
+                ) || 4.99,
+            subscriptionExpiresAt:
+                business.subscription_expires_at ||
+                null
         };
         // Inventario solo necesita productos; Pedidos carga ambas colecciones.
         const pendingLoads = [loadProducts(user.id)];
@@ -1168,6 +1204,17 @@ onBeforeUnmount(function () {
                 </button>
             </div>
         </section>
+        <SubscriptionCard
+            v-if="!hasActiveSubscription"
+            class="mb-6"
+            :subscription="subscription"
+            compact
+            @subscribe="openPlan"
+        />
+        <fieldset
+            :disabled="!hasActiveSubscription"
+            :class="!hasActiveSubscription ? 'opacity-65' : ''"
+        >
         <!-- STOCK -->
         <template v-if="activeTab === 'stock'">
             <!-- Resumen del inventario. -->
@@ -1799,6 +1846,7 @@ onBeforeUnmount(function () {
                 </button>
             </section>
         </template>
+        </fieldset>
     </main>
     <!-- Ventana para modificar el stock exacto. -->
     <Teleport to="body">

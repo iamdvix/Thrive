@@ -3,6 +3,10 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
+import {
+    loadMyFavoriteProductIds,
+    setProductFavorite
+} from "../lib/favorites";
 const route = useRoute();
 const router = useRouter();
 const product = ref(null);
@@ -14,6 +18,8 @@ const selectedImageIndex = ref(0);
 const reviews = ref([]);
 const reviewsLoading = ref(false);
 const reviewSaving = ref(false);
+const favoriteProductIds = ref([]);
+const favoriteSaving = ref(false);
 const reviewForm = ref({
     rating: 5,
     comment: ""
@@ -84,6 +90,9 @@ const canReview = computed(function () {
         currentUserType.value ===
         "cliente"
     );
+});
+const isFavorite = computed(function () {
+    return favoriteProductIds.value.includes(productId.value);
 });
 function formatPrice(price) {
     return new Intl.NumberFormat(
@@ -164,6 +173,49 @@ function previousImage() {
         ) %
         productImages.value.length;
 }
+async function loadFavoriteState() {
+    if (currentUserType.value !== "cliente") {
+        favoriteProductIds.value = [];
+        return;
+    }
+    try {
+        favoriteProductIds.value =
+            await loadMyFavoriteProductIds();
+    } catch (error) {
+        console.warn("No se pudo cargar el favorito:", error);
+        favoriteProductIds.value = [];
+    }
+}
+async function toggleFavorite() {
+    if (
+        currentUserType.value !== "cliente" ||
+        favoriteSaving.value ||
+        !productId.value
+    ) {
+        return;
+    }
+    favoriteSaving.value = true;
+    try {
+        const nextState = !isFavorite.value;
+        await setProductFavorite(productId.value, nextState);
+        if (nextState) {
+            if (!favoriteProductIds.value.includes(productId.value)) {
+                favoriteProductIds.value.push(productId.value);
+            }
+        } else {
+            favoriteProductIds.value =
+                favoriteProductIds.value.filter(function (id) {
+                    return id !== productId.value;
+                });
+        }
+    } catch (error) {
+        console.error("No se pudo actualizar el favorito:", error);
+        alert("No fue posible actualizar tus favoritos.");
+    } finally {
+        favoriteSaving.value = false;
+    }
+}
+
 // Carga el usuario conectado para decidir si puede escribir una reseña.
 async function loadCurrentUser() {
     const {
@@ -607,7 +659,10 @@ function contactWhatsApp() {
 }
 async function loadPage() {
     await loadCurrentUser();
-    await loadProduct();
+    await Promise.all([
+        loadProduct(),
+        loadFavoriteState()
+    ]);
 }
 onMounted(function () {
     loadPage();
@@ -781,9 +836,30 @@ watch(
                             {{ category }}
                         </span>
                     </div>
-                    <h1 class="mt-4 text-2xl font-black leading-tight text-gray-700 sm:text-3xl">
-                        {{ product.name }}
-                    </h1>
+                    <div class="mt-4 flex items-start justify-between gap-4">
+                        <h1 class="min-w-0 flex-1 text-2xl font-black leading-tight text-gray-700 sm:text-3xl">
+                            {{ product.name }}
+                        </h1>
+                        <button
+                            v-if="currentUserType === 'cliente'"
+                            type="button"
+                            :disabled="favoriteSaving"
+                            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border shadow-sm disabled:opacity-50"
+                            :class="isFavorite ? 'border-rose-200 bg-rose-50 text-rose-500' : 'border-gray-200 bg-white text-gray-400'"
+                            :aria-label="isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'"
+                            @click="toggleFavorite"
+                        >
+                            <svg class="h-6 w-6" viewBox="0 0 24 24" :fill="isFavorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.8">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 000-7.8z"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <p
+                        v-if="currentUserType === 'cliente' && isFavorite"
+                        class="mt-2 text-xs font-bold text-rose-500"
+                    >
+                        Guardado en tus favoritos
+                    </p>
                     <div class="mt-3 flex items-center gap-2">
                         <span class="text-lg text-amber-500">★</span>
                         <span class="font-black text-gray-700">
@@ -796,6 +872,24 @@ watch(
                     <p class="mt-3 text-3xl font-black text-[#4F7180]">
                         {{ formatPrice(product.price) }}
                     </p>
+                    <div class="mt-5 grid grid-cols-2 gap-3">
+                        <div class="rounded-2xl bg-[#F8FBFC] p-4">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-400">
+                                Disponibilidad
+                            </p>
+                            <p class="mt-1 text-sm font-black" :class="product.stock > 0 ? 'text-green-600' : 'text-red-600'">
+                                {{ product.stock > 0 ? `${product.stock} unidades` : "Agotado" }}
+                            </p>
+                        </div>
+                        <div class="rounded-2xl bg-[#F8FBFC] p-4">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-400">
+                                Emprendimiento
+                            </p>
+                            <p class="mt-1 truncate text-sm font-black text-[#0077B6]">
+                                {{ product.store }}
+                            </p>
+                        </div>
+                    </div>
                     <p class="mt-6 whitespace-pre-line text-sm leading-6 text-gray-500">
                         {{ product.description || "Este producto no tiene una descripción." }}
                     </p>

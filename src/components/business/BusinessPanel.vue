@@ -10,6 +10,11 @@ import {
 } from "../../lib/storage";
 import NewsFeed from "./NewsFeed.vue";
 import BusinessNav from "./BusinessNav.vue";
+import SubscriptionCard from "../shared/SubscriptionCard.vue";
+import {
+    subscriptionIsActive,
+    startSubscriptionCheckout
+} from "../../lib/subscription";
 const props = defineProps({
     // La vista de ruta decide qué parte del panel se muestra.
     screen: {
@@ -30,13 +35,12 @@ const loadError = ref("");
 const profileSaving = ref(false);
 const productSaving = ref(false);
 const logoutLoading = ref(false);
-const subscriptionRequestLoading = ref(false);
-
+const checkoutLoading = ref(false);
+const deletingProductId = ref("");
 // Control de ventanas.
 const showProfileEditor = ref(false);
 const showProductEditor = ref(false);
 const showFollowersModal = ref(false);
-const showSubscriptionModal = ref(false);
 // Datos y controles relacionados con los seguidores.
 // Guarda la cantidad total y los datos públicos de quienes siguen al emprendimiento.
 const followerCount = ref(0);
@@ -134,52 +138,25 @@ const followerCountText = computed(function () {
         ? "1 seguidor"
         : `${followerCount.value} seguidores`;
 });
-
-const hasActiveSubscription = computed(function () {
-    if (
-        entrepreneur.value?.subscriptionStatus !==
-        "active"
-    ) {
-        return false;
-    }
-
-    if (
-        !entrepreneur.value?.subscriptionExpiresAt
-    ) {
-        return true;
-    }
-
-    return (
-        new Date(
-            entrepreneur.value.subscriptionExpiresAt
-        ).getTime() >
-        Date.now()
-    );
+const subscription = computed(function () {
+    return {
+        status:
+            entrepreneur.value?.subscriptionStatus ||
+            "inactive",
+        price:
+            Number(
+                entrepreneur.value?.subscriptionPrice
+            ) || 4.99,
+        startedAt:
+            entrepreneur.value?.subscriptionStartedAt ||
+            null,
+        expiresAt:
+            entrepreneur.value?.subscriptionExpiresAt ||
+            null
+    };
 });
-
-const subscriptionStatusText = computed(function () {
-    const status =
-        entrepreneur.value?.subscriptionStatus;
-
-    if (hasActiveSubscription.value) {
-        return "Plan activo";
-    }
-
-    if (status === "pending") {
-        return "Solicitud en revisión";
-    }
-
-    if (
-        status === "expired" ||
-        (
-            status === "active" &&
-            entrepreneur.value?.subscriptionExpiresAt
-        )
-    ) {
-        return "Plan vencido";
-    }
-
-    return "Plan no activado";
+const hasActiveSubscription = computed(function () {
+    return subscriptionIsActive(subscription.value);
 });
 // Funciones pequeñas reutilizadas en distintas partes de la vista.
 function formatPrice(price) {
@@ -206,103 +183,6 @@ function stockText(stock) {
     if (amount === 1) return "1 unidad";
     return `${amount} unidades`;
 }
-// Abre la información del plan del emprendedor.
-function openSubscriptionModal() {
-    showSubscriptionModal.value = true;
-    document.body.style.overflow =
-        "hidden";
-}
-
-// Cierra la información del plan y limpia la consulta del router.
-function closeSubscriptionModal() {
-    showSubscriptionModal.value = false;
-    document.body.style.overflow = "";
-
-    if (
-        route.query.subscription ||
-        route.query.product ||
-        route.query.editProduct
-    ) {
-        router.replace({
-            name: "BizHome"
-        });
-    }
-}
-
-// Devuelve true únicamente cuando la cuenta puede utilizar herramientas premium.
-function requireActiveSubscription() {
-    if (hasActiveSubscription.value) {
-        return true;
-    }
-
-    openSubscriptionModal();
-    return false;
-}
-
-// Abre una herramienta del panel y muestra el plan cuando está bloqueada.
-function openBusinessTool(
-    routeName,
-    requiresSubscription = false
-) {
-    if (
-        requiresSubscription &&
-        !requireActiveSubscription()
-    ) {
-        return;
-    }
-
-    router.push({
-        name: routeName
-    });
-}
-
-// Registra una solicitud de suscripción en Supabase.
-async function requestSubscription() {
-    if (
-        subscriptionRequestLoading.value ||
-        hasActiveSubscription.value
-    ) {
-        return;
-    }
-
-    subscriptionRequestLoading.value = true;
-
-    try {
-        const { data, error } = await supabase.rpc(
-            "request_my_entrepreneur_subscription"
-        );
-
-        if (error) {
-            throw error;
-        }
-
-        entrepreneur.value = {
-            ...entrepreneur.value,
-            subscriptionStatus:
-                data || "pending"
-        };
-
-        alert(
-            "Tu solicitud fue registrada. La cuenta quedará habilitada cuando se confirme la suscripción."
-        );
-    } catch (error) {
-        console.error(
-            "Error al solicitar la suscripción:",
-            error
-        );
-
-        alert(
-            "No fue posible registrar la solicitud: " +
-            (
-                error.message ||
-                "Error inesperado"
-            )
-        );
-    } finally {
-        subscriptionRequestLoading.value = false;
-    }
-}
-
 // Cierra la sesión actual y vuelve a la pantalla de autenticación.
 async function logout() {
     if (logoutLoading.value) return;
@@ -318,7 +198,6 @@ async function logout() {
         showProfileEditor.value = false;
         showProductEditor.value = false;
         showFollowersModal.value = false;
-        showSubscriptionModal.value = false;
         document.body.style.overflow = "";
         router.replace({ name: "Access" });
     } catch (error) {
@@ -392,13 +271,18 @@ async function loadDashboard() {
             district: entrepreneurData.district,
             avatar: entrepreneurData.logo_url,
             subscriptionStatus:
-                entrepreneurData.subscription_status || "inactive",
+                entrepreneurData.subscription_status ||
+                "inactive",
             subscriptionPrice:
-                Number(entrepreneurData.subscription_price) || 4.99,
+                Number(
+                    entrepreneurData.subscription_price
+                ) || 4.99,
             subscriptionStartedAt:
-                entrepreneurData.subscription_started_at,
+                entrepreneurData.subscription_started_at ||
+                null,
             subscriptionExpiresAt:
-                entrepreneurData.subscription_expires_at
+                entrepreneurData.subscription_expires_at ||
+                null
         };
         // Cada pantalla carga únicamente la información que necesita.
         const pendingLoads = [];
@@ -613,6 +497,30 @@ function closeFollowersModal() {
     showFollowersModal.value = false;
     document.body.style.overflow = "";
 }
+async function subscribeToPlan() {
+    if (checkoutLoading.value) return;
+    checkoutLoading.value = true;
+    try {
+        await startSubscriptionCheckout();
+    } catch (error) {
+        console.error("No se pudo abrir el pago:", error);
+        alert(
+            "No fue posible abrir el pago seguro: " +
+            (error.message || "Error inesperado")
+        );
+    } finally {
+        checkoutLoading.value = false;
+    }
+}
+function requireSubscription() {
+    if (hasActiveSubscription.value) return true;
+    alert(
+        "Esta herramienta requiere el plan Thrive de $4.99 al mes. Puedes activarlo desde Mi perfil."
+    );
+    router.push({ name: "BizProfile" });
+    return false;
+}
+
 // Funciones utilizadas para abrir, editar y guardar el perfil.
 function openProfileEditor() {
     if (!entrepreneur.value) return;
@@ -662,10 +570,6 @@ function closeProfileEditor() {
     profileLogoFile.value = null;
     clearPasswordFields();
     document.body.style.overflow = "";
-    // La pantalla Profile funciona como editor dedicado.
-    if (screenMode.value === "profile") {
-        router.replace({ name: "BizHome" });
-    }
 }
 // Valida y guarda los cambios realizados en el perfil del emprendimiento.
 async function saveProfile() {
@@ -792,7 +696,15 @@ async function saveProfile() {
             description: data.description,
             department: data.department,
             district: data.district,
-            avatar: data.logo_url
+            avatar: data.logo_url,
+            subscriptionStatus:
+                entrepreneur.value.subscriptionStatus,
+            subscriptionPrice:
+                entrepreneur.value.subscriptionPrice,
+            subscriptionStartedAt:
+                entrepreneur.value.subscriptionStartedAt,
+            subscriptionExpiresAt:
+                entrepreneur.value.subscriptionExpiresAt
         };
         if (wantsPasswordChange) {
             const { error: passwordError } =
@@ -841,10 +753,7 @@ function isCategorySelected(category) {
 }
 // Prepara el formulario para registrar un producto nuevo.
 function openAddProduct() {
-    if (!requireActiveSubscription()) {
-        return;
-    }
-
+    if (!requireSubscription()) return;
     productEditorMode.value = "add";
     selectedProduct.value = null;
     productForm.value = {
@@ -862,10 +771,7 @@ function openAddProduct() {
 }
 // Carga un producto existente dentro del formulario de edición.
 function openProductEditor(product) {
-    if (!requireActiveSubscription()) {
-        return;
-    }
-
+    if (!requireSubscription()) return;
     productEditorMode.value = "edit";
     selectedProduct.value = product;
     productForm.value = {
@@ -980,10 +886,7 @@ function closeProductEditor() {
 // Guarda un producto nuevo o actualiza uno existente.
 async function saveProduct() {
     if (productSaving.value) return;
-
-    if (!requireActiveSubscription()) {
-        return;
-    }
+    if (!requireSubscription()) return;
     if (!productForm.value.categories.length) {
         alert(
             "Selecciona al menos una categoría."
@@ -1295,75 +1198,37 @@ async function updateProduct(user) {
         throw error;
     }
 }
-// Elimina el producto completo, sus imágenes y sus favoritos relacionados.
 async function deleteProduct() {
     if (
-        productSaving.value ||
-        !selectedProduct.value
+        !selectedProduct.value ||
+        deletingProductId.value ||
+        !requireSubscription()
     ) {
         return;
     }
-
-    if (!requireActiveSubscription()) {
-        return;
-    }
-
-    const product =
-        selectedProduct.value;
-
-    const confirmed =
-        window.confirm(
-            `¿Deseas eliminar "${product.name}"? Esta acción no se puede deshacer.`
-        );
-
-    if (!confirmed) {
-        return;
-    }
-
-    productSaving.value = true;
-
+    const product = selectedProduct.value;
+    const confirmed = window.confirm(
+        `¿Eliminar definitivamente "${product.name}"? Esta acción no se puede deshacer.`
+    );
+    if (!confirmed) return;
+    deletingProductId.value = product.id;
     try {
-        const {
-            data: { user },
-            error: userError
-        } = await supabase.auth.getUser();
-
-        if (
-            userError ||
-            !user
-        ) {
-            throw new Error(
-                "No se encontró una sesión activa."
-            );
-        }
-
-        const imagePaths =
-            (product.imageRecords || [])
-                .map(function (image) {
-                    return image.storagePath;
-                })
-                .filter(Boolean);
-
-        const { error } = await supabase
+        const { data: imageRows, error: imageError } =
+            await supabase
+                .from("product_images")
+                .select("storage_path")
+                .eq("product_id", product.id);
+        if (imageError) throw imageError;
+        const { error: deleteError } = await supabase
             .from("products")
             .delete()
             .eq("id", product.id)
-            .eq(
-                "entrepreneur_id",
-                user.id
-            );
-
-        if (error) {
-            throw error;
-        }
-
-        /*
-            product_images y product_favorites se eliminan en cascada.
-            Después limpiamos los archivos físicos del bucket.
-        */
-        for (const path of imagePaths) {
+            .eq("entrepreneur_id", entrepreneur.value.id);
+        if (deleteError) throw deleteError;
+        for (const image of imageRows || []) {
+            if (!image.storage_path) continue;
             try {
-                await deleteImage(path);
+                await deleteImage(image.storage_path);
             } catch (storageError) {
                 console.warn(
                     "El producto se eliminó, pero una imagen quedó en Storage:",
@@ -1371,34 +1236,19 @@ async function deleteProduct() {
                 );
             }
         }
-
-        products.value =
-            products.value.filter(
-                function (item) {
-                    return item.id !== product.id;
-                }
-            );
-
-        alert(
-            "Producto eliminado correctamente."
-        );
-
+        products.value = products.value.filter(function (item) {
+            return item.id !== product.id;
+        });
         closeProductEditor();
+        alert("Producto eliminado correctamente.");
     } catch (error) {
-        console.error(
-            "Error al eliminar el producto:",
-            error
-        );
-
+        console.error("Error al eliminar producto:", error);
         alert(
             "No fue posible eliminar el producto: " +
-            (
-                error.message ||
-                "Error inesperado"
-            )
+            (error.message || "Error inesperado")
         );
     } finally {
-        productSaving.value = false;
+        deletingProductId.value = "";
     }
 }
 
@@ -1415,12 +1265,6 @@ function openProductDetail(product) {
 // Maneja accesos rápidos del teclado para cerrar ventanas.
 function handleEscape(event) {
     if (event.key !== "Escape") return;
-
-    if (showSubscriptionModal.value) {
-        closeSubscriptionModal();
-        return;
-    }
-
     if (showFollowersModal.value) {
         closeFollowersModal();
         return;
@@ -1435,10 +1279,26 @@ function handleEscape(event) {
 }
 onMounted(async function () {
     await loadDashboard();
-    // Algunas rutas abren directamente una herramienta concreta.
-    if (screenMode.value === "profile" && entrepreneur.value) {
-        openProfileEditor();
+    if (route.query.checkout === "success") {
+        alert(
+            "El pago fue recibido. Estamos confirmando la activación de tu plan."
+        );
+
+        // Damos tiempo al webhook y volvemos a consultar el estado real.
+        await new Promise(function (resolve) {
+            setTimeout(resolve, 1800);
+        });
+        await loadDashboard();
+        router.replace({ name: "BizProfile" });
     }
+
+    if (route.query.checkout === "cancelled") {
+        alert(
+            "El pago fue cancelado. No se realizó ningún cobro."
+        );
+        router.replace({ name: "BizProfile" });
+    }
+
     // Crear y editar productos siempre sucede dentro del dashboard.
     if (screenMode.value === "home" && route.query.product === "new") {
         openAddProduct();
@@ -1447,24 +1307,12 @@ onMounted(async function () {
         const product = products.value.find(function (item) {
             return String(item.id) === String(route.query.editProduct);
         });
-
         if (product) {
             openProductEditor(product);
         } else {
-            router.replace({
-                name: "BizHome"
-            });
+            router.replace({ name: "BizHome" });
         }
     }
-
-    if (
-        screenMode.value === "home" &&
-        route.query.subscription === "required" &&
-        !hasActiveSubscription.value
-    ) {
-        openSubscriptionModal();
-    }
-
     document.addEventListener("keydown", handleEscape);
 });
 onBeforeUnmount(function () {
@@ -1519,8 +1367,105 @@ onBeforeUnmount(function () {
         v-else-if="entrepreneur"
         class="mx-auto max-w-[1450px] px-3 pb-10 pt-4 sm:px-5 lg:px-8 lg:pt-6"
     >
+        <SubscriptionCard
+            v-if="!hasActiveSubscription && screenMode !== 'profile'"
+            class="mb-6"
+            :subscription="subscription"
+            :loading="checkoutLoading"
+            compact
+            @subscribe="subscribeToPlan"
+        />
         <!-- INICIO -->
         <section v-if="screenMode === 'home' || screenMode === 'profile'">
+            <!-- Perfil dedicado, con la misma organización visual de la institución. -->
+            <section v-if="screenMode === 'profile'">
+                <section class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
+                    <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                        <div class="flex flex-col items-center gap-5 text-center sm:flex-row sm:text-left">
+                            <img
+                                v-if="entrepreneur.avatar"
+                                :src="entrepreneur.avatar"
+                                :alt="entrepreneur.businessName"
+                                class="h-24 w-24 rounded-full border-4 border-[#CAF0F8] object-cover sm:h-28 sm:w-28"
+                            >
+                            <div
+                                v-else
+                                class="flex h-24 w-24 items-center justify-center rounded-full border-4 border-[#CAF0F8] bg-[#EAF9FC] text-2xl font-black text-[#0077B6] sm:h-28 sm:w-28"
+                            >
+                                {{ entrepreneurInitials }}
+                            </div>
+                            <div>
+                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
+                                    Perfil del emprendimiento
+                                </p>
+                                <h1 class="mt-1 text-2xl font-black text-gray-700 sm:text-3xl">
+                                    {{ entrepreneur.businessName }}
+                                </h1>
+                                <p class="mt-1 text-sm text-gray-400">
+                                    {{ entrepreneur.email }}
+                                </p>
+                                <p class="mt-1 text-sm text-gray-400">
+                                    {{ entrepreneur.phone || "Teléfono no registrado" }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+                            <button
+                                type="button"
+                                class="w-full rounded-xl border border-[#00B4D8] px-5 py-3 text-sm font-bold text-[#0077B6] transition hover:bg-[#CAF0F8] lg:w-auto"
+                                @click="openProfileEditor"
+                            >
+                                Editar perfil
+                            </button>
+                            <button
+                                type="button"
+                                :disabled="logoutLoading"
+                                class="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-bold text-red-600 transition hover:bg-red-100 disabled:opacity-60 lg:w-auto"
+                                @click="logout"
+                            >
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M10 17l5-5-5-5M15 12H3M14 4h5a2 2 0 012 2v12a2 2 0 01-2 2h-5"></path>
+                                </svg>
+                                {{ logoutLoading ? "Cerrando..." : "Cerrar sesión" }}
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <SubscriptionCard
+                    class="mt-5"
+                    :subscription="subscription"
+                    :loading="checkoutLoading"
+                    @subscribe="subscribeToPlan"
+                />
+
+                <section class="mt-5 grid gap-4 md:grid-cols-2">
+                    <article class="rounded-[24px] bg-white p-5 shadow-sm sm:p-6">
+                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
+                            Acerca del emprendimiento
+                        </p>
+                        <p class="mt-3 whitespace-pre-line text-sm leading-7 text-gray-500">
+                            {{ entrepreneur.description || "Agrega una descripción para presentar tu emprendimiento." }}
+                        </p>
+                    </article>
+                    <article class="rounded-[24px] bg-white p-5 shadow-sm sm:p-6">
+                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
+                            Información
+                        </p>
+                        <div class="mt-3 space-y-3 text-sm text-gray-500">
+                            <p>
+                                <span class="font-bold text-gray-600">Ubicación:</span>
+                                {{ entrepreneur.district || entrepreneur.department || "No registrada" }}
+                            </p>
+                            <p>
+                                <span class="font-bold text-gray-600">Acceso:</span>
+                                {{ hasActiveSubscription ? "Herramientas completas" : "Vista previa de herramientas" }}
+                            </p>
+                        </div>
+                    </article>
+                </section>
+            </section>
+
             <!-- Perfil -->
             <section v-if="screenMode === 'home'" class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
                 <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
@@ -1598,217 +1543,6 @@ onBeforeUnmount(function () {
                     </div>
                 </div>
             </section>
-
-            <!-- Suscripción: se muestra de forma clara antes de las herramientas. -->
-            <section
-                v-if="screenMode === 'home'"
-                class="mt-5 overflow-hidden rounded-[24px] border bg-white shadow-sm"
-                :class="
-                    hasActiveSubscription
-                        ? 'border-green-200'
-                        : entrepreneur.subscriptionStatus === 'pending'
-                            ? 'border-amber-200'
-                            : 'border-[#90E0EF]'
-                "
-            >
-                <div class="grid gap-5 p-5 sm:p-6 lg:grid-cols-[1fr_auto] lg:items-center">
-                    <div>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <span
-                                class="rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wide"
-                                :class="
-                                    hasActiveSubscription
-                                        ? 'bg-green-100 text-green-700'
-                                        : entrepreneur.subscriptionStatus === 'pending'
-                                            ? 'bg-amber-100 text-amber-700'
-                                            : 'bg-[#CAF0F8] text-[#0077B6]'
-                                "
-                            >
-                                {{ subscriptionStatusText }}
-                            </span>
-
-                            <span class="text-sm font-black text-[#0077B6]">
-                                ${{ Number(entrepreneur.subscriptionPrice || 4.99).toFixed(2) }} al mes
-                            </span>
-                        </div>
-
-                        <h2 class="mt-3 text-xl font-black text-gray-700 sm:text-2xl">
-                            {{
-                                hasActiveSubscription
-                                    ? "Todas tus herramientas están disponibles"
-                                    : entrepreneur.subscriptionStatus === "pending"
-                                        ? "Tu solicitud de suscripción está en revisión"
-                                        : "Activa las herramientas completas de Thrive"
-                            }}
-                        </h2>
-
-                        <p class="mt-2 max-w-3xl text-sm leading-6 text-gray-500">
-                            {{
-                                hasActiveSubscription
-                                    ? "Puedes publicar productos, administrar inventario y utilizar la calculadora de ganancias."
-                                    : "Puedes conocer el panel, editar tu perfil y consultar novedades. La publicación de productos, el inventario y la calculadora requieren el plan activo."
-                            }}
-                        </p>
-                    </div>
-
-                    <button
-                        v-if="!hasActiveSubscription"
-                        type="button"
-                        class="w-full rounded-xl bg-[#00B4D8] px-6 py-3.5 text-sm font-black text-white transition hover:bg-[#009CC0] lg:w-auto"
-                        @click="openSubscriptionModal"
-                    >
-                        {{
-                            entrepreneur.subscriptionStatus === "pending"
-                                ? "Ver estado de solicitud"
-                                : "Suscribirme por $4.99"
-                        }}
-                    </button>
-
-                    <div
-                        v-else
-                        class="rounded-2xl bg-green-50 px-5 py-4 text-center"
-                    >
-                        <p class="text-xs font-bold uppercase tracking-wide text-green-600">
-                            Acceso completo
-                        </p>
-                        <p class="mt-1 text-sm font-black text-green-700">
-                            Plan activo
-                        </p>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Accesos grandes y fáciles de identificar. -->
-            <section
-                v-if="screenMode === 'home'"
-                class="mt-6"
-            >
-                <div class="mb-4">
-                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                        Acciones rápidas
-                    </p>
-                    <h2 class="mt-1 text-xl font-black text-gray-700 sm:text-2xl">
-                        ¿Qué quieres hacer?
-                    </h2>
-                </div>
-
-                <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                    <button
-                        type="button"
-                        class="rounded-[20px] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:p-5"
-                        @click="openAddProduct"
-                    >
-                        <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-[#CAF0F8] text-[#0077B6]">
-                            <svg
-                                class="h-6 w-6"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="2"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    d="M12 5v14M5 12h14"
-                                ></path>
-                            </svg>
-                        </div>
-                        <p class="mt-3 text-sm font-black text-gray-700">
-                            Añadir producto
-                        </p>
-                        <p class="mt-1 text-xs leading-5 text-gray-400">
-                            Publica algo nuevo.
-                        </p>
-                    </button>
-
-                    <button
-                        type="button"
-                        class="rounded-[20px] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:p-5"
-                        @click="openBusinessTool('BizStock', true)"
-                    >
-                        <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-[#CAF0F8] text-[#0077B6]">
-                            <svg
-                                class="h-6 w-6"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.8"
-                                viewBox="0 0 24 24"
-                            >
-                                <path d="M4 7l8-4 8 4-8 4-8-4z"></path>
-                                <path d="M4 7v10l8 4 8-4V7"></path>
-                            </svg>
-                        </div>
-                        <p class="mt-3 text-sm font-black text-gray-700">
-                            Inventario
-                        </p>
-                        <p class="mt-1 text-xs leading-5 text-gray-400">
-                            Revisa stock y pedidos.
-                        </p>
-                    </button>
-
-                    <button
-                        type="button"
-                        class="rounded-[20px] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:p-5"
-                        @click="openBusinessTool('BizProfit', true)"
-                    >
-                        <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-[#CAF0F8] text-[#0077B6]">
-                            <svg
-                                class="h-6 w-6"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.8"
-                                viewBox="0 0 24 24"
-                            >
-                                <rect
-                                    x="5"
-                                    y="3"
-                                    width="14"
-                                    height="18"
-                                    rx="2"
-                                ></rect>
-                                <path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"></path>
-                            </svg>
-                        </div>
-                        <p class="mt-3 text-sm font-black text-gray-700">
-                            Calculadora
-                        </p>
-                        <p class="mt-1 text-xs leading-5 text-gray-400">
-                            Estima tus ganancias.
-                        </p>
-                    </button>
-
-                    <button
-                        type="button"
-                        class="rounded-[20px] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:p-5"
-                        @click="openBusinessTool('BizNews')"
-                    >
-                        <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-[#CAF0F8] text-[#0077B6]">
-                            <svg
-                                class="h-6 w-6"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.8"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    stroke-linejoin="round"
-                                    d="M4 5h16v14H4z"
-                                ></path>
-                                <path
-                                    stroke-linecap="round"
-                                    d="M8 9h8M8 13h8M8 17h5"
-                                ></path>
-                            </svg>
-                        </div>
-                        <p class="mt-3 text-sm font-black text-gray-700">
-                            Novedades
-                        </p>
-                        <p class="mt-1 text-xs leading-5 text-gray-400">
-                            Mira talleres y eventos.
-                        </p>
-                    </button>
-                </div>
-            </section>
-
             <!-- Productos -->
             <section
                 v-if="screenMode === 'home'"
@@ -1828,22 +1562,13 @@ onBeforeUnmount(function () {
                     </div>
                     <button
                         type="button"
-                        class="flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-bold shadow-sm transition sm:w-auto"
-                        :class="
-                            hasActiveSubscription
-                                ? 'bg-[#00B4D8] text-white hover:bg-[#009CC0]'
-                                : 'border border-[#90E0EF] bg-white text-[#0077B6] hover:bg-[#EAF9FC]'
-                        "
+                        class="flex w-full items-center justify-center gap-2 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#009CC0] sm:w-auto"
                         @click="openAddProduct"
                     >
                         <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <path stroke-linecap="round" d="M12 5v14M5 12h14"></path>
                         </svg>
-                        {{
-                            hasActiveSubscription
-                                ? "Añadir producto"
-                                : "Suscribirme para publicar"
-                        }}
+                        {{ hasActiveSubscription ? "Añadir producto" : "Activar plan para publicar" }}
                     </button>
                 </div>
                 <!-- Productos con el mismo estilo limpio del catálogo -->
@@ -1923,10 +1648,11 @@ onBeforeUnmount(function () {
                                 </button>
                                 <button
                                     type="button"
-                                    class="rounded-xl bg-[#CAF0F8] px-2 py-2 text-[10px] font-bold text-[#0077B6] sm:text-xs"
+                                    class="rounded-xl px-2 py-2 text-[10px] font-bold sm:text-xs"
+                                    :class="hasActiveSubscription ? 'bg-[#CAF0F8] text-[#0077B6]' : 'bg-gray-100 text-gray-400'"
                                     @click="openProductEditor(product)"
                                 >
-                                    Editar
+                                    {{ hasActiveSubscription ? "Editar" : "Bloqueado" }}
                                 </button>
                             </div>
                         </div>
@@ -1952,19 +1678,10 @@ onBeforeUnmount(function () {
                     </p>
                     <button
                         type="button"
-                        class="mt-5 rounded-xl px-6 py-3 text-sm font-bold"
-                        :class="
-                            hasActiveSubscription
-                                ? 'bg-[#00B4D8] text-white'
-                                : 'border border-[#00B4D8] bg-white text-[#0077B6]'
-                        "
+                        class="mt-5 rounded-xl bg-[#00B4D8] px-6 py-3 text-sm font-bold text-white"
                         @click="openAddProduct"
                     >
-                        {{
-                            hasActiveSubscription
-                                ? "Añadir mi primer producto"
-                                : "Conocer el plan para publicar"
-                        }}
+                        {{ hasActiveSubscription ? "Añadir mi primer producto" : "Activar plan" }}
                     </button>
                 </div>
             </section>
@@ -1972,6 +1689,8 @@ onBeforeUnmount(function () {
         <!-- Las novedades institucionales viven en un componente independiente. -->
         <NewsFeed
             v-else-if="screenMode === 'news'"
+            :can-interact="hasActiveSubscription"
+            @subscribe="router.push({ name: 'BizProfile' })"
         />
     </main>
     <!-- Seguidores. -->
@@ -2118,6 +1837,11 @@ onBeforeUnmount(function () {
                     class="space-y-5 p-5 sm:p-7"
                     @submit.prevent="saveProfile"
                 >
+                    <SubscriptionCard
+                        :subscription="subscription"
+                        :loading="checkoutLoading"
+                        @subscribe="subscribeToPlan"
+                    />
                     <!-- Foto -->
                     <div>
                         <label class="mb-3 block text-sm font-bold text-gray-600">
@@ -2273,141 +1997,6 @@ onBeforeUnmount(function () {
             </section>
         </div>
     </Teleport>
-    <!-- Suscripción del emprendedor. -->
-    <Teleport to="body">
-        <div
-            v-if="showSubscriptionModal"
-            class="fixed inset-0 z-[140] flex items-end justify-center bg-black/50 sm:items-center sm:p-5"
-            @click.self="closeSubscriptionModal"
-        >
-            <section class="max-h-[92vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[620px] sm:rounded-[28px]">
-                <div class="sticky top-0 z-20 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
-                    <div>
-                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
-                            Suscripción Thrive
-                        </p>
-                        <h2 class="text-lg font-black text-gray-700">
-                            Plan para emprendedores
-                        </h2>
-                    </div>
-
-                    <button
-                        type="button"
-                        class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
-                        @click="closeSubscriptionModal"
-                    >
-                        ×
-                    </button>
-                </div>
-
-                <div class="p-5 sm:p-7">
-                    <div class="rounded-[24px] bg-[#0077B6] p-6 text-white">
-                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#CAF0F8]">
-                            Plan mensual
-                        </p>
-                        <div class="mt-3 flex items-end gap-2">
-                            <span class="text-4xl font-black">
-                                $4.99
-                            </span>
-                            <span class="pb-1 text-sm text-white/75">
-                                al mes
-                            </span>
-                        </div>
-                        <p class="mt-3 text-sm leading-6 text-white/80">
-                            Activa todas las herramientas necesarias para administrar y hacer crecer tu emprendimiento.
-                        </p>
-                    </div>
-
-                    <div class="mt-6 space-y-3">
-                        <div class="flex items-start gap-3 rounded-2xl bg-[#F8FBFC] p-4">
-                            <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-100 text-sm font-black text-green-700">
-                                ✓
-                            </span>
-                            <div>
-                                <p class="text-sm font-black text-gray-700">
-                                    Publicar y editar productos
-                                </p>
-                                <p class="mt-1 text-xs leading-5 text-gray-400">
-                                    Agrega fotografías, precios, categorías y existencias.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div class="flex items-start gap-3 rounded-2xl bg-[#F8FBFC] p-4">
-                            <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-100 text-sm font-black text-green-700">
-                                ✓
-                            </span>
-                            <div>
-                                <p class="text-sm font-black text-gray-700">
-                                    Inventario y pedidos
-                                </p>
-                                <p class="mt-1 text-xs leading-5 text-gray-400">
-                                    Controla el stock y registra los pedidos de tu negocio.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div class="flex items-start gap-3 rounded-2xl bg-[#F8FBFC] p-4">
-                            <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-100 text-sm font-black text-green-700">
-                                ✓
-                            </span>
-                            <div>
-                                <p class="text-sm font-black text-gray-700">
-                                    Calculadora de ganancias
-                                </p>
-                                <p class="mt-1 text-xs leading-5 text-gray-400">
-                                    Estima costos, ingresos y posibles ganancias.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div
-                        v-if="entrepreneur.subscriptionStatus === 'pending'"
-                        class="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4"
-                    >
-                        <p class="text-sm font-black text-amber-700">
-                            Solicitud en revisión
-                        </p>
-                        <p class="mt-1 text-xs leading-5 text-amber-600">
-                            Ya recibimos tu solicitud. Las herramientas se habilitarán cuando se confirme la activación.
-                        </p>
-                    </div>
-
-                    <button
-                        v-else-if="!hasActiveSubscription"
-                        type="button"
-                        :disabled="subscriptionRequestLoading"
-                        class="mt-6 w-full rounded-xl bg-[#00B4D8] px-5 py-3.5 font-black text-white transition hover:bg-[#009CC0] disabled:cursor-not-allowed disabled:opacity-50"
-                        @click="requestSubscription"
-                    >
-                        {{
-                            subscriptionRequestLoading
-                                ? "Enviando solicitud..."
-                                : "Solicitar suscripción por $4.99"
-                        }}
-                    </button>
-
-                    <div
-                        v-else
-                        class="mt-6 rounded-2xl bg-green-50 p-4 text-center"
-                    >
-                        <p class="font-black text-green-700">
-                            Tu plan está activo
-                        </p>
-                        <p class="mt-1 text-xs text-green-600">
-                            Todas las herramientas están disponibles.
-                        </p>
-                    </div>
-
-                    <p class="mt-4 text-center text-[11px] leading-5 text-gray-400">
-                        Esta versión registra la solicitud en Supabase. La activación automática del cobro requerirá conectar posteriormente un proveedor de pagos.
-                    </p>
-                </div>
-            </section>
-        </div>
-    </Teleport>
-
     <!-- Crear / editar producto. -->
     <Teleport to="body">
         <div
@@ -2619,24 +2208,20 @@ onBeforeUnmount(function () {
                             class="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                         ></textarea>
                     </div>
-                    <div
-                        class="grid gap-3"
-                        :class="productEditorMode === 'edit' ? 'sm:grid-cols-2' : ''"
-                    >
+                    <div class="grid gap-3" :class="productEditorMode === 'edit' ? 'sm:grid-cols-2' : ''">
                         <button
                             v-if="productEditorMode === 'edit'"
                             type="button"
-                            :disabled="productSaving"
-                            class="w-full rounded-xl border border-red-200 bg-red-50 px-5 py-3.5 font-bold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            :disabled="Boolean(deletingProductId) || productSaving"
+                            class="rounded-xl border border-red-200 bg-red-50 px-5 py-3.5 font-bold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
                             @click="deleteProduct"
                         >
-                            Eliminar producto
+                            {{ deletingProductId ? "Eliminando..." : "Eliminar producto" }}
                         </button>
-
                         <button
                             type="submit"
-                            :disabled="productSaving"
-                            class="w-full rounded-xl bg-[#00B4D8] px-5 py-3.5 font-bold text-white transition hover:bg-[#009CC0] disabled:cursor-not-allowed disabled:opacity-50"
+                            :disabled="productSaving || Boolean(deletingProductId)"
+                            class="rounded-xl bg-[#00B4D8] px-5 py-3.5 font-bold text-white transition hover:bg-[#009CC0] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             {{
                                 productSaving

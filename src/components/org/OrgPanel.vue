@@ -175,10 +175,11 @@ onBeforeUnmount(function () {
 </script>
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-0">
-    <!-- En celular se eliminó la barra superior; el menú inferior sigue disponible. -->
+    <!-- Cabecera de la cuenta institucional. -->
     <header class="sticky top-0 z-40 hidden bg-[#F8FBFC] lg:block">
-        <div class="mx-auto max-w-[1450px] px-8 pt-4">
-            <nav class="flex items-center justify-center gap-2 rounded-[24px] bg-[#00B4D8] p-2 shadow-sm">
+        <div class="mx-auto max-w-[1450px] px-2 pt-2 sm:px-5 lg:px-8 lg:pt-4">
+            <!-- Navbar principal para laptop. -->
+            <nav class="hidden items-center justify-center gap-2 rounded-[24px] bg-[#00B4D8] p-2 shadow-sm lg:flex">
                 <button
                     v-for="item in [
                         ['inicio', 'Inicio'],
@@ -189,11 +190,7 @@ onBeforeUnmount(function () {
                     :key="item[0]"
                     type="button"
                     class="rounded-full px-6 py-2.5 text-sm font-bold transition"
-                    :class="
-                        activeSection === item[0]
-                            ? 'bg-white text-[#0077B6] shadow-sm'
-                            : 'text-white/85 hover:bg-white/15 hover:text-white'
-                    "
+                    :class="activeSection === item[0] ? 'bg-white text-[#0077B6] shadow-sm' : 'text-white/85 hover:bg-white/15 hover:text-white'"
                     @click="changeSection(item[0])"
                 >
                     {{ item[1] }}

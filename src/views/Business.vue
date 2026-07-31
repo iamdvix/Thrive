@@ -3,6 +3,10 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
+import {
+    loadMyFavoriteProductIds,
+    setProductFavorite
+} from "../lib/favorites";
 const route = useRoute();
 const router = useRouter();
 const entrepreneur = ref(null);
@@ -12,6 +16,8 @@ const loadError = ref("");
 const isFollowing = ref(false);
 const followLoading = ref(false);
 const followerCount = ref(0);
+const favoriteProductIds = ref([]);
+const favoriteSavingIds = ref([]);
 // Identificamos quién está viendo el perfil para usar el sistema correcto.
 const viewerUserId = ref("");
 const viewerType = ref("");
@@ -140,7 +146,8 @@ async function loadPublicProfile() {
             loadProducts(id),
             loadFollowState(id),
             loadFollowerCount(id),
-            loadWhatsapp(id)
+            loadWhatsapp(id),
+            loadFavorites()
         ]);
     } catch (error) {
         console.error(
@@ -153,6 +160,58 @@ async function loadPublicProfile() {
         loading.value = false;
     }
 }
+async function loadFavorites() {
+    if (viewerType.value !== "cliente") {
+        favoriteProductIds.value = [];
+        return;
+    }
+    try {
+        favoriteProductIds.value =
+            await loadMyFavoriteProductIds();
+    } catch (error) {
+        console.warn("No se pudieron cargar los favoritos:", error);
+        favoriteProductIds.value = [];
+    }
+}
+function isFavorite(productId) {
+    return favoriteProductIds.value.includes(productId);
+}
+function isFavoriteSaving(productId) {
+    return favoriteSavingIds.value.includes(productId);
+}
+async function toggleFavorite(productId) {
+    if (
+        viewerType.value !== "cliente" ||
+        !productId ||
+        isFavoriteSaving(productId)
+    ) {
+        return;
+    }
+    favoriteSavingIds.value.push(productId);
+    try {
+        const nextState = !isFavorite(productId);
+        await setProductFavorite(productId, nextState);
+        if (nextState) {
+            if (!favoriteProductIds.value.includes(productId)) {
+                favoriteProductIds.value.push(productId);
+            }
+        } else {
+            favoriteProductIds.value =
+                favoriteProductIds.value.filter(function (id) {
+                    return id !== productId;
+                });
+        }
+    } catch (error) {
+        console.error("No se pudo actualizar el favorito:", error);
+        alert("No fue posible actualizar tus favoritos.");
+    } finally {
+        favoriteSavingIds.value =
+            favoriteSavingIds.value.filter(function (id) {
+                return id !== productId;
+            });
+    }
+}
+
 // Obtiene el promedio de reseñas de los productos del emprendimiento.
 async function loadReviewSummary(productIds) {
     if (!productIds.length) return {};
@@ -670,7 +729,20 @@ watch(
                     class="min-w-0 cursor-pointer overflow-hidden bg-transparent"
                     @click="openProductDetail(product)"
                 >
-                    <div class="overflow-hidden rounded-xl bg-gray-100 sm:rounded-2xl">
+                    <div class="relative overflow-hidden rounded-xl bg-gray-100 sm:rounded-2xl">
+                        <button
+                            v-if="viewerType === 'cliente'"
+                            type="button"
+                            :disabled="isFavoriteSaving(product.id)"
+                            class="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/95 shadow-sm disabled:opacity-50"
+                            :class="isFavorite(product.id) ? 'text-rose-500' : 'text-gray-400'"
+                            :aria-label="isFavorite(product.id) ? 'Quitar de favoritos' : 'Agregar a favoritos'"
+                            @click.stop="toggleFavorite(product.id)"
+                        >
+                            <svg class="h-5 w-5" viewBox="0 0 24 24" :fill="isFavorite(product.id) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.8">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 000-7.8z"></path>
+                            </svg>
+                        </button>
                         <img
                             v-if="product.image"
                             :src="product.image"

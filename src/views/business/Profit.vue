@@ -3,6 +3,8 @@
 import { ref, computed, onMounted } from "vue";
 import { supabase } from "../../lib/supabaseClient";
 import BusinessNav from "../../components/business/BusinessNav.vue";
+import SubscriptionCard from "../../components/shared/SubscriptionCard.vue";
+import { subscriptionIsActive } from "../../lib/subscription";
 // Información cargada desde la cuenta actual.
 const entrepreneur = ref(null);
 const products = ref([]);
@@ -28,6 +30,23 @@ const salePrice = computed(function () {
 });
 const currentStock = computed(function () {
     return Number(selectedProduct.value?.stock) || 0;
+});
+const subscription = computed(function () {
+    return {
+        status:
+            entrepreneur.value?.subscriptionStatus ||
+            "inactive",
+        price:
+            Number(
+                entrepreneur.value?.subscriptionPrice
+            ) || 4.99,
+        expiresAt:
+            entrepreneur.value?.subscriptionExpiresAt ||
+            null
+    };
+});
+const hasActiveSubscription = computed(function () {
+    return subscriptionIsActive(subscription.value);
 });
 // Nunca se permite calcular una cantidad mayor al stock disponible.
 const calculatedUnits = computed(function () {
@@ -183,6 +202,10 @@ function resetCalculator() {
     unitsToCalculate.value = currentStock.value;
     calculated.value = false;
 }
+function openPlan() {
+    window.location.hash = "#/biz/profile";
+}
+
 async function loadCalculator() {
     loading.value = true;
     loadError.value = "";
@@ -194,7 +217,7 @@ async function loadCalculator() {
         }
         const { data: entrepreneurData, error: entrepreneurError } = await supabase
             .from("entrepreneurs")
-            .select("id, business_name, logo_url")
+            .select("id, business_name, logo_url, subscription_status, subscription_price, subscription_expires_at")
             .eq("id", user.id)
             .single();
         if (entrepreneurError || !entrepreneurData) {
@@ -203,7 +226,17 @@ async function loadCalculator() {
         entrepreneur.value = {
             id: entrepreneurData.id,
             businessName: entrepreneurData.business_name,
-            avatar: entrepreneurData.logo_url
+            avatar: entrepreneurData.logo_url,
+            subscriptionStatus:
+                entrepreneurData.subscription_status ||
+                "inactive",
+            subscriptionPrice:
+                Number(
+                    entrepreneurData.subscription_price
+                ) || 4.99,
+            subscriptionExpiresAt:
+                entrepreneurData.subscription_expires_at ||
+                null
         };
         const { data: productRows, error: productError } = await supabase
             .from("products")
@@ -281,6 +314,17 @@ onMounted(function () {
                 Selecciona uno de tus productos y calcula una estimación utilizando su precio y stock actuales.
             </p>
         </section>
+        <SubscriptionCard
+            v-if="!hasActiveSubscription"
+            class="mb-6"
+            :subscription="subscription"
+            compact
+            @subscribe="openPlan"
+        />
+        <fieldset
+            :disabled="!hasActiveSubscription"
+            :class="!hasActiveSubscription ? 'opacity-65' : ''"
+        >
         <!-- Se muestra cuando todavía no hay productos registrados -->
         <section v-if="!products.length" class="rounded-[24px] bg-white px-5 py-16 text-center shadow-sm">
             <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#EAF9FC] text-[#00B4D8]">
@@ -490,6 +534,7 @@ onMounted(function () {
                 </section>
             </div>
         </template>
+        </fieldset>
     </main>
 </div>
 </template>

@@ -8,6 +8,13 @@ import {
 } from "vue";
 import { supabase } from "../../lib/supabaseClient";
 import NewsModal from "../shared/NewsModal.vue";
+const props = defineProps({
+    canInteract: {
+        type: Boolean,
+        default: true
+    }
+});
+const emit = defineEmits(["subscribe"]);
 const posts = ref([]);
 const loading = ref(true);
 const loadError = ref("");
@@ -273,6 +280,10 @@ async function loadPosts() {
     }
 }
 function openDetail(post) {
+    if (!props.canInteract) {
+        emit("subscribe");
+        return;
+    }
     selectedPost.value = post;
     showDetail.value = true;
     document.body.style.overflow =
@@ -319,6 +330,27 @@ onBeforeUnmount(function () {
             Talleres, eventos, convocatorias y oportunidades de instituciones.
         </p>
     </div>
+    <section
+        v-if="!canInteract"
+        class="mb-6 rounded-[24px] border border-[#90E0EF] bg-[#EAF9FC] p-5 sm:p-6"
+    >
+        <p class="text-xs font-black uppercase tracking-[0.1em] text-[#0077B6]">
+            Vista previa
+        </p>
+        <h2 class="mt-1 text-lg font-black text-gray-700">
+            Puedes leer las novedades, pero las acciones están bloqueadas
+        </h2>
+        <p class="mt-2 text-sm leading-6 text-gray-500">
+            Activa el plan Thrive para buscar, filtrar, abrir publicaciones y comunicarte con las instituciones.
+        </p>
+        <button
+            type="button"
+            class="mt-4 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white"
+            @click="emit('subscribe')"
+        >
+            Ver mi plan
+        </button>
+    </section>
     <!-- Buscador y filtros. -->
     <section class="mb-6 rounded-[24px] bg-white p-3 shadow-sm sm:p-4">
         <div class="flex items-center gap-3 rounded-xl bg-[#F8FBFC] px-4 py-3">
@@ -328,6 +360,7 @@ onBeforeUnmount(function () {
             </svg>
             <input
                 v-model="searchText"
+                :disabled="!canInteract"
                 type="search"
                 placeholder="Buscar novedades..."
                 class="w-full bg-transparent text-sm outline-none placeholder:text-gray-400"
@@ -338,7 +371,8 @@ onBeforeUnmount(function () {
                 v-for="type in postTypes"
                 :key="type[0]"
                 type="button"
-                class="shrink-0 rounded-full px-4 py-2 text-xs font-bold transition"
+                :disabled="!canInteract"
+                class="shrink-0 rounded-full px-4 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60"
                 :class="selectedType === type[0] ? 'bg-[#00B4D8] text-white shadow-sm' : 'bg-[#CAF0F8] text-[#0077B6]'"
                 @click="selectedType = type[0]"
             >
@@ -382,7 +416,8 @@ onBeforeUnmount(function () {
         >
             <button
                 type="button"
-                class="relative block w-full overflow-hidden rounded-2xl bg-[#EAF9FC] text-left shadow-sm"
+                :disabled="!canInteract"
+                class="relative block w-full overflow-hidden rounded-2xl bg-[#EAF9FC] text-left shadow-sm disabled:cursor-not-allowed"
                 @click="openDetail(post)"
             >
                 <img
@@ -444,7 +479,8 @@ onBeforeUnmount(function () {
                 </p>
                 <button
                     type="button"
-                    class="mt-3 w-full rounded-xl bg-[#CAF0F8] px-3 py-2.5 text-[10px] font-black text-[#0077B6] transition hover:bg-[#B8EAF4] sm:text-xs"
+                    :disabled="!canInteract"
+                    class="mt-3 w-full rounded-xl bg-[#CAF0F8] px-3 py-2.5 text-[10px] font-black text-[#0077B6] transition hover:bg-[#B8EAF4] disabled:cursor-not-allowed disabled:opacity-60 sm:text-xs"
                     @click="openDetail(post)"
                 >
                     Ver información
@@ -470,7 +506,7 @@ onBeforeUnmount(function () {
         </p>
     </div>
     <NewsModal
-        :show="showDetail"
+        :show="showDetail && canInteract"
         :post="selectedPost"
         @close="closeDetail"
     />
