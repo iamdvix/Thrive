@@ -36,7 +36,23 @@ function tagClass(tag){
     if(value.includes("sin local"))return "border-slate-200 bg-slate-50 text-slate-600";
     return "border-[#90E0EF] bg-[#EAF9FC] text-[#0077B6]";
 }
-function whatsapp(){const raw=String(entrepreneur.value?.phone||"").replace(/\D/g,"");const phone=raw.length===8?`503${raw}`:raw;window.open(phone?`https://wa.me/${phone}`:"https://wa.me/","_blank","noopener,noreferrer");}
+// Abre WhatsApp con un mensaje corto para que el cliente no tenga que escribir desde cero.
+function openWhatsapp(message){
+    const raw=String(entrepreneur.value?.phone||"").replace(/\D/g,"");
+    if(!raw){
+        alert("Este emprendimiento todavía no ha agregado un número de WhatsApp.");
+        return;
+    }
+    const phone=raw.length===8?`503${raw}`:raw;
+    const text=encodeURIComponent(message);
+    window.open(`https://wa.me/${phone}?text=${text}`,"_blank","noopener,noreferrer");
+}
+function whatsapp(){
+    openWhatsapp(`Hola, vi el perfil de ${entrepreneur.value?.businessName||"tu emprendimiento"} en Thrive y quisiera obtener más información.`);
+}
+function contactProductWhatsApp(product){
+    openWhatsapp(`Hola, vi el producto "${product.name}" de ${entrepreneur.value?.businessName||"tu emprendimiento"} en Thrive y quisiera obtener más información.`);
+}
 function goBack(){if(window.history.length>1)router.back();else router.push({name:"Catalog"});}
 function openProduct(productId){router.push({name:"Product",params:{id:productId}});}
 async function viewer(){const{data:{user}}=await supabase.auth.getUser();if(!user)return;viewerId.value=user.id;const{data}=await supabase.from("profiles").select("user_type").eq("id",user.id).maybeSingle();viewerType.value=data?.user_type||"";}
@@ -109,13 +125,30 @@ onMounted(load);
             </div>
         </section>
 
-        <!-- Productos, sin convertir cada elemento en una tarjeta pesada. -->
+        <!-- Los productos vuelven a mostrarse como tarjetas, como en el diseño anterior. -->
         <section class="mt-8">
             <div class="mb-5"><p class="text-xs font-bold uppercase tracking-[.12em] text-[#00B4D8]">Catálogo</p><h2 class="mt-1 text-2xl font-black text-gray-700">Productos de {{ entrepreneur.businessName }}</h2></div>
-            <div v-if="products.length" class="grid grid-cols-2 gap-x-2 gap-y-5 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
-                <article v-for="product in products" :key="product.id" class="min-w-0 cursor-pointer" @click="openProduct(product.id)">
-                    <div class="relative overflow-hidden rounded-xl bg-gray-100 sm:rounded-2xl"><span v-if="product.discountPercent>0" class="absolute left-2 top-2 z-10 rounded-full bg-rose-500 px-2.5 py-1 text-[9px] font-black text-white">-{{ Math.round(product.discountPercent) }}%</span><img v-if="product.image" :src="product.image" :alt="product.name" class="aspect-square w-full object-cover"><div v-else class="flex aspect-square items-center justify-center text-xs font-bold text-gray-400">Sin imagen</div></div>
-                    <div class="pt-2 sm:px-1"><p v-if="product.categories.length" class="text-[9px] font-bold uppercase text-[#00B4D8]">{{ product.categories[0] }}</p><h3 class="mt-1 truncate text-sm font-bold text-gray-600">{{ product.name }}</h3><div class="mt-1 flex flex-wrap items-baseline gap-1"><span v-if="product.discountPercent>0" class="text-[10px] font-bold text-gray-400 line-through">{{ money(product.price) }}</span><p class="font-black" :class="product.discountPercent>0?'text-rose-600':'text-[#4F7180]'">{{ money(product.discountPercent>0?salePrice(product):product.price) }}</p></div></div>
+            <div v-if="products.length" class="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
+                <article v-for="product in products" :key="product.id" class="min-w-0 overflow-hidden rounded-[20px] border border-gray-100 bg-white p-2 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                    <button type="button" class="block w-full text-left" @click="openProduct(product.id)">
+                        <div class="relative overflow-hidden rounded-[15px] bg-gray-100">
+                            <span v-if="product.discountPercent>0" class="absolute left-2 top-2 z-10 rounded-full bg-rose-500 px-2.5 py-1 text-[9px] font-black text-white">-{{ Math.round(product.discountPercent) }}%</span>
+                            <img v-if="product.image" :src="product.image" :alt="product.name" class="aspect-square w-full object-cover">
+                            <div v-else class="flex aspect-square items-center justify-center text-xs font-bold text-gray-400">Sin imagen</div>
+                        </div>
+                        <div class="px-1 pb-1 pt-2">
+                            <p v-if="product.categories.length" class="text-[9px] font-bold uppercase text-[#00B4D8]">{{ product.categories[0] }}</p>
+                            <h3 class="mt-1 truncate text-sm font-bold text-gray-700">{{ product.name }}</h3>
+                            <div class="mt-1 flex flex-wrap items-baseline gap-1">
+                                <span v-if="product.discountPercent>0" class="text-[10px] font-bold text-gray-400 line-through">{{ money(product.price) }}</span>
+                                <p class="font-black" :class="product.discountPercent>0?'text-rose-600':'text-[#4F7180]'">{{ money(product.discountPercent>0?salePrice(product):product.price) }}</p>
+                            </div>
+                        </div>
+                    </button>
+                    <button v-if="entrepreneur.phone" type="button" class="mt-1 flex w-full items-center justify-center gap-1.5 rounded-[14px] bg-[#25D366] px-2 py-2.5 text-[11px] font-bold text-white transition hover:brightness-95" @click.stop="contactProductWhatsApp(product)">
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.009-.371-.011-.57-.011-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479s1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.262.489 1.693.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347"></path></svg>
+                        WhatsApp
+                    </button>
                 </article>
             </div>
             <div v-else class="border-t border-gray-200 py-8 text-sm text-gray-500">Este emprendimiento todavía no tiene productos publicados.</div>
