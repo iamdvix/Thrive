@@ -30,8 +30,12 @@ async function logout(){if(logoutLoading.value)return;logoutLoading.value=true;t
 <!-- En celular los tres puntos guardan acciones secundarias y dejan cinco accesos principales abajo. -->
 <div class="sticky top-0 z-40 flex justify-end bg-[#F8FBFC]/95 px-3 py-2 backdrop-blur lg:hidden">
     <div class="relative">
-        <button type="button" class="flex h-10 w-12 items-center justify-center rounded-full bg-[#00B4D8] text-white shadow-sm transition active:scale-95" aria-label="Más opciones" :aria-expanded="menuOpen" @click="menuOpen=!menuOpen">
-            <span class="flex items-center gap-1"><i class="h-1.5 w-1.5 rounded-full bg-white"></i><i class="h-1.5 w-1.5 rounded-full bg-white"></i><i class="h-1.5 w-1.5 rounded-full bg-white"></i></span>
+        <button type="button" class="flex h-9 w-9 items-center justify-center text-[#0077B6] transition hover:text-[#00B4D8] active:scale-95" :class="menuOpen?'text-[#00B4D8]':''" aria-label="Más opciones" :aria-expanded="menuOpen" @click="menuOpen=!menuOpen">
+            <svg aria-hidden="true" class="h-6 w-6" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="5" cy="12" r="1.8"></circle>
+                <circle cx="12" cy="12" r="1.8"></circle>
+                <circle cx="19" cy="12" r="1.8"></circle>
+            </svg>
         </button>
         <div v-if="menuOpen" class="absolute right-0 top-12 w-44 overflow-hidden rounded-[18px] border border-[#DDEFF3] bg-white p-1.5 shadow-xl">
             <button type="button" class="flex w-full items-center gap-3 rounded-[13px] px-3 py-3 text-left text-sm font-bold text-gray-700 hover:bg-[#EAF9FC]" @click="go('BizProfile')">

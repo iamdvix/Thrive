@@ -17,6 +17,7 @@ const averageRating=computed(()=>reviews.value.length?reviews.value.reduce((tota
 const reviewCountText=computed(()=>`${reviews.value.length} ${reviews.value.length===1?"reseña":"reseñas"}`);
 const canReview=computed(()=>viewerType.value==="cliente"&&viewerId.value!==id.value);
 const allTags=computed(()=>[...new Set([...(entrepreneur.value?.paymentMethods||[]),...(entrepreneur.value?.serviceTags||[])])]);
+const hasNoPhysicalStore=computed(()=>(entrepreneur.value?.serviceTags||[]).includes("Sin local físico"));
 
 function initials(name){return String(name||"TH").trim().split(/\s+/).slice(0,2).map(word=>word[0]?.toUpperCase()).join("");}
 function money(value){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(value)||0);}
@@ -32,6 +33,7 @@ function tagClass(tag){
     if(value.includes("domicilio")||value.includes("entrega"))return "border-orange-200 bg-orange-50 text-orange-700";
     if(value.includes("envio"))return "border-violet-200 bg-violet-50 text-violet-700";
     if(value.includes("personal"))return "border-rose-200 bg-rose-50 text-rose-700";
+    if(value.includes("sin local"))return "border-slate-200 bg-slate-50 text-slate-600";
     return "border-[#90E0EF] bg-[#EAF9FC] text-[#0077B6]";
 }
 function whatsapp(){const raw=String(entrepreneur.value?.phone||"").replace(/\D/g,"");const phone=raw.length===8?`503${raw}`:raw;window.open(phone?`https://wa.me/${phone}`:"https://wa.me/","_blank","noopener,noreferrer");}
@@ -132,7 +134,7 @@ onMounted(load);
                     </button>
                 </div>
             </div>
-            <div v-else class="border-t border-gray-200 py-8 text-sm text-gray-500">Este emprendimiento aún no ha agregado una ubicación exacta.</div>
+            <div v-else class="border-t border-gray-200 py-8 text-sm text-gray-500">{{ hasNoPhysicalStore?'Este emprendimiento no cuenta con un local físico.':'Este emprendimiento aún no ha agregado una ubicación exacta.' }}</div>
         </section>
 
         <!-- Reseñas con el mismo lenguaje simple del resto del perfil. -->
