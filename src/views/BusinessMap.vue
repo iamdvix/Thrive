@@ -3,13 +3,12 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
-import CustomerNav from "../components/customer/CustomerNav.vue";
+import CustomerHeader from "../components/customer/CustomerHeader.vue";
 import LocationMap from "../components/maps/LocationMap.vue";
 
 const router=useRouter();
 const points=ref([]),selected=ref(null),loading=ref(true),errorText=ref("");
 const search=ref(""),department=ref("Todos");
-const departments=["Todos","Ahuachapán","Cabañas","Chalatenango","Cuscatlán","La Libertad","La Paz","La Unión","Morazán","San Miguel","San Salvador","San Vicente","Santa Ana","Sonsonate","Usulután"];
 const filtered=computed(()=>{const query=search.value.toLowerCase().trim();return points.value.filter(point=>(department.value==="Todos"||point.department===department.value)&&(!query||[point.businessName,point.locationName,point.address,point.district,point.department].join(" ").toLowerCase().includes(query)));});
 function initials(name){return String(name||"TH").trim().split(/\s+/).slice(0,2).map(word=>word[0]?.toUpperCase()).join("");}
 function select(point){selected.value=point;}
@@ -21,16 +20,7 @@ onMounted(load);
 
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-[78px] text-gray-700 lg:pb-10">
-    <header class="sticky top-0 z-40 border-b border-[#CAF0F8]/60 bg-[#F8FBFC]/95 backdrop-blur-xl">
-        <div class="mx-auto max-w-[1450px] px-3 py-3 sm:px-5 lg:px-8 lg:py-4">
-            <div class="flex items-center gap-3">
-                <div class="min-w-0 flex-1 rounded-[22px] bg-white px-4 py-3 shadow-sm ring-1 ring-[#CAF0F8]"><div class="flex items-center gap-3"><svg class="h-5 w-5 shrink-0 text-[#00B4D8]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg><input v-model="search" type="search" placeholder="Buscar emprendimiento o local" class="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-gray-400 sm:text-base"></div></div>
-                <button type="button" class="hidden rounded-[18px] bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white sm:block" @click="router.push({name:'Entrepreneurs'})">Ver lista</button>
-            </div>
-            <div class="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"><button v-for="item in departments" :key="item" type="button" class="whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold transition" :class="department===item?'bg-[#0077B6] text-white shadow-sm':'bg-[#EAF9FC] text-[#0077B6] hover:bg-[#CAF0F8]'" @click="department=item">{{ item }}</button></div>
-            <div class="mt-3"><CustomerNav active="map"/></div>
-        </div>
-    </header>
+    <CustomerHeader v-model="search" v-model:department="department" active="map" search-placeholder="Buscar emprendimiento, local o zona"/>
 
     <main class="mx-auto max-w-[1450px] px-3 py-5 sm:px-5 lg:px-8 lg:py-7">
         <div class="mb-5"><p class="text-xs font-black uppercase tracking-[.16em] text-[#00B4D8]">Ubicaciones</p><div class="mt-1 flex items-end justify-between"><div><h1 class="text-2xl font-black text-gray-800">Mapa de emprendimientos</h1><p class="mt-1 text-sm text-gray-400">Toca un punto para conocer el negocio y su local.</p></div><p class="text-sm font-semibold text-gray-400">{{ filtered.length }} locales</p></div></div>

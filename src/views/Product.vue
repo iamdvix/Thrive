@@ -94,6 +94,10 @@ const canReview = computed(function () {
 const isFavorite = computed(function () {
     return favoriteProductIds.value.includes(productId.value);
 });
+function discountedPrice() {
+    const discount=Math.min(90,Math.max(0,Number(product.value?.discountPercent)||0));
+    return Number(product.value?.price||0)*(1-discount/100);
+}
 function formatPrice(price) {
     return new Intl.NumberFormat(
         "en-US",
@@ -294,6 +298,7 @@ async function loadProduct() {
                 description,
                 categories,
                 price,
+                discount_percent,
                 stock,
                 active,
                 entrepreneurs (
@@ -350,6 +355,8 @@ async function loadProduct() {
                 data.categories || [],
             price:
                 Number(data.price) || 0,
+            discountPercent:
+                Number(data.discount_percent) || 0,
             stock:
                 Number(data.stock) || 0,
             images,
@@ -740,6 +747,7 @@ watch(
                 <!-- Galería -->
                 <div class="bg-gray-50 p-4 sm:p-6">
                     <div class="relative overflow-hidden rounded-[22px] bg-gray-100">
+                        <span v-if="product.discountPercent>0" class="absolute left-3 top-3 z-10 rounded-full bg-rose-500 px-3 py-1.5 text-xs font-black text-white">Oferta -{{ Math.round(product.discountPercent) }}%</span>
                         <img
                             v-if="selectedImage"
                             :src="selectedImage"
@@ -869,9 +877,7 @@ watch(
                             {{ reviewCountText }}
                         </span>
                     </div>
-                    <p class="mt-3 text-3xl font-black text-[#4F7180]">
-                        {{ formatPrice(product.price) }}
-                    </p>
+                    <div class="mt-3 flex flex-wrap items-baseline gap-x-3"><p v-if="product.discountPercent>0" class="text-base font-bold text-gray-400 line-through">{{ formatPrice(product.price) }}</p><p class="text-3xl font-black" :class="product.discountPercent>0?'text-rose-600':'text-[#4F7180]'">{{ formatPrice(product.discountPercent>0?discountedPrice():product.price) }}</p><span v-if="product.discountPercent>0" class="rounded-full bg-rose-50 px-3 py-1 text-xs font-black text-rose-600">Ahorras {{ formatPrice(product.price-discountedPrice()) }}</span></div>
                     <div class="mt-5 grid grid-cols-2 gap-3">
                         <div class="rounded-2xl bg-[#F8FBFC] p-4">
                             <p class="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-400">

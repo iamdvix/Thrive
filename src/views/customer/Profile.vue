@@ -8,6 +8,7 @@ import {
 } from "vue";
 import { useRouter } from "vue-router";
 import { supabase } from "../../lib/supabaseClient";
+import CustomerHeader from "../../components/customer/CustomerHeader.vue";
 import {
     uploadProfileImage,
     deleteImage,
@@ -22,6 +23,8 @@ const loadError = ref("");
 const saving = ref(false);
 const logoutLoading = ref(false);
 const showEditor = ref(false);
+const headerSearch=ref("");
+const headerDepartment=ref("Todos");
 
 const form = ref({
     fullName: "",
@@ -426,6 +429,21 @@ function goCatalog() {
     });
 }
 
+// Desde el perfil, la búsqueda y los departamentos vuelven al catálogo ya filtrado.
+function searchFromHeader() {
+    const query={};
+    if(headerSearch.value.trim()) query.q=headerSearch.value.trim();
+    if(headerDepartment.value!=="Todos") query.department=headerDepartment.value;
+    router.push({name:"Catalog",query});
+}
+function changeHeaderDepartment(value) {
+    headerDepartment.value=value;
+    const query={};
+    if(headerSearch.value.trim()) query.q=headerSearch.value.trim();
+    if(value!=="Todos") query.department=value;
+    router.push({name:"Catalog",query});
+}
+
 function goFavorites() {
     router.push({
         name: "Catalog",
@@ -499,45 +517,7 @@ onBeforeUnmount(function () {
 
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-10">
-    <!-- Navegación de computadora del cliente. -->
-    <header class="sticky top-0 z-40 hidden bg-[#F8FBFC] lg:block">
-        <div class="mx-auto max-w-[1450px] px-8 pt-4">
-            <nav class="rounded-[24px] bg-[#00B4D8] p-2 shadow-sm">
-                <div class="mx-auto grid max-w-[720px] grid-cols-4 gap-2">
-                    <button
-                        type="button"
-                        class="rounded-full px-4 py-2.5 text-sm font-bold text-white/85 hover:bg-white/15"
-                        @click="goCatalog"
-                    >
-                        Inicio
-                    </button>
-
-                    <button
-                        type="button"
-                        class="rounded-full px-4 py-2.5 text-sm font-bold text-white/85 hover:bg-white/15"
-                        @click="goCatalog"
-                    >
-                        Explorar
-                    </button>
-
-                    <button
-                        type="button"
-                        class="rounded-full px-4 py-2.5 text-sm font-bold text-white/85 hover:bg-white/15"
-                        @click="goFavorites"
-                    >
-                        Favoritos
-                    </button>
-
-                    <button
-                        type="button"
-                        class="rounded-full bg-white px-4 py-2.5 text-sm font-bold text-[#0077B6] shadow-sm"
-                    >
-                        Perfil
-                    </button>
-                </div>
-            </nav>
-        </div>
-    </header>
+    <CustomerHeader v-model="headerSearch" :department="headerDepartment" active="profile" search-placeholder="Buscar productos, emprendimientos o categorías" @search-submit="searchFromHeader" @update:department="changeHeaderDepartment"/>
 
     <main
         v-if="loading"
@@ -693,56 +673,7 @@ onBeforeUnmount(function () {
         </section>
     </main>
 
-    <!-- Navegación móvil del cliente. -->
-    <nav class="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] border-t border-white/20 bg-[#00B4D8] shadow-[0_-6px_20px_rgba(0,0,0,0.12)] lg:hidden">
-        <div class="mx-auto grid max-w-md grid-cols-4">
-            <button
-                type="button"
-                class="flex flex-col items-center gap-1 py-2 text-white/75"
-                @click="goCatalog"
-            >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path d="M3 11l9-8 9 8"></path>
-                    <path d="M5 10v10h14V10"></path>
-                </svg>
-                <span class="text-[9px] font-bold">Inicio</span>
-            </button>
 
-            <button
-                type="button"
-                class="flex flex-col items-center gap-1 py-2 text-white/75"
-                @click="goCatalog"
-            >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <circle cx="11" cy="11" r="7"></circle>
-                    <path stroke-linecap="round" d="m20 20-3.5-3.5"></path>
-                </svg>
-                <span class="text-[9px] font-bold">Explorar</span>
-            </button>
-
-            <button
-                type="button"
-                class="flex flex-col items-center gap-1 py-2 text-white/75"
-                @click="goFavorites"
-            >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path d="M12 20s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.6-7 10-7 10z"></path>
-                </svg>
-                <span class="text-[9px] font-bold">Favoritos</span>
-            </button>
-
-            <button
-                type="button"
-                class="flex flex-col items-center gap-1 bg-white/15 py-2 text-white"
-            >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <circle cx="12" cy="8" r="4"></circle>
-                    <path stroke-linecap="round" d="M4 21a8 8 0 0116 0"></path>
-                </svg>
-                <span class="text-[9px] font-bold">Perfil</span>
-            </button>
-        </div>
-    </nav>
 
     <!-- Editor del cliente. -->
     <Teleport to="body">
