@@ -16,13 +16,13 @@ watch(id,load);onMounted(load);
 </script>
 <template>
 <div class="min-h-screen bg-[#F8FBFC] text-gray-700">
-    <!-- Encabezado sencillo para volver al directorio sin competir con el perfil. -->
-    <header class="sticky top-0 z-40 bg-[#F8FBFC]/95 px-3 py-3 backdrop-blur-xl sm:px-5">
-        <div class="mx-auto flex max-w-[1100px]">
-            <button type="button" class="inline-flex items-center gap-2 rounded-full bg-[#00B4D8] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#009FC2] active:scale-[.98]" aria-label="Regresar a instituciones" @click="goBack">
-                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
-                Perfil institucional
+    <!-- Barra institucional a todo lo ancho. Solo la flecha sirve como acción. -->
+    <header class="sticky top-0 z-40 w-full bg-[#00B4D8] shadow-sm">
+        <div class="mx-auto flex min-h-[58px] max-w-[1100px] items-center px-4 sm:px-6">
+            <button type="button" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition hover:bg-white/15 active:scale-95" aria-label="Regresar a instituciones" @click="goBack">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
             </button>
+            <p class="ml-2 text-sm font-bold text-white sm:text-base">Perfil institucional</p>
         </div>
     </header>
     <main v-if="loading" class="py-28 text-center"><div class="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div></main>
