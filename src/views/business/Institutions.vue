@@ -18,22 +18,22 @@ onMounted(load);
 <div class="min-h-screen bg-[#F8FBFC] pb-[78px] text-gray-700 lg:pb-10">
     <BusinessNav active="institutions" :business-name="businessName"/>
     <main class="mx-auto max-w-[1450px] px-3 py-5 sm:px-5 lg:px-8 lg:py-7">
-        <section class="border-l-4 border-[#00B4D8] bg-white px-5 py-5 sm:rounded-r-[22px] sm:px-6">
+        <section class="rounded-[22px] border border-[#DDEFF3] border-l-4 border-l-[#00B4D8] bg-white px-5 py-5 shadow-sm sm:px-6">
             <p class="text-xs font-black uppercase tracking-[.14em] text-[#00B4D8]">Red de apoyo</p>
             <div class="mt-1 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><h1 class="text-2xl font-black text-gray-800 sm:text-3xl">Instituciones en Thrive</h1><p class="mt-1 max-w-2xl text-sm leading-6 text-gray-500">Encuentra contactos, sitios web y perfiles de las instituciones que acompañan a los emprendedores.</p></div><label class="flex w-full items-center gap-3 rounded-[16px] bg-[#F8FBFC] px-4 py-3 ring-1 ring-[#CAF0F8] lg:max-w-[390px]"><svg class="h-4 w-4 shrink-0 text-[#00B4D8]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg><input v-model="search" type="search" class="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-gray-400" placeholder="Buscar institución o zona"></label></div>
         </section>
         <div class="mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"><button v-for="item in departments" :key="item" type="button" class="whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold" :class="department===item?'bg-[#0077B6] text-white':'bg-[#EAF9FC] text-[#0077B6]'" @click="department=item">{{ item }}</button></div>
         <div v-if="loading" class="py-24 text-center"><div class="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div></div>
-        <div v-else-if="errorText" class="mt-5 bg-white p-10 text-center sm:rounded-[22px]">{{ errorText }}</div>
+        <div v-else-if="errorText" class="mt-5 rounded-[22px] border border-[#DDEFF3] bg-white p-10 text-center">{{ errorText }}</div>
         <section v-else-if="filtered.length" class="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <article v-for="institution in filtered" :key="institution.id" class="group bg-white p-5 sm:rounded-[20px] sm:border sm:border-gray-100">
+            <article v-for="institution in filtered" :key="institution.id" class="group rounded-[20px] border border-[#DDEFF3] bg-white p-5 shadow-sm">
                 <div class="flex items-start gap-4"><img v-if="institution.logoUrl" :src="institution.logoUrl" :alt="institution.name" class="h-16 w-16 shrink-0 rounded-[18px] object-cover ring-1 ring-[#CAF0F8]"><div v-else class="flex h-16 w-16 shrink-0 items-center justify-center rounded-[18px] bg-[#EAF9FC] font-black text-[#0077B6]">{{ initials(institution.name) }}</div><div class="min-w-0 flex-1"><h2 class="line-clamp-2 text-lg font-black text-gray-700">{{ institution.name }}</h2><p class="mt-1 text-xs font-semibold text-gray-400">{{ institution.district||institution.department||'El Salvador' }}</p></div></div>
                 <p class="mt-4 line-clamp-3 min-h-[72px] text-sm leading-6 text-gray-500">{{ institution.description||'Institución asociada a Thrive.' }}</p>
                 <div class="mt-4 flex flex-wrap gap-2"><span v-if="institution.phone" class="rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-bold text-emerald-700">WhatsApp disponible</span><span v-if="institution.website" class="rounded-full bg-sky-50 px-3 py-1.5 text-[10px] font-bold text-sky-700">Sitio web</span></div>
                 <div class="mt-5 grid grid-cols-2 gap-2 border-t border-gray-100 pt-4"><button v-if="institution.phone" type="button" class="rounded-xl bg-[#25D366] px-3 py-2.5 text-xs font-black text-white" @click="whatsapp(institution.phone,institution.name)">WhatsApp</button><a v-if="institution.website" :href="url(institution.website)" target="_blank" rel="noopener noreferrer" class="rounded-xl bg-[#EAF9FC] px-3 py-2.5 text-center text-xs font-black text-[#0077B6]">Sitio web</a><button type="button" class="col-span-2 flex items-center justify-between rounded-xl px-1 py-2 text-left text-xs font-black text-[#0077B6]" @click="router.push({name:'InstitutionPublic',params:{id:institution.id}})"><span>Ver perfil institucional</span><span class="transition group-hover:translate-x-1">→</span></button></div>
             </article>
         </section>
-        <div v-else class="mt-6 bg-white p-10 text-center text-sm text-gray-500 sm:rounded-[22px]">No encontramos instituciones con esos filtros.</div>
+        <div v-else class="mt-6 rounded-[22px] border border-[#DDEFF3] bg-white p-10 text-center text-sm text-gray-500">No encontramos instituciones con esos filtros.</div>
     </main>
 </div>
 </template>
