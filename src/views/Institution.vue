@@ -16,7 +16,7 @@ watch(id,load);onMounted(load);
 </script>
 <template>
 <div class="min-h-screen bg-[#F8FBFC] text-gray-700">
-    <header class="sticky top-0 z-40 border-b border-[#DDEFF3] bg-[#F8FBFC]/95 backdrop-blur-xl"><div class="mx-auto flex max-w-[1100px] items-center gap-3 px-4 py-3 sm:px-6"><button type="button" class="flex h-10 w-10 items-center justify-center rounded-full bg-white text-lg font-bold text-[#0077B6] ring-1 ring-[#DDEFF3]" @click="goBack">←</button><div><p class="text-[10px] font-bold uppercase tracking-[.12em] text-[#00B4D8]">Thrive</p><p class="text-sm font-black text-gray-700">Perfil institucional</p></div></div></header>
+    <header class="sticky top-0 z-40 bg-[#F8FBFC]/95 px-3 py-3 backdrop-blur-xl sm:px-5"><div class="mx-auto flex max-w-[1100px] items-center rounded-[24px] bg-[#00B4D8] p-2 shadow-sm"><button type="button" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-lg font-black text-[#0077B6] shadow-sm" aria-label="Regresar" @click="goBack">←</button><div class="min-w-0 flex-1 px-3"><p class="text-[10px] font-bold uppercase tracking-[.14em] text-white/70">Thrive</p><p class="truncate text-sm font-black text-white">Perfil institucional</p></div><span class="hidden rounded-full bg-white/15 px-4 py-2 text-xs font-bold text-white sm:block">Instituciones</span></div></header>
     <main v-if="loading" class="py-28 text-center"><div class="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div></main>
     <main v-else-if="errorText" class="mx-auto max-w-xl px-5 py-24 text-center"><p class="font-black text-gray-700">{{ errorText }}</p></main>
     <main v-else-if="institution" class="mx-auto max-w-[1100px] px-4 py-5 sm:px-6 lg:py-8">

@@ -10,6 +10,7 @@ import {
 } from "../../lib/storage";
 import NewsFeed from "./NewsFeed.vue";
 import BusinessNav from "./BusinessNav.vue";
+import LocationPicker from "../maps/LocationPicker.vue";
 import SubscriptionCard from "../shared/SubscriptionCard.vue";
 import {
     subscriptionIsActive,
@@ -48,6 +49,12 @@ const followers = ref([]);
 const followersLoading = ref(false);
 // Reseñas que los clientes han dejado directamente al emprendimiento.
 const entrepreneurReviews = ref([]);
+// Los locales se administran desde el panel para que formen parte del trabajo diario del negocio.
+const locations=ref([]);
+const locationSaving=ref(false);
+const showLocationEditor=ref(false);
+const locationForm=ref({id:"",name:"",address:"",latitude:null,longitude:null,isPrimary:false,active:true,hours:[]});
+const weekdays=["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
 // Datos y controles utilizados para editar el perfil del emprendimiento.
 const profileForm = ref({
     businessName: "",
@@ -225,8 +232,47 @@ function formatReviewDate(value) {
     if (!value) return "";
     return new Intl.DateTimeFormat("es-SV", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value));
 }
-function addLocationFromPanel() {
-    router.push({ name: "BizProfile", query: { location: "new" } });
+function emptyHours(){return weekdays.map((_,weekday)=>({weekday,isClosed:weekday===6,openTime:weekday===5?"09:00":"08:00",closeTime:weekday===5?"14:00":"18:00"}));}
+function addLocationFromPanel(){openLocation();}
+function openLocation(location=null){
+    if(location){
+        locationForm.value={id:location.id,name:location.name,address:location.address,latitude:location.latitude,longitude:location.longitude,isPrimary:location.isPrimary,active:location.active,hours:weekdays.map((_,weekday)=>{const hour=location.hours.find(item=>item.weekday===weekday);return hour?{weekday,isClosed:hour.is_closed,openTime:String(hour.open_time||"08:00").slice(0,5),closeTime:String(hour.close_time||"18:00").slice(0,5)}:emptyHours()[weekday];})};
+    }else{
+        locationForm.value={id:"",name:"",address:"",latitude:null,longitude:null,isPrimary:locations.value.length===0,active:true,hours:emptyHours()};
+    }
+    showLocationEditor.value=true;document.body.style.overflow="hidden";
+}
+function closeLocation(){showLocationEditor.value=false;document.body.style.overflow="";}
+async function loadLocations(userId){
+    const{data,error}=await supabase.from("entrepreneur_locations").select(`id,name,address,latitude,longitude,is_primary,active,entrepreneur_location_hours(weekday,is_closed,open_time,close_time)`).eq("entrepreneur_id",userId).order("is_primary",{ascending:false});
+    if(error)throw error;
+    locations.value=(data||[]).map(location=>({id:location.id,name:location.name,address:location.address,latitude:Number(location.latitude),longitude:Number(location.longitude),isPrimary:Boolean(location.is_primary),active:Boolean(location.active),hours:(location.entrepreneur_location_hours||[]).sort((a,b)=>a.weekday-b.weekday)}));
+}
+async function saveLocation(){
+    if(locationSaving.value)return;
+    if(!locationForm.value.name.trim()||!locationForm.value.address.trim()||!Number.isFinite(Number(locationForm.value.latitude))||!Number.isFinite(Number(locationForm.value.longitude))){alert("Completa el nombre, dirección y coloca el punto exacto en el mapa.");return;}
+    locationSaving.value=true;
+    try{
+        const userId=entrepreneur.value?.id;if(!userId)throw new Error("Sesión no válida");
+        if(locationForm.value.isPrimary){const{error}=await supabase.from("entrepreneur_locations").update({is_primary:false}).eq("entrepreneur_id",userId).eq("is_primary",true);if(error)throw error;}
+        const payload={entrepreneur_id:userId,name:locationForm.value.name.trim(),address:locationForm.value.address.trim(),latitude:Number(locationForm.value.latitude),longitude:Number(locationForm.value.longitude),is_primary:Boolean(locationForm.value.isPrimary),active:Boolean(locationForm.value.active)};
+        let locationId=locationForm.value.id;
+        if(locationId){const{error}=await supabase.from("entrepreneur_locations").update(payload).eq("id",locationId);if(error)throw error;}else{const{data,error}=await supabase.from("entrepreneur_locations").insert(payload).select("id").single();if(error)throw error;locationId=data.id;}
+        const{error:deleteHoursError}=await supabase.from("entrepreneur_location_hours").delete().eq("location_id",locationId);if(deleteHoursError)throw deleteHoursError;
+        const rows=locationForm.value.hours.map(hour=>({location_id:locationId,weekday:hour.weekday,is_closed:Boolean(hour.isClosed),open_time:hour.isClosed?null:hour.openTime,close_time:hour.isClosed?null:hour.closeTime}));
+        const{error:hoursError}=await supabase.from("entrepreneur_location_hours").insert(rows);if(hoursError)throw hoursError;
+        await loadLocations(userId);closeLocation();
+    }catch(error){console.error(error);alert(error.message||"No fue posible guardar el local.");}finally{locationSaving.value=false;}
+}
+async function deleteLocation(location){
+    if(!confirm(`¿Eliminar ${location.name}?`))return;
+    try{const{error}=await supabase.from("entrepreneur_locations").delete().eq("id",location.id);if(error)throw error;locations.value=locations.value.filter(item=>item.id!==location.id);}catch(error){console.error(error);alert("No fue posible eliminar el local.");}
+}
+function locationSchedule(location){
+    const openDays=(location.hours||[]).filter(hour=>!hour.is_closed);
+    if(!openDays.length)return"Sin horario registrado";
+    const first=openDays[0];
+    return `${String(first.open_time||"").slice(0,5)} - ${String(first.close_time||"").slice(0,5)}`;
 }
 // Devuelve las clases visuales correspondientes al nivel de existencias.
 function stockClasses(stock) {
@@ -367,6 +413,7 @@ async function loadDashboard() {
         if (screenMode.value === "home") {
             pendingLoads.push(loadFollowers());
             pendingLoads.push(loadEntrepreneurReviews(user.id));
+            pendingLoads.push(loadLocations(user.id));
         }
         await Promise.all(pendingLoads);
     } catch (error) {
@@ -1371,6 +1418,10 @@ function openProductDetail(product) {
 // Maneja accesos rápidos del teclado para cerrar ventanas.
 function handleEscape(event) {
     if (event.key !== "Escape") return;
+    if (showLocationEditor.value) {
+        closeLocation();
+        return;
+    }
     if (showFollowersModal.value) {
         closeFollowersModal();
         return;
@@ -1552,6 +1603,22 @@ onBeforeUnmount(function () {
                     </article>
                 </div>
                 <div v-else class="mt-5 rounded-[18px] border border-dashed border-[#90E0EF] bg-[#EAF9FC]/35 px-5 py-7 text-center text-sm text-gray-500">Aún no tienes reseñas. Cuando un cliente valore tu emprendimiento aparecerá aquí.</div>
+            </section>
+            <!-- Locales y horarios -->
+            <section class="mt-5 rounded-[24px] bg-white p-5 shadow-sm sm:p-6">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <div><p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">Tus puntos de venta</p><h2 class="mt-1 text-xl font-black text-gray-700">Locales y horarios</h2><p class="mt-1 text-sm text-gray-400">Administra aquí las ubicaciones que aparecen en el mapa de Thrive.</p></div>
+                    <button type="button" class="rounded-full bg-[#00B4D8] px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-[#009CC0]" @click="openLocation()">+ Agregar local</button>
+                </div>
+                <div v-if="locations.length" class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <article v-for="location in locations" :key="location.id" class="rounded-[20px] border border-[#DDEFF3] bg-[#F8FBFC] p-4">
+                        <div class="flex items-start justify-between gap-3"><div><p class="font-black text-gray-700">{{ location.name }}</p><p class="mt-1 text-xs font-semibold text-gray-400">{{ location.isPrimary?'Local principal':'Sucursal' }}</p></div><span class="rounded-full px-2.5 py-1 text-[9px] font-black" :class="location.active?'bg-emerald-50 text-emerald-700':'bg-gray-100 text-gray-500'">{{ location.active?'Visible':'Oculto' }}</span></div>
+                        <p class="mt-3 line-clamp-2 text-sm leading-6 text-gray-500">{{ location.address }}</p>
+                        <div class="mt-3 flex items-center gap-2 text-xs font-bold text-[#4F7180]"><svg class="h-4 w-4 text-[#00B4D8]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>{{ locationSchedule(location) }}</div>
+                        <div class="mt-4 flex gap-2"><button type="button" class="flex-1 rounded-xl bg-[#EAF9FC] px-3 py-2.5 text-xs font-black text-[#0077B6]" @click="openLocation(location)">Editar local</button><button type="button" class="rounded-xl bg-red-50 px-3 py-2.5 text-xs font-black text-red-600" @click="deleteLocation(location)">Eliminar</button></div>
+                    </article>
+                </div>
+                <div v-else class="mt-5 rounded-[18px] border border-dashed border-[#90E0EF] bg-[#EAF9FC]/35 px-5 py-7 text-center text-sm text-gray-500">Todavía no has agregado un local. Agrégalo para aparecer en el mapa.</div>
             </section>
             <!-- Productos -->
             <section
@@ -2058,6 +2125,20 @@ onBeforeUnmount(function () {
                         </button>
                     </div>
                 </form>
+            </section>
+        </div>
+    </Teleport>
+    <Teleport to="body">
+        <div v-if="showLocationEditor" class="fixed inset-0 z-[150] flex items-end justify-center bg-black/50 sm:items-center sm:p-5" @click.self="closeLocation">
+            <section class="max-h-[95vh] w-full overflow-y-auto rounded-t-[28px] bg-white sm:max-w-[860px] sm:rounded-[28px]">
+                <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4"><div><p class="text-xs font-black uppercase tracking-[.14em] text-[#00B4D8]">Ubicación</p><h2 class="text-xl font-black text-gray-700">{{ locationForm.id?'Editar local':'Agregar local' }}</h2></div><button type="button" class="h-9 w-9 rounded-full bg-gray-100 font-bold" @click="closeLocation">×</button></div>
+                <div class="space-y-5 p-5 sm:p-6">
+                    <div class="grid gap-4 sm:grid-cols-2"><label class="text-sm font-bold">Nombre del local<input v-model="locationForm.name" placeholder="Ej. Sucursal Centro" class="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"></label><label class="text-sm font-bold">Dirección<input v-model="locationForm.address" placeholder="Dirección que verá el cliente" class="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"></label></div>
+                    <LocationPicker v-model:latitude="locationForm.latitude" v-model:longitude="locationForm.longitude"/>
+                    <div class="flex flex-wrap gap-4"><label class="flex items-center gap-2 text-sm font-bold"><input v-model="locationForm.isPrimary" type="checkbox"> Local principal</label><label class="flex items-center gap-2 text-sm font-bold"><input v-model="locationForm.active" type="checkbox"> Visible para clientes</label></div>
+                    <div><div class="flex items-center justify-between"><p class="text-sm font-black">Horario</p><button type="button" class="text-xs font-black text-[#0077B6]" @click="locationForm.hours=emptyHours()">Restablecer</button></div><div class="mt-3 space-y-2"><div v-for="hour in locationForm.hours" :key="hour.weekday" class="grid grid-cols-[90px_1fr] items-center gap-2 rounded-[14px] bg-[#F8FBFC] p-3 sm:grid-cols-[110px_100px_1fr_1fr]"><span class="text-xs font-black">{{ weekdays[hour.weekday] }}</span><label class="flex items-center gap-1 text-[10px] font-bold text-gray-500"><input v-model="hour.isClosed" type="checkbox"> Cerrado</label><input v-model="hour.openTime" type="time" :disabled="hour.isClosed" class="rounded-lg border border-gray-200 px-2 py-2 text-xs disabled:opacity-40"><input v-model="hour.closeTime" type="time" :disabled="hour.isClosed" class="rounded-lg border border-gray-200 px-2 py-2 text-xs disabled:opacity-40"></div></div></div>
+                    <button type="button" :disabled="locationSaving" class="w-full rounded-[15px] bg-[#00B4D8] px-5 py-3.5 font-black text-white disabled:opacity-50" @click="saveLocation">{{ locationSaving?'Guardando...':'Guardar local' }}</button>
+                </div>
             </section>
         </div>
     </Teleport>
