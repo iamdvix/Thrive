@@ -25,8 +25,17 @@ const selectedProduct = computed(function () {
         return product.id === selectedProductId.value;
     }) || null;
 });
-const salePrice = computed(function () {
+const originalSalePrice = computed(function () {
     return Number(selectedProduct.value?.price) || 0;
+});
+const discountPercent = computed(function () {
+    return Math.min(90, Math.max(0, Number(selectedProduct.value?.discountPercent) || 0));
+});
+const hasDiscount = computed(function () {
+    return discountPercent.value > 0;
+});
+const salePrice = computed(function () {
+    return originalSalePrice.value * (1 - discountPercent.value / 100);
 });
 const currentStock = computed(function () {
     return Number(selectedProduct.value?.stock) || 0;
@@ -240,7 +249,7 @@ async function loadCalculator() {
         };
         const { data: productRows, error: productError } = await supabase
             .from("products")
-            .select("id, name, description, categories, price, stock, active, created_at")
+            .select("id, name, description, categories, price, discount_percent, stock, active, created_at")
             .eq("entrepreneur_id", user.id)
             .order("created_at", { ascending: false });
         if (productError) throw productError;
@@ -267,6 +276,7 @@ async function loadCalculator() {
                 description: product.description || "",
                 categories: product.categories || [],
                 price: Number(product.price) || 0,
+                discountPercent: Number(product.discount_percent) || 0,
                 stock: Number(product.stock) || 0,
                 active: product.active,
                 image: firstImage?.image_url || ""
@@ -355,7 +365,11 @@ onMounted(function () {
                         <div v-else class="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-xs font-bold text-gray-400">Sin foto</div>
                         <div class="min-w-0">
                             <p class="truncate text-sm font-bold text-gray-600">{{ product.name }}</p>
-                            <p class="mt-1 text-sm font-black text-black">{{ formatPrice(product.price) }}</p>
+                            <div class="mt-1 flex items-center gap-2">
+                                <p v-if="product.discountPercent > 0" class="text-[10px] font-bold text-gray-400 line-through">{{ formatPrice(product.price) }}</p>
+                                <p class="text-sm font-black" :class="product.discountPercent > 0 ? 'text-rose-600' : 'text-black'">{{ formatPrice(product.price * (1 - product.discountPercent / 100)) }}</p>
+                                <span v-if="product.discountPercent > 0" class="rounded-full bg-rose-50 px-2 py-0.5 text-[9px] font-black text-rose-600">-{{ Math.round(product.discountPercent) }}%</span>
+                            </div>
                             <p class="text-xs text-gray-400">{{ product.stock }} en stock</p>
                         </div>
                     </button>
@@ -365,8 +379,11 @@ onMounted(function () {
             <section v-if="selectedProduct" class="mb-6 grid gap-4 sm:grid-cols-3">
                 <div class="rounded-[22px] bg-white p-5 shadow-sm">
                     <p class="text-xs font-bold uppercase tracking-[0.1em] text-gray-400">Precio de venta</p>
-                    <p class="mt-2 text-2xl font-black text-black">{{ formatPrice(salePrice) }}</p>
-                    <p class="mt-1 text-xs text-gray-400">Precio actual del producto</p>
+                    <div class="mt-2 flex flex-wrap items-end gap-2">
+                        <p class="text-2xl font-black" :class="hasDiscount ? 'text-rose-600' : 'text-black'">{{ formatPrice(salePrice) }}</p>
+                        <p v-if="hasDiscount" class="pb-1 text-xs font-bold text-gray-400 line-through">{{ formatPrice(originalSalePrice) }}</p>
+                    </div>
+                    <p class="mt-1 text-xs text-gray-400">{{ hasDiscount ? `Precio con ${Math.round(discountPercent)}% de descuento aplicado` : "Precio actual del producto" }}</p>
                 </div>
                 <div class="rounded-[22px] bg-white p-5 shadow-sm">
                     <p class="text-xs font-bold uppercase tracking-[0.1em] text-gray-400">Stock disponible</p>

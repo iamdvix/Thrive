@@ -9,10 +9,10 @@ import {
 import { supabase } from "../../lib/supabaseClient";
 import NewsModal from "../shared/NewsModal.vue";
 const props = defineProps({
-    canInteract: {
-        type: Boolean,
-        default: true
-    }
+    canInteract: { type: Boolean, default: true },
+    institutionId: { type: String, default: "" },
+    showHeader: { type: Boolean, default: true },
+    showFilters: { type: Boolean, default: true }
 });
 const emit = defineEmits(["subscribe"]);
 const posts = ref([]);
@@ -110,10 +110,7 @@ async function loadPosts() {
     loading.value = true;
     loadError.value = "";
     try {
-        const {
-            data: postRows,
-            error: postError
-        } = await supabase
+        let postQuery = supabase
             .from("institution_posts")
             .select(`
                 id,
@@ -132,11 +129,12 @@ async function loadPosts() {
                 published_at,
                 created_at
             `)
-            .eq("status", "published")
-            .order("published_at", {
-                ascending: false,
-                nullsFirst: false
-            });
+            .eq("status", "published");
+        if (props.institutionId) postQuery = postQuery.eq("institution_id", props.institutionId);
+        const { data: postRows, error: postError } = await postQuery.order("published_at", {
+            ascending: false,
+            nullsFirst: false
+        });
         if (postError) {
             throw postError;
         }
@@ -319,7 +317,7 @@ onBeforeUnmount(function () {
 </script>
 <template>
 <section>
-    <div class="mb-5">
+    <div v-if="showHeader" class="mb-5">
         <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
             Información para crecer
         </p>
@@ -352,7 +350,7 @@ onBeforeUnmount(function () {
         </button>
     </section>
     <!-- Buscador y filtros. -->
-    <section class="mb-6 rounded-[24px] bg-white p-3 shadow-sm sm:p-4">
+    <section v-if="showFilters" class="mb-6 rounded-[24px] bg-white p-3 shadow-sm sm:p-4">
         <div class="flex items-center gap-3 rounded-xl bg-[#F8FBFC] px-4 py-3">
             <svg class="h-5 w-5 shrink-0 text-gray-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                 <circle cx="11" cy="11" r="7"></circle>

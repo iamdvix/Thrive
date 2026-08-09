@@ -46,6 +46,8 @@ const showFollowersModal = ref(false);
 const followerCount = ref(0);
 const followers = ref([]);
 const followersLoading = ref(false);
+// Reseñas que los clientes han dejado directamente al emprendimiento.
+const entrepreneurReviews = ref([]);
 // Datos y controles utilizados para editar el perfil del emprendimiento.
 const profileForm = ref({
     businessName: "",
@@ -139,6 +141,32 @@ const followerCountText = computed(function () {
         ? "1 seguidor"
         : `${followerCount.value} seguidores`;
 });
+const entrepreneurReviewCount = computed(function () {
+    return entrepreneurReviews.value.length;
+});
+const entrepreneurRating = computed(function () {
+    if (!entrepreneurReviews.value.length) return 0;
+    const total = entrepreneurReviews.value.reduce(function (sum, review) {
+        return sum + Number(review.rating || 0);
+    }, 0);
+    return total / entrepreneurReviews.value.length;
+});
+const entrepreneurTags = computed(function () {
+    return [
+        ...(entrepreneur.value?.paymentMethods || []),
+        ...(entrepreneur.value?.serviceTags || [])
+    ];
+});
+const entrepreneurSocials = computed(function () {
+    return [
+        { label: "Instagram", value: entrepreneur.value?.instagramUrl, type: "instagram", classes: "bg-pink-50 text-pink-700" },
+        { label: "Facebook", value: entrepreneur.value?.facebookUrl, type: "facebook", classes: "bg-blue-50 text-blue-700" },
+        { label: "TikTok", value: entrepreneur.value?.tiktokUrl, type: "tiktok", classes: "bg-gray-100 text-gray-700" },
+        { label: "Sitio web", value: entrepreneur.value?.websiteUrl, type: "website", classes: "bg-cyan-50 text-[#0077B6]" }
+    ].filter(function (item) {
+        return item.value;
+    });
+});
 const subscription = computed(function () {
     return {
         status:
@@ -166,6 +194,39 @@ function formatPrice(price) {
 function discountedPrice(product) {
     const discount=Math.min(90,Math.max(0,Number(product?.discountPercent)||0));
     return Number(product?.price||0)*(1-discount/100);
+}
+function tagClasses(tag) {
+    const value = String(tag || "").toLowerCase();
+    if (value.includes("efectivo")) return "bg-emerald-50 text-emerald-700";
+    if (value.includes("tarjeta")) return "bg-indigo-50 text-indigo-700";
+    if (value.includes("transfer")) return "bg-sky-50 text-sky-700";
+    if (value.includes("retiro")) return "bg-amber-50 text-amber-700";
+    if (value.includes("entrega")) return "bg-orange-50 text-orange-700";
+    if (value.includes("envío")) return "bg-violet-50 text-violet-700";
+    if (value.includes("personal")) return "bg-pink-50 text-pink-700";
+    if (value.includes("reserva")) return "bg-lime-50 text-lime-700";
+    return "bg-[#EAF9FC] text-[#0077B6]";
+}
+function socialHref(item) {
+    const value = String(item.value || "").trim();
+    if (/^https?:\/\//i.test(value)) return value;
+    const clean = value.replace(/^@/, "");
+    if (item.type === "instagram") return `https://instagram.com/${clean}`;
+    if (item.type === "facebook") return `https://facebook.com/${clean}`;
+    if (item.type === "tiktok") return `https://tiktok.com/@${clean}`;
+    return `https://${clean}`;
+}
+function reviewInitials(name) {
+    return String(name || "TH").trim().split(/\s+/).slice(0, 2).map(function (word) {
+        return word.charAt(0).toUpperCase();
+    }).join("");
+}
+function formatReviewDate(value) {
+    if (!value) return "";
+    return new Intl.DateTimeFormat("es-SV", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value));
+}
+function addLocationFromPanel() {
+    router.push({ name: "BizProfile", query: { location: "new" } });
 }
 // Devuelve las clases visuales correspondientes al nivel de existencias.
 function stockClasses(stock) {
@@ -234,6 +295,12 @@ async function loadDashboard() {
                     department,
                     district,
                     logo_url,
+                    instagram_url,
+                    facebook_url,
+                    tiktok_url,
+                    website_url,
+                    payment_methods,
+                    service_tags,
                     subscription_status,
                     subscription_price,
                     subscription_started_at,
@@ -272,6 +339,12 @@ async function loadDashboard() {
             department: entrepreneurData.department,
             district: entrepreneurData.district,
             avatar: entrepreneurData.logo_url,
+            instagramUrl: entrepreneurData.instagram_url || "",
+            facebookUrl: entrepreneurData.facebook_url || "",
+            tiktokUrl: entrepreneurData.tiktok_url || "",
+            websiteUrl: entrepreneurData.website_url || "",
+            paymentMethods: entrepreneurData.payment_methods || [],
+            serviceTags: entrepreneurData.service_tags || [],
             subscriptionStatus:
                 entrepreneurData.subscription_status ||
                 "inactive",
@@ -293,6 +366,7 @@ async function loadDashboard() {
         }
         if (screenMode.value === "home") {
             pendingLoads.push(loadFollowers());
+            pendingLoads.push(loadEntrepreneurReviews(user.id));
         }
         await Promise.all(pendingLoads);
     } catch (error) {
@@ -426,6 +500,30 @@ async function loadProducts(userId) {
         };
     });
 }
+// Carga las reseñas del negocio para mostrarlas directamente en el panel.
+async function loadEntrepreneurReviews(userId) {
+    try {
+        const { data, error } = await supabase.rpc("get_entrepreneur_reviews", {
+            target_entrepreneur_id: userId
+        });
+        if (error) throw error;
+        entrepreneurReviews.value = (data || []).map(function (review) {
+            return {
+                id: review.review_id,
+                clientId: review.client_id,
+                fullName: review.full_name || "Usuario de Thrive",
+                avatarUrl: review.avatar_url || "",
+                rating: Number(review.rating) || 0,
+                comment: review.comment || "",
+                createdAt: review.created_at
+            };
+        });
+    } catch (error) {
+        console.error("No se pudieron cargar las reseñas del emprendimiento:", error);
+        entrepreneurReviews.value = [];
+    }
+}
+
 // Carga y prepara la lista de seguidores del emprendimiento.
 async function loadFollowers() {
     followersLoading.value = true;
@@ -1398,16 +1496,25 @@ onBeforeUnmount(function () {
                             <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
                                 Mi emprendimiento
                             </p>
-                            <h1 class="mt-1 text-2xl font-black text-gray-700 sm:text-3xl">
-                                {{ entrepreneur.businessName }}
-                            </h1>
+                            <div class="mt-1 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                                <h1 class="text-2xl font-black text-gray-700 sm:text-3xl">{{ entrepreneur.businessName }}</h1>
+                                <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700">
+                                    <span class="text-amber-500">★</span>
+                                    {{ entrepreneurReviewCount ? entrepreneurRating.toFixed(1) : "0.0" }}
+                                    <span class="font-bold text-amber-600/70">· {{ entrepreneurReviewCount }} {{ entrepreneurReviewCount === 1 ? "reseña" : "reseñas" }}</span>
+                                </span>
+                            </div>
                             <p class="mt-1 text-sm text-gray-400">
                                 {{ entrepreneur.district }},
                                 {{ entrepreneur.department }}
                             </p>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-gray-500">
-                                {{ entrepreneur.description }}
-                            </p>
+                            <p class="mt-3 max-w-2xl text-sm leading-6 text-gray-500">{{ entrepreneur.description }}</p>
+                            <div v-if="entrepreneurTags.length" class="mt-3 flex flex-wrap justify-center gap-1.5 sm:justify-start">
+                                <span v-for="tag in entrepreneurTags" :key="tag" class="rounded-full px-2.5 py-1 text-[10px] font-bold" :class="tagClasses(tag)">{{ tag }}</span>
+                            </div>
+                            <div v-if="entrepreneurSocials.length" class="mt-2 flex flex-wrap justify-center gap-1.5 sm:justify-start">
+                                <a v-for="social in entrepreneurSocials" :key="social.label" :href="socialHref(social)" target="_blank" rel="noopener noreferrer" class="rounded-full px-2.5 py-1 text-[10px] font-bold" :class="social.classes">{{ social.label }}</a>
+                            </div>
                             <!-- Seguidores -->
                             <button
                                 type="button"
@@ -1423,8 +1530,28 @@ onBeforeUnmount(function () {
                             </button>
                         </div>
                     </div>
-
+                    <div class="flex w-full flex-col gap-2 lg:w-auto">
+                        <button type="button" class="flex w-full items-center justify-center gap-2 rounded-full bg-[#00B4D8] px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-[#009CC0] lg:w-auto" @click="addLocationFromPanel">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 21s6-5.3 6-11a6 6 0 10-12 0c0 5.7 6 11 6 11z"></path><circle cx="12" cy="10" r="2"></circle></svg>
+                            Agregar local
+                        </button>
+                        <p class="text-center text-[10px] font-semibold text-gray-400">Ubica tu negocio en el mapa de Thrive</p>
+                    </div>
                 </div>
+            </section>
+            <!-- Reseñas del emprendimiento -->
+            <section class="mt-5 rounded-[24px] bg-white p-5 shadow-sm sm:p-6">
+                <div class="flex flex-wrap items-end justify-between gap-3">
+                    <div><p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">Lo que dicen tus clientes</p><h2 class="mt-1 text-xl font-black text-gray-700">Reseñas de tu emprendimiento</h2></div>
+                    <div class="flex items-center gap-2 rounded-full bg-amber-50 px-4 py-2"><span class="text-lg text-amber-500">★</span><span class="font-black text-amber-700">{{ entrepreneurReviewCount ? entrepreneurRating.toFixed(1) : "0.0" }}</span><span class="text-xs font-bold text-amber-600/70">{{ entrepreneurReviewCount }} {{ entrepreneurReviewCount === 1 ? "reseña" : "reseñas" }}</span></div>
+                </div>
+                <div v-if="entrepreneurReviews.length" class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <article v-for="review in entrepreneurReviews.slice(0,6)" :key="review.id" class="rounded-[18px] border border-[#DDEFF3] bg-[#F8FBFC] p-4">
+                        <div class="flex items-center gap-3"><img v-if="review.avatarUrl" :src="review.avatarUrl" :alt="review.fullName" class="h-10 w-10 rounded-full object-cover"><div v-else class="flex h-10 w-10 items-center justify-center rounded-full bg-[#EAF9FC] text-xs font-black text-[#0077B6]">{{ reviewInitials(review.fullName) }}</div><div class="min-w-0 flex-1"><p class="truncate text-sm font-black text-gray-700">{{ review.fullName }}</p><div class="flex items-center gap-2"><span class="text-xs tracking-[.08em] text-amber-500">{{ "★".repeat(review.rating) }}<span class="text-gray-200">{{ "★".repeat(5-review.rating) }}</span></span><span class="text-[10px] text-gray-400">{{ formatReviewDate(review.createdAt) }}</span></div></div></div>
+                        <p class="mt-3 line-clamp-3 text-sm leading-6 text-gray-500">{{ review.comment || "El cliente dejó una calificación sin comentario." }}</p>
+                    </article>
+                </div>
+                <div v-else class="mt-5 rounded-[18px] border border-dashed border-[#90E0EF] bg-[#EAF9FC]/35 px-5 py-7 text-center text-sm text-gray-500">Aún no tienes reseñas. Cuando un cliente valore tu emprendimiento aparecerá aquí.</div>
             </section>
             <!-- Productos -->
             <section
