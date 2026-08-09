@@ -31,8 +31,9 @@ onMounted(loadClient);
             </button>
         </div>
         <div class="lg:mt-3"><CustomerNav :active="active" :favorite-count="favoriteCount"/></div>
-        <div class="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <button v-for="item in departments" :key="item" type="button" class="whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold transition" :class="department===item?'bg-[#0077B6] text-white shadow-sm':'bg-[#EAF9FC] text-[#0077B6] hover:bg-[#CAF0F8]'" @click="emit('update:department',item)">{{ item }}</button>
+        <!-- Los departamentos no son necesarios dentro del perfil del cliente. -->
+        <div v-if="active !== 'profile'"class="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <button v-for="item in departments" :key="item" type="button" class="whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold transition" :class="department===item?'bg-[#0077B6] text-white shadow-sm':'bg-[#EAF9FC] text-[#0077B6] hover:bg-[#CAF0F8]'" @click="emit('update:department',item)"> {{ item }} </button>
         </div>
     </div>
 </header>
