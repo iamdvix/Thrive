@@ -16,10 +16,10 @@ watch(id,load);onMounted(load);
 </script>
 <template>
 <div class="min-h-screen bg-[#F8FBFC] text-gray-700">
-    <!-- Barra institucional a todo lo ancho. Solo la flecha sirve como acción. -->
-    <header class="sticky top-0 z-40 w-full bg-[#00B4D8] shadow-sm">
-        <div class="mx-auto flex min-h-[58px] max-w-[1100px] items-center px-4 sm:px-6">
-            <button type="button" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition hover:bg-white/15 active:scale-95" aria-label="Regresar a instituciones" @click="goBack">
+    <!-- Isla flotante del perfil institucional. Solo la flecha funciona como botón. -->
+    <header class="sticky top-0 z-40 px-3 pt-3 sm:px-5 sm:pt-4">
+        <div class="mx-auto flex min-h-[62px] w-full max-w-[1100px] items-center rounded-[22px] bg-[#00B4D8] px-3 shadow-[0_8px_24px_rgba(0,180,216,.18)] sm:min-h-[66px] sm:px-4">
+            <button type="button" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white transition hover:bg-white/15 active:scale-95" aria-label="Regresar a instituciones" @click="goBack">
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
             </button>
             <p class="ml-2 text-sm font-bold text-white sm:text-base">Perfil institucional</p>
