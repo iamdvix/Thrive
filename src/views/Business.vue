@@ -1,44 +1,158 @@
 <script setup>
-// Perfil público completo: reputación, redes, productos, ubicaciones y reseñas del emprendimiento.
+// Perfil público del emprendimiento. Conserva el estilo original de Thrive y suma reputación, ubicaciones y redes.
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
 import LocationMap from "../components/maps/LocationMap.vue";
-const route=useRoute(); const router=useRouter();
-const entrepreneur=ref(null), products=ref([]), reviews=ref([]), locations=ref([]); const loading=ref(true), loadError=ref(""); const viewerId=ref(""), viewerType=ref(""); const following=ref(false), followLoading=ref(false), followerCount=ref(0); const reviewSaving=ref(false); const selectedLocation=ref(null);
+
+const route=useRoute();
+const router=useRouter();
+const entrepreneur=ref(null),products=ref([]),reviews=ref([]),locations=ref([]);
+const loading=ref(true),loadError=ref(""),viewerId=ref(""),viewerType=ref("");
+const following=ref(false),followLoading=ref(false),followerCount=ref(0),reviewSaving=ref(false),selectedLocation=ref(null);
 const reviewForm=ref({rating:5,comment:""});
 const id=computed(()=>String(route.params.id||""));
-const myReview=computed(()=>reviews.value.find(r=>r.clientId===viewerId.value)||null);
-const averageRating=computed(()=>reviews.value.length?reviews.value.reduce((t,r)=>t+r.rating,0)/reviews.value.length:0);
-const reviewCountText=computed(()=>`${reviews.value.length} ${reviews.value.length===1?'reseña':'reseñas'}`);
-const canReview=computed(()=>viewerType.value==="cliente" && viewerId.value!==id.value);
-function initials(name){return String(name||"TH").trim().split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()).join("");}
-function money(v){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(v)||0);}
-function date(v){return v?new Intl.DateTimeFormat("es-SV",{day:"numeric",month:"short",year:"numeric"}).format(new Date(v)):"";}
-function normalizeUrl(value, network){if(!value)return""; if(/^https?:\/\//i.test(value))return value; const clean=value.replace(/^@/,"").trim(); const base={instagram:"https://instagram.com/",facebook:"https://facebook.com/",tiktok:"https://tiktok.com/@",website:"https://"}[network]; return `${base}${clean}`;}
+const myReview=computed(()=>reviews.value.find(review=>review.clientId===viewerId.value)||null);
+const averageRating=computed(()=>reviews.value.length?reviews.value.reduce((total,review)=>total+review.rating,0)/reviews.value.length:0);
+const reviewCountText=computed(()=>`${reviews.value.length} ${reviews.value.length===1?"reseña":"reseñas"}`);
+const canReview=computed(()=>viewerType.value==="cliente"&&viewerId.value!==id.value);
+const allTags=computed(()=>[...new Set([...(entrepreneur.value?.paymentMethods||[]),...(entrepreneur.value?.serviceTags||[])])]);
+
+function initials(name){return String(name||"TH").trim().split(/\s+/).slice(0,2).map(word=>word[0]?.toUpperCase()).join("");}
+function money(value){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(value)||0);}
+function date(value){return value?new Intl.DateTimeFormat("es-SV",{day:"numeric",month:"short",year:"numeric"}).format(new Date(value)):"";}
+function normalizeUrl(value,network){if(!value)return"";if(/^https?:\/\//i.test(value))return value;const clean=value.replace(/^@/,"").trim();const base={instagram:"https://instagram.com/",facebook:"https://facebook.com/",tiktok:"https://tiktok.com/@",website:"https://"}[network];return `${base}${clean}`;}
+function tagClass(tag){
+    const value=String(tag||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+    if(value.includes("efectivo"))return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    if(value.includes("tarjeta"))return "border-indigo-200 bg-indigo-50 text-indigo-700";
+    if(value.includes("transfer"))return "border-sky-200 bg-sky-50 text-sky-700";
+    if(value.includes("retiro"))return "border-amber-200 bg-amber-50 text-amber-700";
+    if(value.includes("domicilio")||value.includes("entrega"))return "border-orange-200 bg-orange-50 text-orange-700";
+    if(value.includes("envio"))return "border-violet-200 bg-violet-50 text-violet-700";
+    if(value.includes("personal"))return "border-rose-200 bg-rose-50 text-rose-700";
+    return "border-[#90E0EF] bg-[#EAF9FC] text-[#0077B6]";
+}
 function whatsapp(){const raw=String(entrepreneur.value?.phone||"").replace(/\D/g,"");const phone=raw.length===8?`503${raw}`:raw;window.open(phone?`https://wa.me/${phone}`:"https://wa.me/","_blank","noopener,noreferrer");}
 function goBack(){if(window.history.length>1)router.back();else router.push({name:"Catalog"});}
-function openProduct(pid){router.push({name:"Product",params:{id:pid}});}
+function openProduct(productId){router.push({name:"Product",params:{id:productId}});}
 async function viewer(){const{data:{user}}=await supabase.auth.getUser();if(!user)return;viewerId.value=user.id;const{data}=await supabase.from("profiles").select("user_type").eq("id",user.id).maybeSingle();viewerType.value=data?.user_type||"";}
-async function loadReviews(){const{data,error}=await supabase.rpc("get_entrepreneur_reviews",{target_entrepreneur_id:id.value});if(error)throw error;reviews.value=(data||[]).map(r=>({id:r.review_id,clientId:r.client_id,fullName:r.full_name||"Usuario de Thrive",avatarUrl:r.avatar_url||"",rating:Number(r.rating)||0,comment:r.comment||"",createdAt:r.created_at,updatedAt:r.updated_at}));const own=reviews.value.find(r=>r.clientId===viewerId.value);reviewForm.value=own?{rating:own.rating,comment:own.comment}:{rating:5,comment:""};}
-async function loadProducts(){const{data,error}=await supabase.from("products").select(`id,name,description,categories,price,stock,active,product_images(image_url,sort_order)`).eq("entrepreneur_id",id.value).eq("active",true).order("created_at",{ascending:false});if(error)throw error;products.value=(data||[]).map(p=>{const imgs=(p.product_images||[]).slice().sort((a,b)=>a.sort_order-b.sort_order);return{id:p.id,name:p.name,description:p.description||"",categories:p.categories||[],price:Number(p.price)||0,stock:Number(p.stock)||0,image:imgs[0]?.image_url||""};});}
-async function loadLocations(){const{data,error}=await supabase.from("entrepreneur_locations").select(`id,name,address,latitude,longitude,is_primary,active,entrepreneur_location_hours(weekday,is_closed,open_time,close_time)`).eq("entrepreneur_id",id.value).eq("active",true).order("is_primary",{ascending:false});if(error)throw error;locations.value=(data||[]).map(l=>({id:l.id,name:l.name,address:l.address,latitude:Number(l.latitude),longitude:Number(l.longitude),isPrimary:Boolean(l.is_primary),hours:(l.entrepreneur_location_hours||[]).sort((a,b)=>a.weekday-b.weekday),businessName:entrepreneur.value?.businessName||""}));selectedLocation.value=locations.value[0]||null;}
+async function loadReviews(){const{data,error}=await supabase.rpc("get_entrepreneur_reviews",{target_entrepreneur_id:id.value});if(error)throw error;reviews.value=(data||[]).map(row=>({id:row.review_id,clientId:row.client_id,fullName:row.full_name||"Usuario de Thrive",avatarUrl:row.avatar_url||"",rating:Number(row.rating)||0,comment:row.comment||"",createdAt:row.created_at,updatedAt:row.updated_at}));const own=reviews.value.find(review=>review.clientId===viewerId.value);reviewForm.value=own?{rating:own.rating,comment:own.comment}:{rating:5,comment:""};}
+async function loadProducts(){const{data,error}=await supabase.from("products").select(`id,name,description,categories,price,stock,active,product_images(image_url,sort_order)`).eq("entrepreneur_id",id.value).eq("active",true).order("created_at",{ascending:false});if(error)throw error;products.value=(data||[]).map(product=>{const images=(product.product_images||[]).slice().sort((a,b)=>a.sort_order-b.sort_order);return{id:product.id,name:product.name,description:product.description||"",categories:product.categories||[],price:Number(product.price)||0,stock:Number(product.stock)||0,image:images[0]?.image_url||""};});}
+async function loadLocations(){const{data,error}=await supabase.from("entrepreneur_locations").select(`id,name,address,latitude,longitude,is_primary,active,entrepreneur_location_hours(weekday,is_closed,open_time,close_time)`).eq("entrepreneur_id",id.value).eq("active",true).order("is_primary",{ascending:false});if(error)throw error;locations.value=(data||[]).map(location=>({id:location.id,name:location.name,address:location.address,latitude:Number(location.latitude),longitude:Number(location.longitude),isPrimary:Boolean(location.is_primary),hours:(location.entrepreneur_location_hours||[]).sort((a,b)=>a.weekday-b.weekday),businessName:entrepreneur.value?.businessName||""}));selectedLocation.value=locations.value[0]||null;}
 async function loadFollow(){if(!viewerId.value)return;try{if(viewerType.value==="cliente"){const{data}=await supabase.from("follows").select("id").eq("follower_id",viewerId.value).eq("entrepreneur_id",id.value).maybeSingle();following.value=Boolean(data);}else if(viewerType.value==="institucion"){const{data}=await supabase.rpc("is_institution_following",{target_entrepreneur_id:id.value});following.value=data===true;}}catch{following.value=false;}try{const{data}=await supabase.rpc("get_entrepreneur_follower_count",{p_entrepreneur_id:id.value});followerCount.value=Number(data)||0;}catch{followerCount.value=0;}}
-async function toggleFollow(){if(followLoading.value||!["cliente","institucion"].includes(viewerType.value))return;followLoading.value=true;try{if(viewerType.value==="institucion"){const{data,error}=await supabase.rpc("toggle_institution_follow",{target_entrepreneur_id:id.value});if(error)throw error;following.value=data===true;}else if(following.value){const{error}=await supabase.from("follows").delete().eq("follower_id",viewerId.value).eq("entrepreneur_id",id.value);if(error)throw error;following.value=false;}else{const{error}=await supabase.from("follows").insert({follower_id:viewerId.value,entrepreneur_id:id.value});if(error&&error.code!=="23505")throw error;following.value=true;}await loadFollow();}catch(e){console.error(e);alert("No fue posible actualizar el seguimiento.");}finally{followLoading.value=false;}}
-async function saveReview(){if(!canReview.value||reviewSaving.value)return;reviewSaving.value=true;try{if(myReview.value){const{error}=await supabase.from("entrepreneur_reviews").update({rating:Number(reviewForm.value.rating),comment:reviewForm.value.comment.trim()}).eq("id",myReview.value.id);if(error)throw error;}else{const{error}=await supabase.from("entrepreneur_reviews").insert({entrepreneur_id:id.value,client_id:viewerId.value,rating:Number(reviewForm.value.rating),comment:reviewForm.value.comment.trim()});if(error)throw error;}await loadReviews();}catch(e){console.error(e);alert("No fue posible guardar tu reseña.");}finally{reviewSaving.value=false;}}
-async function deleteReview(){if(!myReview.value||!confirm("¿Eliminar tu reseña de este emprendimiento?"))return;reviewSaving.value=true;try{const{error}=await supabase.from("entrepreneur_reviews").delete().eq("id",myReview.value.id);if(error)throw error;await loadReviews();}catch(e){console.error(e);alert("No fue posible eliminar la reseña.");}finally{reviewSaving.value=false;}}
-async function load(){loading.value=true;loadError.value="";try{await viewer();const{data,error}=await supabase.from("entrepreneurs").select(`id,business_name,description,department,district,logo_url,instagram_url,facebook_url,tiktok_url,website_url,payment_methods,service_tags`).eq("id",id.value).maybeSingle();if(error)throw error;if(!data){loadError.value="No encontramos este emprendimiento.";return;}const{data:phoneData}=await supabase.rpc("get_entrepreneur_public_contact",{target_entrepreneur_id:id.value});entrepreneur.value={id:data.id,businessName:data.business_name,description:data.description||"",department:data.department||"",district:data.district||"",logoUrl:data.logo_url||"",instagramUrl:data.instagram_url||"",facebookUrl:data.facebook_url||"",tiktokUrl:data.tiktok_url||"",websiteUrl:data.website_url||"",paymentMethods:data.payment_methods||[],serviceTags:data.service_tags||[],phone:phoneData?.[0]?.phone||""};await Promise.all([loadReviews(),loadProducts(),loadLocations(),loadFollow()]);}catch(e){console.error(e);loadError.value="Ocurrió un problema al cargar este emprendimiento.";}finally{loading.value=false;}}
-watch(id,load); onMounted(load);
+async function toggleFollow(){if(followLoading.value||!["cliente","institucion"].includes(viewerType.value))return;followLoading.value=true;try{if(viewerType.value==="institucion"){const{data,error}=await supabase.rpc("toggle_institution_follow",{target_entrepreneur_id:id.value});if(error)throw error;following.value=data===true;}else if(following.value){const{error}=await supabase.from("follows").delete().eq("follower_id",viewerId.value).eq("entrepreneur_id",id.value);if(error)throw error;following.value=false;}else{const{error}=await supabase.from("follows").insert({follower_id:viewerId.value,entrepreneur_id:id.value});if(error&&error.code!=="23505")throw error;following.value=true;}await loadFollow();}catch(error){console.error(error);alert("No fue posible actualizar el seguimiento.");}finally{followLoading.value=false;}}
+async function saveReview(){if(!canReview.value||reviewSaving.value)return;reviewSaving.value=true;try{if(myReview.value){const{error}=await supabase.from("entrepreneur_reviews").update({rating:Number(reviewForm.value.rating),comment:reviewForm.value.comment.trim()}).eq("id",myReview.value.id);if(error)throw error;}else{const{error}=await supabase.from("entrepreneur_reviews").insert({entrepreneur_id:id.value,client_id:viewerId.value,rating:Number(reviewForm.value.rating),comment:reviewForm.value.comment.trim()});if(error)throw error;}await loadReviews();}catch(error){console.error(error);alert("No fue posible guardar tu reseña.");}finally{reviewSaving.value=false;}}
+async function deleteReview(){if(!myReview.value||!confirm("¿Eliminar tu reseña de este emprendimiento?"))return;reviewSaving.value=true;try{const{error}=await supabase.from("entrepreneur_reviews").delete().eq("id",myReview.value.id);if(error)throw error;await loadReviews();}catch(error){console.error(error);alert("No fue posible eliminar la reseña.");}finally{reviewSaving.value=false;}}
+async function load(){loading.value=true;loadError.value="";try{await viewer();const{data,error}=await supabase.from("entrepreneurs").select(`id,business_name,description,department,district,logo_url,instagram_url,facebook_url,tiktok_url,website_url,payment_methods,service_tags`).eq("id",id.value).maybeSingle();if(error)throw error;if(!data){loadError.value="No encontramos este emprendimiento.";return;}const{data:phoneData}=await supabase.rpc("get_entrepreneur_public_contact",{target_entrepreneur_id:id.value});entrepreneur.value={id:data.id,businessName:data.business_name,description:data.description||"",department:data.department||"",district:data.district||"",logoUrl:data.logo_url||"",instagramUrl:data.instagram_url||"",facebookUrl:data.facebook_url||"",tiktokUrl:data.tiktok_url||"",websiteUrl:data.website_url||"",paymentMethods:data.payment_methods||[],serviceTags:data.service_tags||[],phone:phoneData?.[0]?.phone||""};await Promise.all([loadReviews(),loadProducts(),loadLocations(),loadFollow()]);}catch(error){console.error(error);loadError.value="Ocurrió un problema al cargar este emprendimiento.";}finally{loading.value=false;}}
+watch(id,load);
+onMounted(load);
 </script>
+
 <template>
 <div class="min-h-screen bg-[#F8FBFC] pb-10 text-gray-700">
-<header class="sticky top-0 z-40 border-b border-[#CAF0F8]/60 bg-[#F8FBFC]/95 backdrop-blur-xl"><div class="mx-auto flex max-w-[1250px] items-center justify-between px-4 py-3 sm:px-6"><button class="flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#0077B6] shadow-sm" @click="goBack">←</button><p class="text-sm font-black text-[#0077B6]">Perfil del emprendimiento</p><div class="h-11 w-11"></div></div></header>
-<main v-if="loading" class="py-28 text-center"><div class="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div></main><main v-else-if="loadError" class="mx-auto max-w-xl px-5 py-24 text-center"><div class="rounded-[24px] bg-white p-10 shadow-sm">{{ loadError }}</div></main>
-<main v-else-if="entrepreneur" class="mx-auto max-w-[1250px] px-3 py-5 sm:px-6 lg:py-8">
-<section class="relative overflow-hidden rounded-[30px] bg-gradient-to-br from-[#0077B6] via-[#00A8D1] to-[#48CAE4] p-6 text-white shadow-[0_18px_55px_rgba(0,119,182,.2)] sm:p-8"><div class="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-white/10"></div><div class="relative flex flex-col gap-6 sm:flex-row sm:items-center"><img v-if="entrepreneur.logoUrl" :src="entrepreneur.logoUrl" class="h-28 w-28 rounded-[30px] bg-white object-cover p-1 shadow-lg"><div v-else class="flex h-28 w-28 items-center justify-center rounded-[30px] bg-white/15 text-2xl font-black">{{ initials(entrepreneur.businessName) }}</div><div class="min-w-0 flex-1"><p class="text-xs font-black uppercase tracking-[.18em] text-white/65">Emprendimiento Thrive</p><h1 class="mt-2 text-3xl font-black sm:text-4xl">{{ entrepreneur.businessName }}</h1><div class="mt-3 flex flex-wrap items-center gap-2 text-sm font-bold"><span class="rounded-full bg-white/15 px-3 py-1.5">★ {{ averageRating.toFixed(1) }} · {{ reviewCountText }}</span><span class="rounded-full bg-white/15 px-3 py-1.5">{{ followerCount }} seguidores</span><span class="rounded-full bg-white/15 px-3 py-1.5">{{ entrepreneur.district || entrepreneur.department }}</span></div></div><button v-if="['cliente','institucion'].includes(viewerType)" :disabled="followLoading" class="rounded-full bg-white px-6 py-3 font-black text-[#0077B6] shadow-sm" @click="toggleFollow">{{ following ? 'Siguiendo' : 'Seguir +' }}</button></div></section>
-<section class="mt-5 grid gap-4 lg:grid-cols-[1.4fr_.8fr]"><article class="rounded-[26px] bg-white p-5 shadow-sm sm:p-6"><p class="text-xs font-black uppercase tracking-[.15em] text-[#00B4D8]">Acerca de</p><p class="mt-3 whitespace-pre-line text-sm leading-7 text-gray-500">{{ entrepreneur.description || 'Este emprendimiento aún no ha agregado una descripción.' }}</p><div class="mt-5 flex flex-wrap gap-2"><span v-for="tag in [...entrepreneur.paymentMethods,...entrepreneur.serviceTags]" :key="tag" class="rounded-full bg-[#EAF9FC] px-3 py-1.5 text-xs font-bold text-[#0077B6]">{{ tag }}</span></div></article><article class="rounded-[26px] bg-white p-5 shadow-sm sm:p-6"><p class="text-xs font-black uppercase tracking-[.15em] text-[#00B4D8]">Contactar y seguir</p><div class="mt-4 grid grid-cols-2 gap-2"><button v-if="entrepreneur.phone" class="rounded-[16px] bg-[#25D366] px-3 py-3 text-sm font-black text-white" @click="whatsapp">WhatsApp</button><a v-if="entrepreneur.instagramUrl" :href="normalizeUrl(entrepreneur.instagramUrl,'instagram')" target="_blank" rel="noopener noreferrer" class="rounded-[16px] bg-[#F8FBFC] px-3 py-3 text-center text-sm font-black text-gray-700 ring-1 ring-gray-100">Instagram</a><a v-if="entrepreneur.facebookUrl" :href="normalizeUrl(entrepreneur.facebookUrl,'facebook')" target="_blank" rel="noopener noreferrer" class="rounded-[16px] bg-[#F8FBFC] px-3 py-3 text-center text-sm font-black text-gray-700 ring-1 ring-gray-100">Facebook</a><a v-if="entrepreneur.tiktokUrl" :href="normalizeUrl(entrepreneur.tiktokUrl,'tiktok')" target="_blank" rel="noopener noreferrer" class="rounded-[16px] bg-[#F8FBFC] px-3 py-3 text-center text-sm font-black text-gray-700 ring-1 ring-gray-100">TikTok</a><a v-if="entrepreneur.websiteUrl" :href="normalizeUrl(entrepreneur.websiteUrl,'website')" target="_blank" rel="noopener noreferrer" class="col-span-2 rounded-[16px] bg-[#0077B6] px-3 py-3 text-center text-sm font-black text-white">Sitio web</a></div></article></section>
-<section class="mt-7"><div class="mb-4"><p class="text-xs font-black uppercase tracking-[.15em] text-[#00B4D8]">Catálogo</p><h2 class="mt-1 text-2xl font-black text-gray-800">Productos</h2></div><div v-if="products.length" class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"><article v-for="p in products" :key="p.id" class="cursor-pointer rounded-[22px] bg-white p-2 shadow-sm ring-1 ring-gray-100" @click="openProduct(p.id)"><img v-if="p.image" :src="p.image" class="aspect-square w-full rounded-[17px] object-cover"><div v-else class="flex aspect-square items-center justify-center rounded-[17px] bg-gray-100 text-xs text-gray-400">Sin imagen</div><div class="p-2"><h3 class="truncate text-sm font-black">{{ p.name }}</h3><p class="mt-1 font-black text-[#4F7180]">{{ money(p.price) }}</p></div></article></div><div v-else class="rounded-[24px] bg-white p-8 text-sm text-gray-500 shadow-sm">Este emprendimiento todavía no tiene productos publicados.</div></section>
-<section class="mt-8"><div class="mb-4"><p class="text-xs font-black uppercase tracking-[.15em] text-[#00B4D8]">Dónde encontrarlo</p><h2 class="mt-1 text-2xl font-black text-gray-800">Ubicaciones y horarios</h2></div><div v-if="locations.length" class="grid gap-4 lg:grid-cols-[1.3fr_.7fr]"><LocationMap :locations="locations" height="420px" @select="selectedLocation=$event"/><div class="space-y-3"><button v-for="l in locations" :key="l.id" class="w-full rounded-[22px] bg-white p-4 text-left shadow-sm ring-1" :class="selectedLocation?.id===l.id?'ring-[#00B4D8]':'ring-gray-100'" @click="selectedLocation=l"><div class="flex items-center justify-between"><p class="font-black">{{ l.name }}</p><span v-if="l.isPrimary" class="rounded-full bg-[#EAF9FC] px-2 py-1 text-[9px] font-black text-[#0077B6]">Principal</span></div><p class="mt-1 text-xs leading-5 text-gray-500">{{ l.address }}</p><div class="mt-3 grid grid-cols-2 gap-1 text-[10px] text-gray-400"><span v-for="h in l.hours" :key="h.weekday">{{ ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'][h.weekday] }}: {{ h.is_closed ? 'Cerrado' : `${String(h.open_time).slice(0,5)}–${String(h.close_time).slice(0,5)}` }}</span></div></button></div></div><div v-else class="rounded-[24px] bg-white p-8 text-sm text-gray-500 shadow-sm">Este emprendimiento aún no ha agregado una ubicación exacta.</div></section>
-<section class="mt-8"><div class="mb-4 flex items-end justify-between"><div><p class="text-xs font-black uppercase tracking-[.15em] text-[#00B4D8]">Reputación</p><h2 class="mt-1 text-2xl font-black text-gray-800">Reseñas del emprendimiento</h2></div><div class="text-right"><p class="text-2xl font-black text-amber-500">★ {{ averageRating.toFixed(1) }}</p><p class="text-xs text-gray-400">{{ reviewCountText }}</p></div></div><div class="grid gap-4 lg:grid-cols-[.75fr_1.25fr]"><article v-if="canReview" class="rounded-[26px] bg-white p-5 shadow-sm"><h3 class="font-black text-gray-800">{{ myReview ? 'Editar tu reseña' : 'Dejar una reseña' }}</h3><div class="mt-4 flex gap-1"><button v-for="star in 5" :key="star" class="text-3xl" :class="star<=reviewForm.rating?'text-amber-400':'text-gray-200'" @click="reviewForm.rating=star">★</button></div><textarea v-model="reviewForm.comment" rows="5" maxlength="800" placeholder="Cuéntale a otros clientes cómo fue tu experiencia" class="mt-4 w-full resize-none rounded-[18px] border border-gray-200 p-4 text-sm outline-none focus:border-[#00B4D8]"></textarea><button :disabled="reviewSaving" class="mt-3 w-full rounded-[16px] bg-[#00B4D8] px-4 py-3 font-black text-white disabled:opacity-50" @click="saveReview">{{ myReview ? 'Actualizar reseña' : 'Publicar reseña' }}</button><button v-if="myReview" :disabled="reviewSaving" class="mt-2 w-full rounded-[16px] bg-red-50 px-4 py-3 text-sm font-black text-red-600" @click="deleteReview">Eliminar mi reseña</button></article><article :class="canReview?'':'lg:col-span-2'" class="space-y-3"><div v-if="!reviews.length" class="rounded-[24px] bg-white p-8 text-sm text-gray-500 shadow-sm">Todavía no hay reseñas. La primera calificación ayudará a otros clientes a conocer mejor este emprendimiento.</div><div v-for="r in reviews" :key="r.id" class="rounded-[24px] bg-white p-5 shadow-sm"><div class="flex items-start gap-3"><img v-if="r.avatarUrl" :src="r.avatarUrl" class="h-11 w-11 rounded-full object-cover"><div v-else class="flex h-11 w-11 items-center justify-center rounded-full bg-[#EAF9FC] text-xs font-black text-[#0077B6]">{{ initials(r.fullName) }}</div><div class="min-w-0 flex-1"><div class="flex items-start justify-between gap-2"><div><p class="font-black text-gray-700">{{ r.fullName }}</p><p class="mt-0.5 text-xs text-gray-400">{{ date(r.updatedAt) }}</p></div><span class="font-black text-amber-500">★ {{ r.rating }}</span></div><p class="mt-3 whitespace-pre-line text-sm leading-6 text-gray-500">{{ r.comment || 'Calificó este emprendimiento sin comentario.' }}</p></div></div></div></article></div></section>
-</main></div>
+    <!-- Barra simple, igual a la identidad original del catálogo. -->
+    <header class="sticky top-0 z-40 bg-[#F8FBFC]">
+        <div class="mx-auto max-w-[1450px] px-2 pt-2 sm:px-5 lg:px-8 lg:pt-4">
+            <div class="flex items-center gap-2 rounded-[22px] bg-[#00B4D8] p-2 shadow-sm">
+                <button type="button" aria-label="Volver" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white hover:bg-white/20" @click="goBack">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6"></path></svg>
+                </button>
+                <p class="min-w-0 flex-1 truncate text-sm font-bold text-white">{{ entrepreneur?.businessName||"Perfil del emprendimiento" }}</p>
+            </div>
+        </div>
+    </header>
+
+    <main v-if="loading" class="mx-auto max-w-[1450px] px-5 py-24 text-center">
+        <div class="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div>
+        <p class="mt-4 text-sm font-semibold text-gray-400">Cargando emprendimiento...</p>
+    </main>
+
+    <main v-else-if="loadError" class="mx-auto max-w-[1450px] px-5 py-24 text-center">
+        <div class="mx-auto max-w-lg bg-white p-8 sm:rounded-[22px]"><h1 class="text-xl font-black text-gray-700">No pudimos cargar el perfil</h1><p class="mt-2 text-sm text-gray-400">{{ loadError }}</p><button class="mt-5 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white" @click="load">Intentar nuevamente</button></div>
+    </main>
+
+    <main v-else-if="entrepreneur" class="mx-auto max-w-[1450px] px-3 pb-10 pt-4 sm:px-5 lg:px-8">
+        <!-- El perfil vuelve a ser limpio: logo, información y acciones en un solo bloque. -->
+        <section class="bg-white px-4 py-6 sm:rounded-[24px] sm:px-7">
+            <div class="flex flex-col items-center gap-5 text-center sm:flex-row sm:items-start sm:text-left">
+                <img v-if="entrepreneur.logoUrl" :src="entrepreneur.logoUrl" :alt="entrepreneur.businessName" class="h-24 w-24 shrink-0 rounded-full border-4 border-[#CAF0F8] object-cover sm:h-28 sm:w-28">
+                <div v-else class="flex h-24 w-24 shrink-0 items-center justify-center rounded-full border-4 border-[#CAF0F8] bg-[#EAF9FC] text-2xl font-black text-[#0077B6] sm:h-28 sm:w-28">{{ initials(entrepreneur.businessName) }}</div>
+                <div class="min-w-0 flex-1">
+                    <p class="text-xs font-bold uppercase tracking-[.12em] text-[#00B4D8]">Emprendimiento</p>
+                    <h1 class="mt-1 text-2xl font-black text-gray-700 sm:text-3xl">{{ entrepreneur.businessName }}</h1>
+                    <div class="mt-1 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm sm:justify-start">
+                        <span class="text-gray-400">{{ entrepreneur.district }}<span v-if="entrepreneur.district&&entrepreneur.department">, </span>{{ entrepreneur.department }}</span>
+                        <span class="font-bold text-amber-500">★ {{ averageRating.toFixed(1) }}</span>
+                        <span class="text-gray-400">{{ reviewCountText }}</span>
+                        <span class="text-gray-400">{{ followerCount }} seguidores</span>
+                    </div>
+                    <p class="mt-3 max-w-3xl whitespace-pre-line text-sm leading-6 text-gray-500">{{ entrepreneur.description||"Este emprendimiento aún no tiene una descripción." }}</p>
+
+                    <!-- Las etiquetas usan colores según lo que representan. -->
+                    <div v-if="allTags.length" class="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
+                        <span v-for="tag in allTags" :key="tag" class="rounded-full border px-3 py-1.5 text-[11px] font-bold" :class="tagClass(tag)">{{ tag }}</span>
+                    </div>
+
+                    <div class="mt-5 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                        <button v-if="['cliente','institucion'].includes(viewerType)" type="button" :disabled="followLoading" class="rounded-full border border-[#00B4D8] px-4 py-2 text-xs font-bold text-[#0077B6] disabled:opacity-50" :class="following?'bg-[#CAF0F8]':''" @click="toggleFollow">{{ followLoading?'Actualizando...':following?'Siguiendo':'Seguir +' }}</button>
+                        <button v-if="entrepreneur.phone" type="button" class="flex items-center gap-2 rounded-full bg-[#25D366] px-4 py-2 text-xs font-bold text-white" @click="whatsapp">WhatsApp</button>
+                        <a v-if="entrepreneur.instagramUrl" :href="normalizeUrl(entrepreneur.instagramUrl,'instagram')" target="_blank" rel="noopener noreferrer" class="rounded-full border border-pink-200 bg-pink-50 px-4 py-2 text-xs font-bold text-pink-700">Instagram</a>
+                        <a v-if="entrepreneur.facebookUrl" :href="normalizeUrl(entrepreneur.facebookUrl,'facebook')" target="_blank" rel="noopener noreferrer" class="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700">Facebook</a>
+                        <a v-if="entrepreneur.tiktokUrl" :href="normalizeUrl(entrepreneur.tiktokUrl,'tiktok')" target="_blank" rel="noopener noreferrer" class="rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-xs font-bold text-gray-700">TikTok</a>
+                        <a v-if="entrepreneur.websiteUrl" :href="normalizeUrl(entrepreneur.websiteUrl,'website')" target="_blank" rel="noopener noreferrer" class="rounded-full border border-[#90E0EF] bg-[#EAF9FC] px-4 py-2 text-xs font-bold text-[#0077B6]">Sitio web</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Productos, sin convertir cada elemento en una tarjeta pesada. -->
+        <section class="mt-8">
+            <div class="mb-5"><p class="text-xs font-bold uppercase tracking-[.12em] text-[#00B4D8]">Catálogo</p><h2 class="mt-1 text-2xl font-black text-gray-700">Productos de {{ entrepreneur.businessName }}</h2></div>
+            <div v-if="products.length" class="grid grid-cols-2 gap-x-2 gap-y-5 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
+                <article v-for="product in products" :key="product.id" class="min-w-0 cursor-pointer" @click="openProduct(product.id)">
+                    <div class="overflow-hidden rounded-xl bg-gray-100 sm:rounded-2xl"><img v-if="product.image" :src="product.image" :alt="product.name" class="aspect-square w-full object-cover"><div v-else class="flex aspect-square items-center justify-center text-xs font-bold text-gray-400">Sin imagen</div></div>
+                    <div class="pt-2 sm:px-1"><p v-if="product.categories.length" class="text-[9px] font-bold uppercase text-[#00B4D8]">{{ product.categories[0] }}</p><h3 class="mt-1 truncate text-sm font-bold text-gray-600">{{ product.name }}</h3><p class="mt-1 font-black text-[#4F7180]">{{ money(product.price) }}</p></div>
+                </article>
+            </div>
+            <div v-else class="border-t border-gray-200 py-8 text-sm text-gray-500">Este emprendimiento todavía no tiene productos publicados.</div>
+        </section>
+
+        <!-- Ubicaciones integradas como parte del perfil, no como otro dashboard. -->
+        <section class="mt-10 border-t border-[#DDEFF3] pt-7">
+            <div class="mb-5"><p class="text-xs font-bold uppercase tracking-[.12em] text-[#00B4D8]">Dónde encontrarlo</p><h2 class="mt-1 text-2xl font-black text-gray-700">Ubicaciones y horarios</h2></div>
+            <div v-if="locations.length" class="grid gap-5 lg:grid-cols-[1.35fr_.65fr]">
+                <LocationMap :locations="locations" height="400px" @select="selectedLocation=$event"/>
+                <div class="divide-y divide-gray-100 border-y border-gray-100 bg-white sm:rounded-[20px] sm:border sm:px-4">
+                    <button v-for="location in locations" :key="location.id" type="button" class="w-full border-l-4 px-3 py-4 text-left transition" :class="selectedLocation?.id===location.id?'border-[#00B4D8] bg-[#F5FCFD]':'border-transparent hover:bg-gray-50'" @click="selectedLocation=location">
+                        <div class="flex items-center justify-between gap-3"><p class="font-black text-gray-700">{{ location.name }}</p><span v-if="location.isPrimary" class="text-[10px] font-bold text-[#00B4D8]">Principal</span></div>
+                        <p class="mt-1 text-xs leading-5 text-gray-500">{{ location.address }}</p>
+                        <div class="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-gray-400"><span v-for="hour in location.hours" :key="hour.weekday">{{ ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'][hour.weekday] }}: {{ hour.is_closed?'Cerrado':`${String(hour.open_time).slice(0,5)}–${String(hour.close_time).slice(0,5)}` }}</span></div>
+                    </button>
+                </div>
+            </div>
+            <div v-else class="border-t border-gray-200 py-8 text-sm text-gray-500">Este emprendimiento aún no ha agregado una ubicación exacta.</div>
+        </section>
+
+        <!-- Reseñas con el mismo lenguaje simple del resto del perfil. -->
+        <section class="mt-10 border-t border-[#DDEFF3] pt-7">
+            <div class="mb-5 flex items-end justify-between gap-4"><div><p class="text-xs font-bold uppercase tracking-[.12em] text-[#00B4D8]">Opiniones</p><h2 class="mt-1 text-2xl font-black text-gray-700">Reseñas del emprendimiento</h2></div><div class="text-right"><p class="text-xl font-black text-amber-500">★ {{ averageRating.toFixed(1) }}</p><p class="text-xs text-gray-400">{{ reviewCountText }}</p></div></div>
+            <div class="grid gap-6 lg:grid-cols-[360px_1fr]">
+                <article v-if="canReview" class="bg-white p-5 sm:rounded-[20px] sm:border sm:border-gray-100">
+                    <h3 class="font-black text-gray-700">{{ myReview?'Editar tu reseña':'Dejar una reseña' }}</h3>
+                    <div class="mt-3 flex gap-1"><button v-for="star in 5" :key="star" type="button" class="text-3xl" :class="star<=reviewForm.rating?'text-amber-400':'text-gray-200'" @click="reviewForm.rating=star">★</button></div>
+                    <textarea v-model="reviewForm.comment" rows="5" maxlength="800" placeholder="Cuéntale a otros clientes cómo fue tu experiencia" class="mt-3 w-full resize-none rounded-xl border border-gray-200 p-3 text-sm outline-none focus:border-[#00B4D8]"></textarea>
+                    <button :disabled="reviewSaving" class="mt-3 w-full rounded-xl bg-[#00B4D8] px-4 py-3 text-sm font-bold text-white disabled:opacity-50" @click="saveReview">{{ myReview?'Actualizar reseña':'Publicar reseña' }}</button>
+                    <button v-if="myReview" :disabled="reviewSaving" class="mt-2 w-full px-4 py-2 text-xs font-bold text-red-500" @click="deleteReview">Eliminar mi reseña</button>
+                </article>
+                <div :class="canReview?'':'lg:col-span-2'" class="divide-y divide-gray-100 bg-white sm:rounded-[20px] sm:border sm:border-gray-100 sm:px-5">
+                    <div v-if="!reviews.length" class="py-8 text-sm text-gray-500">Todavía no hay reseñas de este emprendimiento.</div>
+                    <article v-for="review in reviews" :key="review.id" class="py-5">
+                        <div class="flex items-start gap-3"><img v-if="review.avatarUrl" :src="review.avatarUrl" class="h-10 w-10 rounded-full object-cover"><div v-else class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#EAF9FC] text-xs font-black text-[#0077B6]">{{ initials(review.fullName) }}</div><div class="min-w-0 flex-1"><div class="flex items-start justify-between gap-3"><div><p class="font-bold text-gray-700">{{ review.fullName }}</p><p class="text-xs text-gray-400">{{ date(review.updatedAt) }}</p></div><span class="text-sm font-black text-amber-500">★ {{ review.rating }}</span></div><p class="mt-2 whitespace-pre-line text-sm leading-6 text-gray-500">{{ review.comment||"Calificó este emprendimiento sin comentario." }}</p></div></div>
+                    </article>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
 </template>
