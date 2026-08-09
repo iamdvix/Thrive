@@ -1,115 +1,23 @@
 <script setup>
+// Tarjeta del plan del emprendedor. Muestra el periodo actual sin convertirlo en una pantalla de publicidad.
 import { computed } from "vue";
-import {
-    subscriptionIsActive,
-    subscriptionStatusLabel
-} from "../../lib/subscription";
-
-const props = defineProps({
-    subscription: {
-        type: Object,
-        default: function () {
-            return {
-                status: "inactive",
-                price: 4.99,
-                expiresAt: null
-            };
-        }
-    },
-    loading: {
-        type: Boolean,
-        default: false
-    },
-    compact: {
-        type: Boolean,
-        default: false
-    },
-    showButton: {
-        type: Boolean,
-        default: true
-    }
-});
-
-const emit = defineEmits(["subscribe"]);
-const active = computed(function () {
-    return subscriptionIsActive(props.subscription);
-});
-
-function formatDate(date) {
-    if (!date) return "";
-    return new Intl.DateTimeFormat("es-SV", {
-        day: "numeric",
-        month: "long",
-        year: "numeric"
-    }).format(new Date(date));
-}
+import { subscriptionIsActive,subscriptionStatusLabel } from "../../lib/subscription";
+const props=defineProps({subscription:{type:Object,default:()=>({status:"inactive",price:4.99,startedAt:null,expiresAt:null})},loading:{type:Boolean,default:false},compact:{type:Boolean,default:false},showButton:{type:Boolean,default:true}});
+const emit=defineEmits(["subscribe"]);
+const active=computed(()=>subscriptionIsActive(props.subscription));
+function formatDate(value){if(!value)return"Sin fecha";return new Intl.DateTimeFormat("es-SV",{day:"numeric",month:"long",year:"numeric"}).format(new Date(value));}
 </script>
-
 <template>
-<section
-    class="overflow-hidden rounded-[24px] border border-[#90E0EF]/70 bg-gradient-to-br from-[#0077B6] via-[#00A8CC] to-[#00B4D8] text-white shadow-sm"
-    :class="compact ? 'p-5' : 'p-6 sm:p-7'"
->
+<section class="overflow-hidden border border-[#CAF0F8] bg-white sm:rounded-[24px]" :class="compact?'p-5':'p-5 sm:p-6'">
     <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-        <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-2">
-                <span class="rounded-full bg-white/20 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em]">
-                    Mi plan
-                </span>
-                <span
-                    class="rounded-full px-3 py-1 text-[10px] font-black"
-                    :class="active ? 'bg-green-100 text-green-700' : 'bg-white text-[#0077B6]'"
-                >
-                    {{ subscriptionStatusLabel(subscription.status) }}
-                </span>
-            </div>
-            <div class="mt-4 flex items-end gap-2">
-                <span class="text-4xl font-black sm:text-5xl">
-                    ${{ Number(subscription.price || 4.99).toFixed(2) }}
-                </span>
-                <span class="pb-1 text-sm font-bold text-white/75">
-                    al mes
-                </span>
-            </div>
-            <p class="mt-3 max-w-2xl text-sm leading-6 text-white/80">
-                Explora todas las herramientas antes de pagar. Al activar el plan podrás publicar productos y utilizar inventario, pedidos, novedades y calculadora sin bloqueos.
-            </p>
-            <div class="mt-4 grid gap-2 text-xs font-bold text-white/85 sm:grid-cols-2">
-                <p class="rounded-xl bg-white/10 px-3 py-2">✓ Productos y fotografías</p>
-                <p class="rounded-xl bg-white/10 px-3 py-2">✓ Inventario y pedidos</p>
-                <p class="rounded-xl bg-white/10 px-3 py-2">✓ Calculadora financiera</p>
-                <p class="rounded-xl bg-white/10 px-3 py-2">✓ Novedades completas</p>
-            </div>
-            <p
-                v-if="active && subscription.expiresAt"
-                class="mt-3 text-xs font-bold text-white/80"
-            >
-                Próxima renovación: {{ formatDate(subscription.expiresAt) }}
-            </p>
+        <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2"><span class="rounded-full bg-[#00B4D8] px-3 py-1 text-[10px] font-black uppercase tracking-[.1em] text-white">Plan Thrive</span><span class="rounded-full px-3 py-1 text-[10px] font-black" :class="active?'bg-emerald-50 text-emerald-700':'bg-gray-100 text-gray-500'">{{ subscriptionStatusLabel(subscription.status) }}</span></div>
+            <div class="mt-4 flex flex-wrap items-baseline gap-x-2"><span class="text-3xl font-black text-[#0077B6] sm:text-4xl">${{ Number(subscription.price||4.99).toFixed(2) }}</span><span class="text-sm font-bold text-gray-400">al mes</span></div>
+            <p class="mt-2 max-w-2xl text-sm leading-6 text-gray-500">Publica productos y usa inventario, pedidos, novedades y calculadora con todas sus funciones.</p>
+            <div v-if="active" class="mt-4 grid gap-2 sm:grid-cols-2"><div class="border-l-4 border-[#00B4D8] bg-[#F8FBFC] px-4 py-3"><p class="text-[10px] font-black uppercase tracking-[.1em] text-gray-400">Tu periodo inició</p><p class="mt-1 text-sm font-black text-gray-700">{{ formatDate(subscription.startedAt) }}</p></div><div class="border-l-4 border-emerald-400 bg-[#F8FBFC] px-4 py-3"><p class="text-[10px] font-black uppercase tracking-[.1em] text-gray-400">Tu suscripción termina</p><p class="mt-1 text-sm font-black text-gray-700">{{ formatDate(subscription.expiresAt) }}</p></div></div>
+            <p v-else class="mt-4 text-xs font-semibold text-gray-400">Al activar el plan, el periodo se registra con su fecha de inicio y finalización.</p>
         </div>
-        <div class="w-full lg:w-auto">
-            <button
-                v-if="showButton && !active"
-                type="button"
-                :disabled="loading"
-                class="w-full rounded-xl bg-white px-6 py-3.5 text-sm font-black text-[#0077B6] shadow-sm transition hover:bg-[#EAF9FC] disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
-                @click="emit('subscribe')"
-            >
-                {{ loading ? "Activando plan..." : "Probar suscripción por $4.99" }}
-            </button>
-            <p
-                v-if="showButton && !active"
-                class="mt-2 text-center text-[10px] font-semibold text-white/70"
-            >
-                La demostración utiliza una tarjeta de prueba y no procesa dinero real.
-            </p>
-            <div
-                v-else-if="active"
-                class="rounded-xl border border-white/25 bg-white/15 px-5 py-3 text-center text-sm font-bold"
-            >
-                Todas las herramientas están disponibles
-            </div>
-        </div>
+        <div class="w-full lg:w-auto"><button v-if="showButton&&!active" type="button" :disabled="loading" class="w-full rounded-xl bg-[#00B4D8] px-6 py-3.5 text-sm font-black text-white transition hover:bg-[#009CC0] disabled:opacity-60 lg:w-auto" @click="emit('subscribe')">{{ loading?'Activando plan...':'Activar plan Thrive' }}</button><div v-else-if="active" class="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700"><span class="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100">✓</span><span>Herramientas desbloqueadas</span></div></div>
     </div>
 </section>
 </template>

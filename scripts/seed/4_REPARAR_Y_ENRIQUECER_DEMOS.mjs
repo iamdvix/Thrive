@@ -24,13 +24,13 @@ for(let index=0;index<entrepreneurs.length;index++){
     const metadata={...(user.user_metadata||{}),full_name:null,display_name:null,name:null};
     const{error:authError}=await supabase.auth.admin.updateUserById(user.id,{user_metadata:metadata});if(authError)throw authError;
     const{error:pErr}=await supabase.from("profiles").upsert({id:user.id,full_name:null,phone:item.phone,user_type:"emprendedor",avatar_url:logo},{onConflict:"id"});if(pErr)throw pErr;
-    const{error:bErr}=await supabase.from("entrepreneurs").update({business_name:item.business_name,description:item.description,department:item.department,district:item.district,logo_url:logo,payment_methods:paymentSets[index%paymentSets.length],service_tags:serviceSets[index%serviceSets.length]}).eq("id",user.id);if(bErr)throw bErr;
+    const startedAt=new Date();const expiresAt=new Date(startedAt);expiresAt.setMonth(expiresAt.getMonth()+1);const{error:bErr}=await supabase.from("entrepreneurs").update({business_name:item.business_name,description:item.description,department:item.department,district:item.district,logo_url:logo,payment_methods:paymentSets[index%paymentSets.length],service_tags:serviceSets[index%serviceSets.length],subscription_status:"active",subscription_price:4.99,subscription_started_at:startedAt.toISOString(),subscription_expires_at:expiresAt.toISOString()}).eq("id",user.id);if(bErr)throw bErr;
     // Reutiliza el primer local demo si existe; si no, lo crea.
     const{data:existing}=await supabase.from("entrepreneur_locations").select("id").eq("entrepreneur_id",user.id).order("created_at").limit(1).maybeSingle();
     let locationId=existing?.id;
     const payload={entrepreneur_id:user.id,name:"Local principal",address:`Zona central de ${item.district}, ${item.department} · ubicación de demostración`,latitude:Number(item.latitude),longitude:Number(item.longitude),is_primary:true,active:true};
     await supabase.from("entrepreneur_locations").update({is_primary:false}).eq("entrepreneur_id",user.id).eq("is_primary",true);
     if(locationId){const{error}=await supabase.from("entrepreneur_locations").update(payload).eq("id",locationId);if(error)throw error;}else{const{data,error}=await supabase.from("entrepreneur_locations").insert(payload).select("id").single();if(error)throw error;locationId=data.id;}
-    await upsertHours(locationId);done++;console.log(`✓ ${item.business_name} | logo + perfil + local + horario`);
+    await upsertHours(locationId);done++;console.log(`✓ ${item.business_name} | perfil + local + horario + plan activo`);
 }
 console.log(`\nListos: ${done}/${entrepreneurs.length}`);

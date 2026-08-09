@@ -71,6 +71,7 @@ const productForm = ref({
     description: "",
     categories: [],
     price: 0,
+    discountPercent: 0,
     stock: 0
 });
 // Aquí mantenemos juntas las imágenes actuales y las nuevas.
@@ -160,10 +161,11 @@ const hasActiveSubscription = computed(function () {
 });
 // Funciones pequeñas reutilizadas en distintas partes de la vista.
 function formatPrice(price) {
-    return new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD"
-    }).format(Number(price) || 0);
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(price) || 0);
+}
+function discountedPrice(product) {
+    const discount=Math.min(90,Math.max(0,Number(product?.discountPercent)||0));
+    return Number(product?.price||0)*(1-discount/100);
 }
 // Devuelve las clases visuales correspondientes al nivel de existencias.
 function stockClasses(stock) {
@@ -336,6 +338,7 @@ async function loadProducts(userId) {
             description,
             categories,
             price,
+            discount_percent,
             stock,
             featured,
             active,
@@ -404,6 +407,7 @@ async function loadProducts(userId) {
             description: product.description || "",
             categories: product.categories || [],
             price: Number(product.price) || 0,
+            discountPercent: Number(product.discount_percent) || 0,
             stock: Number(product.stock) || 0,
             featured: product.featured,
             active: product.active,
@@ -761,6 +765,7 @@ function openAddProduct() {
         description: "",
         categories: [],
         price: 0,
+        discountPercent: 0,
         stock: 0
     };
     editorImages.value = [];
@@ -781,6 +786,7 @@ function openProductEditor(product) {
             ...(product.categories || [])
         ],
         price: Number(product.price) || 0,
+        discountPercent: Number(product.discountPercent) || 0,
         stock: Number(product.stock) || 0
     };
     /*
@@ -941,6 +947,7 @@ async function createProduct(user) {
                 description: productForm.value.description.trim(),
                 categories: productForm.value.categories,
                 price: Number(productForm.value.price) || 0,
+                discount_percent: Math.min(90,Math.max(0,Number(productForm.value.discountPercent)||0)),
                 stock: Number(productForm.value.stock) || 0,
                 featured: false,
                 active: true
@@ -1030,6 +1037,7 @@ async function updateProduct(user) {
             description: productForm.value.description.trim(),
             categories: productForm.value.categories,
             price: Number(productForm.value.price) || 0,
+            discount_percent: Math.min(90,Math.max(0,Number(productForm.value.discountPercent)||0)),
             stock: Number(productForm.value.stock) || 0,
             updated_at: new Date().toISOString()
         })
@@ -1458,9 +1466,10 @@ onBeforeUnmount(function () {
                     >
                         <button
                             type="button"
-                            class="block w-full overflow-hidden rounded-xl bg-gray-100 sm:rounded-2xl"
+                            class="relative block w-full overflow-hidden rounded-xl bg-gray-100 sm:rounded-2xl"
                             @click="openProductDetail(product)"
                         >
+                            <span v-if="product.discountPercent>0" class="absolute left-2 top-2 z-10 rounded-full bg-rose-500 px-2.5 py-1 text-[9px] font-black text-white">-{{ Math.round(product.discountPercent) }}%</span>
                             <img
                                 v-if="product.image"
                                 :src="product.image"
@@ -1503,9 +1512,7 @@ onBeforeUnmount(function () {
                                 </span>
                             </div>
                             <div class="mt-2 flex items-center justify-between gap-2">
-                                <p class="text-base font-black text-[#4F7180] sm:text-xl">
-                                    {{ formatPrice(product.price) }}
-                                </p>
+                                <div><p v-if="product.discountPercent>0" class="text-[10px] font-bold text-gray-400 line-through">{{ formatPrice(product.price) }}</p><p class="text-base font-black sm:text-xl" :class="product.discountPercent>0?'text-rose-600':'text-[#4F7180]'">{{ formatPrice(product.discountPercent>0?discountedPrice(product):product.price) }}</p></div>
                                 <span
                                     class="rounded-full px-2 py-1 text-[9px] font-bold sm:text-[10px]"
                                     :class="stockClasses(product.stock)"
@@ -1881,6 +1888,11 @@ onBeforeUnmount(function () {
                                 class="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-[#00B4D8]"
                             >
                         </div>
+                    </div>
+                    <!-- Oferta opcional -->
+                    <div class="rounded-xl border border-rose-100 bg-rose-50/50 p-4">
+                        <div class="flex items-start justify-between gap-3"><div><label class="block text-sm font-bold text-gray-600">Descuento</label><p class="mt-1 text-xs text-gray-400">Déjalo en 0 si el producto no está en oferta.</p></div><span v-if="productForm.discountPercent>0" class="rounded-full bg-rose-500 px-2.5 py-1 text-[10px] font-black text-white">Oferta -{{ Math.round(productForm.discountPercent) }}%</span></div>
+                        <div class="mt-3 flex items-center gap-3"><input v-model.number="productForm.discountPercent" min="0" max="90" step="1" type="number" class="w-28 rounded-xl border border-rose-100 bg-white px-4 py-3 outline-none focus:border-rose-300"><span class="text-sm font-bold text-gray-500">%</span><p v-if="productForm.discountPercent>0" class="ml-auto text-sm font-black text-rose-600">{{ formatPrice((Number(productForm.price)||0)*(1-Math.min(90,Math.max(0,Number(productForm.discountPercent)||0))/100)) }}</p></div>
                     </div>
                     <!-- Descripción -->
                     <div>
