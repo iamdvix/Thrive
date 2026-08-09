@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="28" fill="#cffafe"/>
+  <circle cx="64" cy="60" r="18" fill="none" stroke="#0e7490" stroke-width="5"/><path d="M64 31v8M64 81v8M35 60h8M85 60h8M44 40l6 6M78 74l6 6M84 40l-6 6M50 74l-6 6" stroke="#0e7490" stroke-width="4" stroke-linecap="round"/>
+  <rect x="30" y="94" width="68" height="20" rx="10" fill="#0e7490"/>
+  <text x="64" y="108" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="700" fill="#ffffff">CL</text>
+</svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="28" fill="#f1f5f9"/>
+  <path d="M47 45c15-13 34 6 21 20S44 73 45 59s21-18 31-4" fill="none" stroke="#475569" stroke-width="5" stroke-linecap="round"/>
+  <rect x="30" y="94" width="68" height="20" rx="10" fill="#475569"/>
+  <text x="64" y="108" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="700" fill="#ffffff">NR</text>
+</svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="28" fill="#fef3c7"/>
+  <path d="M45 69c0-18 9-28 19-28s19 10 19 28c0 8-7 13-19 13S45 77 45 69z" fill="none" stroke="#92400e" stroke-width="5"/><path d="M56 51l-5 9M68 49l-5 10M77 54l-5 9" stroke="#92400e" stroke-width="3" stroke-linecap="round"/>
+  <rect x="30" y="94" width="68" height="20" rx="10" fill="#92400e"/>
+  <text x="64" y="108" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="700" fill="#ffffff">PP</text>
+</svg>
