@@ -115,7 +115,12 @@ onMounted(load);
 
                     <div class="mt-5 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
                         <button v-if="['cliente','institucion'].includes(viewerType)" type="button" :disabled="followLoading" class="rounded-full border border-[#00B4D8] px-4 py-2 text-xs font-bold text-[#0077B6] disabled:opacity-50" :class="following?'bg-[#CAF0F8]':''" @click="toggleFollow">{{ followLoading?'Actualizando...':following?'Siguiendo':'Seguir +' }}</button>
-                        <button v-if="entrepreneur.phone" type="button" class="flex items-center gap-2 rounded-full bg-[#25D366] px-4 py-2 text-xs font-bold text-white" @click="whatsapp">WhatsApp</button>
+                        <button v-if="entrepreneur.phone" type="button" class="flex items-center gap-2 rounded-full bg-[#25D366] px-4 py-2 text-xs font-bold text-white transition hover:brightness-95" @click="whatsapp">
+    <svg class="h-5 w-5 sm:h-6 sm:w-6" viewBox="0 0 448 512" aria-hidden="true">
+    <path fill="#ffffff" d="M380.9 97.1C339 55.1 283.2 32 223.9 32 101.5 32 1.9 131.6 1.9 254c0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.8l-6.7-4-69.8 18.3 18.6-68-4.4-7c-18.5-29.4-28.2-63.4-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.1-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.7 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.3 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"></path>
+</svg>
+    <span>WhatsApp</span>
+</button>
                         <a v-if="entrepreneur.instagramUrl" :href="normalizeUrl(entrepreneur.instagramUrl,'instagram')" target="_blank" rel="noopener noreferrer" class="rounded-full border border-pink-200 bg-pink-50 px-4 py-2 text-xs font-bold text-pink-700">Instagram</a>
                         <a v-if="entrepreneur.facebookUrl" :href="normalizeUrl(entrepreneur.facebookUrl,'facebook')" target="_blank" rel="noopener noreferrer" class="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700">Facebook</a>
                         <a v-if="entrepreneur.tiktokUrl" :href="normalizeUrl(entrepreneur.tiktokUrl,'tiktok')" target="_blank" rel="noopener noreferrer" class="rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-xs font-bold text-gray-700">TikTok</a>
@@ -130,26 +135,31 @@ onMounted(load);
             <div class="mb-5"><p class="text-xs font-bold uppercase tracking-[.12em] text-[#00B4D8]">Catálogo</p><h2 class="mt-1 text-2xl font-black text-gray-700">Productos de {{ entrepreneur.businessName }}</h2></div>
             <div v-if="products.length" class="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
                 <article v-for="product in products" :key="product.id" class="min-w-0 overflow-hidden rounded-[20px] border border-gray-100 bg-white p-2 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-                    <button type="button" class="block w-full text-left" @click="openProduct(product.id)">
-                        <div class="relative overflow-hidden rounded-[15px] bg-gray-100">
-                            <span v-if="product.discountPercent>0" class="absolute left-2 top-2 z-10 rounded-full bg-rose-500 px-2.5 py-1 text-[9px] font-black text-white">-{{ Math.round(product.discountPercent) }}%</span>
-                            <img v-if="product.image" :src="product.image" :alt="product.name" class="aspect-square w-full object-cover">
-                            <div v-else class="flex aspect-square items-center justify-center text-xs font-bold text-gray-400">Sin imagen</div>
-                        </div>
-                        <div class="px-1 pb-1 pt-2">
-                            <p v-if="product.categories.length" class="text-[9px] font-bold uppercase text-[#00B4D8]">{{ product.categories[0] }}</p>
-                            <h3 class="mt-1 truncate text-sm font-bold text-gray-700">{{ product.name }}</h3>
-                            <div class="mt-1 flex flex-wrap items-baseline gap-1">
-                                <span v-if="product.discountPercent>0" class="text-[10px] font-bold text-gray-400 line-through">{{ money(product.price) }}</span>
-                                <p class="font-black" :class="product.discountPercent>0?'text-rose-600':'text-[#4F7180]'">{{ money(product.discountPercent>0?salePrice(product):product.price) }}</p>
-                            </div>
-                        </div>
-                    </button>
-                    <button v-if="entrepreneur.phone" type="button" class="mt-1 flex w-full items-center justify-center gap-1.5 rounded-[14px] bg-[#25D366] px-2 py-2.5 text-[11px] font-bold text-white transition hover:brightness-95" @click.stop="contactProductWhatsApp(product)">
-                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.009-.371-.011-.57-.011-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479s1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.262.489 1.693.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347"></path></svg>
-                        WhatsApp
-                    </button>
-                </article>
+    <button type="button" class="block w-full text-left" @click="openProduct(product.id)">
+        <div class="relative overflow-hidden rounded-[15px] bg-gray-100">
+            <span v-if="product.discountPercent>0" class="absolute left-2 top-2 z-10 rounded-full bg-rose-500 px-2.5 py-1 text-[9px] font-black text-white">-{{ Math.round(product.discountPercent) }}%</span>
+            <img v-if="product.image" :src="product.image" :alt="product.name" class="aspect-square w-full object-cover">
+            <div v-else class="flex aspect-square items-center justify-center text-xs font-bold text-gray-400">Sin imagen</div>
+        </div>
+        <div class="px-1 pt-2">
+            <p v-if="product.categories.length" class="text-[9px] font-bold uppercase text-[#00B4D8]">{{ product.categories[0] }}</p>
+            <h3 class="mt-1 truncate text-sm font-bold text-gray-700">{{ product.name }}</h3>
+        </div>
+    </button>
+
+    <!-- Precio y WhatsApp usan la misma disposición del catálogo. -->
+    <div class="flex items-end justify-between gap-2 px-1 pb-1 pt-1">
+        <div class="min-w-0">
+            <span v-if="product.discountPercent>0" class="block text-[10px] font-bold text-gray-400 line-through">{{ money(product.price) }}</span>
+            <p class="font-black" :class="product.discountPercent>0?'text-rose-600':'text-[#4F7180]'">{{ money(product.discountPercent>0?salePrice(product):product.price) }}</p>
+        </div>
+        <button v-if="entrepreneur.phone" type="button" aria-label="Consultar por WhatsApp" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition hover:scale-105 sm:h-10 sm:w-10" style="background-color:#25D366;color:#ffffff;" @click.stop="contactProductWhatsApp(product)">
+            <svg class="h-5 w-5 sm:h-6 sm:w-6" viewBox="0 0 448 512" aria-hidden="true">
+    <path fill="#ffffff" d="M380.9 97.1C339 55.1 283.2 32 223.9 32 101.5 32 1.9 131.6 1.9 254c0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.8l-6.7-4-69.8 18.3 18.6-68-4.4-7c-18.5-29.4-28.2-63.4-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.1-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.7 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.3 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"></path>
+</svg>
+        </button>
+    </div>
+</article>
             </div>
             <div v-else class="border-t border-gray-200 py-8 text-sm text-gray-500">Este emprendimiento todavía no tiene productos publicados.</div>
         </section>
