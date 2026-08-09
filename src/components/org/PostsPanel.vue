@@ -1067,7 +1067,7 @@ onBeforeUnmount(function () {
         <article
             v-for="post in posts"
             :key="post.id"
-            class="group min-w-0 overflow-hidden"
+            class="group min-w-0 overflow-hidden rounded-[22px] bg-white p-2 shadow-sm ring-1 ring-gray-100"
         >
             <button
                 type="button"
@@ -1096,7 +1096,12 @@ onBeforeUnmount(function () {
                     {{ post.imageRecords.length }} imágenes
                 </span>
             </button>
-            <div class="pt-3 sm:px-1">
+            <div class="px-1 pb-1 pt-3">
+                <div class="mb-2 flex items-center gap-2">
+                    <img v-if="institution.logoUrl" :src="institution.logoUrl" :alt="institution.institutionName" class="h-7 w-7 rounded-full border border-[#CAF0F8] object-cover">
+                    <div v-else class="flex h-7 w-7 items-center justify-center rounded-full bg-[#CAF0F8] text-[9px] font-black text-[#0077B6]">{{ institution.institutionName.charAt(0).toUpperCase() }}</div>
+                    <p class="truncate text-[10px] font-bold text-gray-400 sm:text-xs">{{ institution.institutionName }}</p>
+                </div>
                 <div class="flex items-center justify-between gap-2">
                     <span
                         class="rounded-full px-2.5 py-1 text-[9px] font-black"

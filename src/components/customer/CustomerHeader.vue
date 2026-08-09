@@ -30,7 +30,7 @@ onMounted(loadClient);
                 <img v-if="client.avatarUrl" :src="client.avatarUrl" :alt="client.name" class="h-full w-full object-cover"><span v-else class="text-xs font-black">{{ initials(client.name) }}</span>
             </button>
         </div>
-        <div class="mt-3"><CustomerNav :active="active" :favorite-count="favoriteCount"/></div>
+        <div class="lg:mt-3"><CustomerNav :active="active" :favorite-count="favoriteCount"/></div>
         <div class="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <button v-for="item in departments" :key="item" type="button" class="whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold transition" :class="department===item?'bg-[#0077B6] text-white shadow-sm':'bg-[#EAF9FC] text-[#0077B6] hover:bg-[#CAF0F8]'" @click="emit('update:department',item)">{{ item }}</button>
         </div>

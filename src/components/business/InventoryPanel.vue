@@ -1114,7 +1114,7 @@ onBeforeUnmount(function () {
 });
 </script>
 <template>
-<div class="min-h-screen bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-10">
+<div class="min-h-screen w-full overflow-x-hidden bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-10">
     <!-- Cabecera móvil y navbar para computadora. -->
     <!-- El mismo navbar se usa en todo el panel del emprendedor. -->
     <BusinessNav
@@ -1156,7 +1156,7 @@ onBeforeUnmount(function () {
     <!-- Contenido principal. -->
     <main
         v-else
-        class="mx-auto max-w-[1450px] px-3 pb-10 pt-4 sm:px-5 lg:px-8 lg:pt-6"
+        class="mx-auto w-full min-w-0 max-w-[1450px] overflow-x-hidden px-3 pb-10 pt-4 sm:px-5 lg:px-8 lg:pt-6"
     >
         <!-- Encabezado y cambio de pestaña. -->
         <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -1213,6 +1213,7 @@ onBeforeUnmount(function () {
         />
         <fieldset
             :disabled="!hasActiveSubscription"
+            class="min-w-0 border-0 p-0"
             :class="!hasActiveSubscription ? 'opacity-65' : ''"
         >
         <!-- STOCK -->

@@ -312,7 +312,7 @@ onMounted(loadSummary);
             <article
                 v-for="post in recentPosts"
                 :key="post.id"
-                class="min-w-0 overflow-hidden"
+                class="min-w-0 overflow-hidden rounded-[22px] bg-white p-2 shadow-sm ring-1 ring-gray-100"
             >
                 <div class="relative overflow-hidden rounded-2xl bg-[#EAF9FC] shadow-sm">
                     <img

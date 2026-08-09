@@ -412,7 +412,7 @@ onBeforeUnmount(function () {
         <article
             v-for="post in filteredPosts"
             :key="post.id"
-            class="group min-w-0 overflow-hidden"
+            class="group min-w-0 overflow-hidden rounded-[22px] bg-white p-2 shadow-sm ring-1 ring-gray-100"
         >
             <button
                 type="button"
@@ -449,7 +449,7 @@ onBeforeUnmount(function () {
                     {{ Number(post.availableSpots) > 0 ? `${post.availableSpots} cupos` : "Lleno" }}
                 </span>
             </button>
-            <div class="pt-3 sm:px-1">
+            <div class="px-1 pb-1 pt-3">
                 <div class="flex items-center gap-2">
                     <img
                         v-if="post.institutionLogo"
