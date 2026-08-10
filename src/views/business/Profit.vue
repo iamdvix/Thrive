@@ -295,7 +295,7 @@ onMounted(function () {
 });
 </script>
 <template>
-<div class="min-h-screen bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-10">
+<div class="min-h-screen overflow-x-hidden bg-[#F8FBFC] pb-[76px] text-gray-700 lg:pb-10">
     <!-- Navbar compartido: mismas opciones, tamaño y posición que el resto del panel. -->
     <BusinessNav
         active="profit"
@@ -332,6 +332,7 @@ onMounted(function () {
             @subscribe="openPlan"
         />
         <fieldset
+            class="min-w-0 w-full max-w-full"
             :disabled="!hasActiveSubscription"
             :class="!hasActiveSubscription ? 'opacity-65' : ''"
         >
@@ -349,15 +350,16 @@ onMounted(function () {
         </section>
         <template v-else>
             <!-- Selector de productos -->
-            <section class="mb-6 rounded-[24px] bg-white p-5 shadow-sm sm:p-6">
+            <section class="mb-6 min-w-0 max-w-full overflow-hidden rounded-[24px] bg-white p-5 shadow-sm sm:p-6">
                 <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">Mis productos</p>
                 <h2 class="mt-1 text-lg font-black text-gray-700">Selecciona el producto que quieres analizar</h2>
-                <div class="mt-4 flex gap-3 overflow-x-auto pb-2">
+                <!-- En celular funciona como carrusel y nunca aumenta el ancho de la página. -->
+                <div class="mt-4 flex w-full max-w-full snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-2 pr-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     <button
                         v-for="product in products"
                         :key="product.id"
                         type="button"
-                        class="flex w-[230px] shrink-0 items-center gap-3 rounded-2xl border p-3 text-left transition"
+                        class="flex w-[82vw] max-w-[290px] shrink-0 snap-start items-center gap-3 rounded-2xl border p-3 text-left transition sm:w-[260px]"
                         :class="selectedProductId === product.id ? 'border-[#00B4D8] bg-[#EAF9FC]' : 'border-gray-100 bg-white'"
                         @click="selectProduct(product)"
                     >
