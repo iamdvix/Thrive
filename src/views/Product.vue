@@ -499,25 +499,25 @@ watch(
             <section class="bg-white sm:rounded-[28px] sm:border sm:border-gray-200 sm:p-4">
                 <div class="relative overflow-hidden bg-gray-100 sm:rounded-[23px]">
 
-                    <!-- La altura cambia según el dispositivo para evitar agrandar demasiado la foto. -->
-                <div class="relative flex h-[330px] w-full items-center justify-center overflow-hidden bg-[#F4F7F8] sm:h-[430px] lg:h-[560px] lg:rounded-[26px]">
-                    <!-- La imagen se reduce si hace falta, pero nunca se fuerza a crecer ni se recorta. -->
-                    <img
-                        v-if="selectedImage"
-                        :src="selectedImage"
-                        :alt="product.name"
-                        class="max-h-full max-w-full object-contain object-center"
-                        loading="eager"
-                        decoding="async"
-                        fetchpriority="high"
-                    >
-                    <div
-                        v-else
-                        class="flex h-full w-full items-center justify-center text-sm font-bold text-gray-400"
-                    >
-                        Sin fotografía
+                    <!-- La foto llena el espacio sin dejar franjas blancas. -->
+                    <div class="relative h-[390px] w-full overflow-hidden bg-gray-100 sm:h-[460px] lg:h-[560px] lg:rounded-[26px]">
+                        <!-- object-cover adapta la foto al marco sin comprimir el archivo original. -->
+                        <img
+                            v-if="selectedImage"
+                            :src="selectedImage"
+                            :alt="product.name"
+                            class="h-full w-full object-cover object-center"
+                            loading="eager"
+                            decoding="async"
+                            fetchpriority="high"
+                        >
+                        <div
+                            v-else
+                            class="flex h-full w-full items-center justify-center text-sm font-bold text-gray-400"
+                        >
+                            Sin fotografía
+                        </div>
                     </div>
-                </div>
 
                     <!-- Isla superior. Solo regresar es interactivo. -->
                     <div
