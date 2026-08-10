@@ -5,6 +5,7 @@ import { useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
 import CustomerHeader from "../components/customer/CustomerHeader.vue";
 import LocationMap from "../components/maps/LocationMap.vue";
+import BrandLogo from "../components/shared/BrandLogo.vue";
 
 const router=useRouter();
 const points=ref([]),selected=ref(null),loading=ref(true),errorText=ref("");
@@ -33,7 +34,7 @@ onMounted(load);
 
             <aside class="bg-white sm:rounded-[22px] sm:border sm:border-gray-100">
                 <article v-if="selected" class="p-5">
-                    <div class="flex items-center gap-3"><img v-if="selected.logoUrl" :src="selected.logoUrl" :alt="selected.businessName" class="h-14 w-14 rounded-[16px] bg-white p-1 object-contain ring-2 ring-[#CAF0F8]"><div v-else class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#EAF9FC] font-black text-[#0077B6]">{{ initials(selected.businessName) }}</div><div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[.12em] text-[#00B4D8]">{{ selected.isPrimary?'Local principal':'Sucursal' }}</p><h2 class="mt-1 truncate text-lg font-black text-gray-700">{{ selected.businessName }}</h2><p class="mt-1 text-xs font-bold text-amber-500">★ {{ selected.averageRating.toFixed(1) }} <span class="font-medium text-gray-400">· {{ selected.reviewCount }} reseñas</span></p></div></div>
+                    <div class="flex items-center gap-3"><BrandLogo :src="selected.logoUrl" :alt="selected.businessName" :name="selected.businessName" size="md"/><div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[.12em] text-[#00B4D8]">{{ selected.isPrimary?'Local principal':'Sucursal' }}</p><h2 class="mt-1 truncate text-lg font-black text-gray-700">{{ selected.businessName }}</h2><p class="mt-1 text-xs font-bold text-amber-500">★ {{ selected.averageRating.toFixed(1) }} <span class="font-medium text-gray-400">· {{ selected.reviewCount }} reseñas</span></p></div></div>
                     <div class="mt-5 border-y border-gray-100 py-4"><p class="font-bold text-gray-700">{{ selected.locationName }}</p><p class="mt-1 text-sm leading-6 text-gray-500">{{ selected.address }}</p><p class="mt-2 text-xs font-semibold text-[#0077B6]">{{ selected.district||selected.department }}</p></div>
                     <button class="mt-4 w-full rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white" @click="openBusiness">Ver perfil</button>
                 </article>
@@ -41,7 +42,7 @@ onMounted(load);
 
                 <!-- En laptop se puede cambiar de local sin abrir otra pantalla. -->
                 <div v-if="filtered.length" class="border-t border-gray-100 px-3 py-2">
-                    <button v-for="point in filtered" :key="point.id" type="button" class="flex w-full items-center gap-3 border-l-4 px-3 py-3 text-left" :class="selected?.id===point.id?'border-[#00B4D8] bg-[#F5FCFD]':'border-transparent hover:bg-gray-50'" @click="select(point)"><img v-if="point.logoUrl" :src="point.logoUrl" class="h-9 w-9 rounded-xl bg-white p-0.5 object-contain"><div v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#EAF9FC] text-[9px] font-black text-[#0077B6]">{{ initials(point.businessName) }}</div><div class="min-w-0"><p class="truncate text-xs font-bold text-gray-700">{{ point.businessName }}</p><p class="truncate text-[10px] text-gray-400">{{ point.locationName }}</p></div></button>
+                    <button v-for="point in filtered" :key="point.id" type="button" class="flex w-full items-center gap-3 border-l-4 px-3 py-3 text-left" :class="selected?.id===point.id?'border-[#00B4D8] bg-[#F5FCFD]':'border-transparent hover:bg-gray-50'" @click="select(point)"><BrandLogo :src="point.logoUrl" :alt="point.businessName" :name="point.businessName" size="xs"/><div class="min-w-0"><p class="truncate text-xs font-bold text-gray-700">{{ point.businessName }}</p><p class="truncate text-[10px] text-gray-400">{{ point.locationName }}</p></div></button>
                 </div>
             </aside>
         </div>

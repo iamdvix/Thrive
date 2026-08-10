@@ -7,6 +7,7 @@ import {
 } from "vue";
 import { useRouter } from "vue-router";
 import { supabase } from "../../lib/supabaseClient";
+import BrandLogo from "../shared/BrandLogo.vue";
 const props = defineProps({
     institution: {
         type: Object,
@@ -378,18 +379,7 @@ onMounted(loadPage);
         >
             <div class="flex items-start justify-between gap-3">
                 <div class="flex min-w-0 items-center gap-3">
-                    <img
-                        v-if="item.logoUrl"
-                        :src="item.logoUrl"
-                        :alt="item.businessName"
-                        class="h-14 w-14 shrink-0 rounded-full border-4 border-[#CAF0F8] object-cover sm:h-16 sm:w-16"
-                    >
-                    <div
-                        v-else
-                        class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-4 border-[#CAF0F8] bg-[#EAF9FC] text-lg font-black text-[#0077B6] sm:h-16 sm:w-16"
-                    >
-                        {{ item.businessName.charAt(0).toUpperCase() }}
-                    </div>
+                    <BrandLogo :src="item.logoUrl" :alt="item.businessName" :name="item.businessName" size="md"/>
                     <div class="min-w-0">
                         <h2 class="truncate font-black text-gray-700">
                             {{ item.businessName }}

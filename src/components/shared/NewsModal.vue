@@ -1,4 +1,5 @@
 <script setup>
+import BrandLogo from "./BrandLogo.vue";
 // Vista compartida para que institución y emprendedor vean exactamente la misma publicación.
 import {
     ref,
@@ -269,18 +270,7 @@ function contactByWhatsApp() {
             <!-- Información principal -->
             <div class="p-5 sm:p-7">
                 <div class="flex items-center gap-3">
-                    <img
-                        v-if="post.institutionLogo"
-                        :src="post.institutionLogo"
-                        :alt="post.institutionName"
-                        class="h-12 w-12 rounded-full border-2 border-[#CAF0F8] object-cover"
-                    >
-                    <div
-                        v-else
-                        class="flex h-12 w-12 items-center justify-center rounded-full bg-[#CAF0F8] font-black text-[#0077B6]"
-                    >
-                        {{ post.institutionName?.charAt(0).toUpperCase() || "I" }}
-                    </div>
+                    <BrandLogo :src="post.institutionLogo" :alt="post.institutionName" :name="post.institutionName||'Institución'" size="sm"/>
                     <div class="min-w-0">
                         <p class="truncate font-black text-gray-700">
                             {{ post.institutionName || "Institución Thrive" }}

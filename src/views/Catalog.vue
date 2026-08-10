@@ -5,6 +5,7 @@ import { useRoute, useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
 import { loadMyFavoriteProductIds, setProductFavorite } from "../lib/favorites";
 import CustomerHeader from "../components/customer/CustomerHeader.vue";
+import BrandLogo from "../components/shared/BrandLogo.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -171,7 +172,7 @@ onMounted(loadAll);
             <section v-else class="grid grid-cols-2 gap-x-2 gap-y-5 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
                 <article v-for="product in filteredProducts" :key="product.id" class="min-w-0 cursor-pointer rounded-[20px] bg-white p-2 shadow-sm ring-1 ring-gray-100 transition hover:-translate-y-0.5 hover:shadow-md" @click="openProduct(product.id)">
                     <div class="mb-2 flex items-center justify-between gap-2 px-0.5">
-                        <button type="button" class="flex min-w-0 items-center gap-2 text-left" @click.stop="openBusiness(product.entrepreneurId)"><img v-if="product.storeAvatar" :src="product.storeAvatar" :alt="product.store" class="h-8 w-8 shrink-0 rounded-lg bg-white p-0.5 object-contain ring-1 ring-[#CAF0F8]"><span v-else class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#EAF9FC] text-[9px] font-black text-[#0077B6]">{{ initials(product.store) }}</span><span class="truncate text-[10px] font-bold text-gray-500 sm:text-xs">{{ product.store }}</span></button>
+                        <button type="button" class="flex min-w-0 items-center gap-2 text-left" @click.stop="openBusiness(product.entrepreneurId)"><BrandLogo :src="product.storeAvatar" :alt="product.store" :name="product.store" size="xs"/><span class="truncate text-[10px] font-bold text-gray-500 sm:text-xs">{{ product.store }}</span></button>
                         <button type="button" :disabled="isFollowLoading(product.entrepreneurId)" class="shrink-0 rounded-full px-2 py-1 text-[9px] font-bold" :class="isFollowing(product.entrepreneurId) ? 'bg-[#CAF0F8] text-[#0077B6]' : 'bg-gray-50 text-gray-400'" @click.stop="toggleFollow(product.entrepreneurId)">{{ isFollowing(product.entrepreneurId) ? 'Siguiendo' : 'Seguir +' }}</button>
                     </div>
                     <div class="relative overflow-hidden rounded-[16px] bg-gray-100">

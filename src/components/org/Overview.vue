@@ -6,6 +6,7 @@ import {
     onMounted
 } from "vue";
 import { supabase } from "../../lib/supabaseClient";
+import BrandLogo from "../shared/BrandLogo.vue";
 const props = defineProps({
     institution: {
         type: Object,
@@ -209,18 +210,7 @@ onMounted(loadSummary);
     <section class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
         <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div class="flex flex-col items-center gap-5 text-center sm:flex-row sm:text-left">
-                <img
-                    v-if="institution.logoUrl"
-                    :src="institution.logoUrl"
-                    :alt="institution.institutionName"
-                    class="h-24 w-24 rounded-full border-4 border-[#CAF0F8] object-cover sm:h-28 sm:w-28"
-                >
-                <div
-                    v-else
-                    class="flex h-24 w-24 items-center justify-center rounded-full border-4 border-[#CAF0F8] bg-[#EAF9FC] text-2xl font-black text-[#0077B6] sm:h-28 sm:w-28"
-                >
-                    {{ institution.institutionName.charAt(0).toUpperCase() }}
-                </div>
+                <BrandLogo :src="institution.logoUrl" :alt="institution.institutionName" :name="institution.institutionName" size="profile"/>
                 <div>
                     <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
                         Mi institución

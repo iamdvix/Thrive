@@ -8,6 +8,7 @@ import {
 } from "vue";
 import { supabase } from "../../lib/supabaseClient";
 import NewsModal from "../shared/NewsModal.vue";
+import BrandLogo from "../shared/BrandLogo.vue";
 const props = defineProps({
     canInteract: { type: Boolean, default: true },
     institutionId: { type: String, default: "" },
@@ -449,18 +450,7 @@ onBeforeUnmount(function () {
             </button>
             <div class="px-1 pb-1 pt-3">
                 <div class="flex items-center gap-2">
-                    <img
-                        v-if="post.institutionLogo"
-                        :src="post.institutionLogo"
-                        :alt="post.institutionName"
-                        class="h-7 w-7 rounded-full border border-[#CAF0F8] object-cover"
-                    >
-                    <div
-                        v-else
-                        class="flex h-7 w-7 items-center justify-center rounded-full bg-[#CAF0F8] text-[9px] font-black text-[#0077B6]"
-                    >
-                        {{ post.institutionName.charAt(0).toUpperCase() }}
-                    </div>
+                    <BrandLogo :src="post.institutionLogo" :alt="post.institutionName" :name="post.institutionName" size="xs"/>
                     <p class="truncate text-[10px] font-bold text-gray-400 sm:text-xs">
                         {{ post.institutionName }}
                     </p>

@@ -12,6 +12,7 @@ import {
     deleteInstitutionImages
 } from "../../lib/orgStorage";
 import NewsModal from "../shared/NewsModal.vue";
+import BrandLogo from "../shared/BrandLogo.vue";
 const props = defineProps({
     institution: {
         type: Object,
@@ -1098,8 +1099,7 @@ onBeforeUnmount(function () {
             </button>
             <div class="px-1 pb-1 pt-3">
                 <div class="mb-2 flex items-center gap-2">
-                    <img v-if="institution.logoUrl" :src="institution.logoUrl" :alt="institution.institutionName" class="h-7 w-7 rounded-full border border-[#CAF0F8] object-cover">
-                    <div v-else class="flex h-7 w-7 items-center justify-center rounded-full bg-[#CAF0F8] text-[9px] font-black text-[#0077B6]">{{ institution.institutionName.charAt(0).toUpperCase() }}</div>
+                    <BrandLogo :src="institution.logoUrl" :alt="institution.institutionName" :name="institution.institutionName" size="xs"/>
                     <p class="truncate text-[10px] font-bold text-gray-400 sm:text-xs">{{ institution.institutionName }}</p>
                 </div>
                 <div class="flex items-center justify-between gap-2">

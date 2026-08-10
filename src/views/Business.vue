@@ -4,6 +4,7 @@ import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
 import LocationMap from "../components/maps/LocationMap.vue";
+import BrandLogo from "../components/shared/BrandLogo.vue";
 
 const route=useRoute();
 const router=useRouter();
@@ -95,8 +96,7 @@ onMounted(load);
         <!-- El perfil vuelve a ser limpio: logo, información y acciones en un solo bloque. -->
         <section class="bg-white px-4 py-6 sm:rounded-[24px] sm:px-7">
             <div class="flex flex-col items-center gap-5 text-center sm:flex-row sm:items-start sm:text-left">
-                <img v-if="entrepreneur.logoUrl" :src="entrepreneur.logoUrl" :alt="entrepreneur.businessName" class="h-24 w-24 shrink-0 rounded-[24px] border-4 border-[#CAF0F8] bg-white p-2 object-contain sm:h-28 sm:w-28">
-                <div v-else class="flex h-24 w-24 shrink-0 items-center justify-center rounded-full border-4 border-[#CAF0F8] bg-[#EAF9FC] text-2xl font-black text-[#0077B6] sm:h-28 sm:w-28">{{ initials(entrepreneur.businessName) }}</div>
+                <BrandLogo :src="entrepreneur.logoUrl" :alt="entrepreneur.businessName" :name="entrepreneur.businessName" size="profile"/>
                 <div class="min-w-0 flex-1">
                     <p class="text-xs font-bold uppercase tracking-[.12em] text-[#00B4D8]">Emprendimiento</p>
                     <h1 class="mt-1 text-2xl font-black text-gray-700 sm:text-3xl">{{ entrepreneur.businessName }}</h1>

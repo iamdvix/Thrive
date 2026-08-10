@@ -2,6 +2,7 @@
 // Perfil institucional y editor de cuenta.
 import { ref, computed, onBeforeUnmount } from "vue";
 import { supabase } from "../../lib/supabaseClient";
+import BrandLogo from "../shared/BrandLogo.vue";
 import {
     uploadInstitutionLogo,
     deleteInstitutionImages,
@@ -288,18 +289,7 @@ onBeforeUnmount(function () {
     <section class="rounded-[24px] bg-white p-5 shadow-sm sm:p-7">
         <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div class="flex flex-col items-center gap-5 text-center sm:flex-row sm:text-left">
-                <img
-                    v-if="institution.logoUrl"
-                    :src="institution.logoUrl"
-                    :alt="institution.institutionName"
-                    class="h-24 w-24 rounded-full border-4 border-[#CAF0F8] object-cover sm:h-28 sm:w-28"
-                >
-                <div
-                    v-else
-                    class="flex h-24 w-24 items-center justify-center rounded-full border-4 border-[#CAF0F8] bg-[#EAF9FC] text-2xl font-black text-[#0077B6] sm:h-28 sm:w-28"
-                >
-                    {{ initials }}
-                </div>
+                <BrandLogo :src="institution.logoUrl" :alt="institution.institutionName" :name="institution.institutionName" size="profile"/>
                 <div>
                     <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#00B4D8]">
                         Perfil institucional
@@ -411,18 +401,7 @@ onBeforeUnmount(function () {
                             Foto de la institución
                         </label>
                         <div class="flex flex-col items-center gap-4 sm:flex-row">
-                            <img
-                                v-if="logoPreview"
-                                :src="logoPreview"
-                                alt="Foto de la institución"
-                                class="h-24 w-24 rounded-full border-4 border-[#CAF0F8] object-cover"
-                            >
-                            <div
-                                v-else
-                                class="flex h-24 w-24 items-center justify-center rounded-full bg-[#CAF0F8] text-xl font-black text-[#0077B6]"
-                            >
-                                {{ initials }}
-                            </div>
+                            <BrandLogo :src="logoPreview" alt="Logo de la institución" :name="form.institutionName||institution.institutionName" size="lg"/>
                             <label class="cursor-pointer rounded-xl border border-[#00B4D8] px-4 py-2.5 text-sm font-bold text-[#0077B6] hover:bg-[#CAF0F8]">
                                 Cambiar foto
                                 <input

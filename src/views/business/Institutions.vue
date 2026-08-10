@@ -4,6 +4,7 @@ import { ref,computed,onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { supabase } from "../../lib/supabaseClient";
 import BusinessNav from "../../components/business/BusinessNav.vue";
+import BrandLogo from "../../components/shared/BrandLogo.vue";
 const router=useRouter();
 const businessName=ref("Thrive"),institutions=ref([]),loading=ref(true),errorText=ref(""),search=ref(""),department=ref("Todos");
 const departments=computed(()=>["Todos",...new Set(institutions.value.map(i=>i.department).filter(Boolean).sort((a,b)=>a.localeCompare(b,"es")))]);
@@ -27,7 +28,7 @@ onMounted(load);
         <div v-else-if="errorText" class="mt-5 rounded-[22px] border border-[#DDEFF3] bg-white p-10 text-center">{{ errorText }}</div>
         <section v-else-if="filtered.length" class="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <article v-for="institution in filtered" :key="institution.id" class="group rounded-[20px] border border-[#DDEFF3] bg-white p-5 shadow-sm">
-                <div class="flex items-start gap-4"><img v-if="institution.logoUrl" :src="institution.logoUrl" :alt="institution.name" class="h-16 w-16 shrink-0 rounded-[18px] object-cover ring-1 ring-[#CAF0F8]"><div v-else class="flex h-16 w-16 shrink-0 items-center justify-center rounded-[18px] bg-[#EAF9FC] font-black text-[#0077B6]">{{ initials(institution.name) }}</div><div class="min-w-0 flex-1"><h2 class="line-clamp-2 text-lg font-black text-gray-700">{{ institution.name }}</h2><p class="mt-1 text-xs font-semibold text-gray-400">{{ institution.district||institution.department||'El Salvador' }}</p></div></div>
+                <div class="flex items-start gap-4"><BrandLogo :src="institution.logoUrl" :alt="institution.name" :name="institution.name" size="lg"/><div class="min-w-0 flex-1"><h2 class="line-clamp-2 text-lg font-black text-gray-700">{{ institution.name }}</h2><p class="mt-1 text-xs font-semibold text-gray-400">{{ institution.district||institution.department||'El Salvador' }}</p></div></div>
                 <p class="mt-4 line-clamp-3 min-h-[72px] text-sm leading-6 text-gray-500">{{ institution.description||'Institución asociada a Thrive.' }}</p>
                 <div class="mt-4 flex flex-wrap gap-2"><span v-if="institution.phone" class="rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-bold text-emerald-700">WhatsApp disponible</span><span v-if="institution.website" class="rounded-full bg-sky-50 px-3 py-1.5 text-[10px] font-bold text-sky-700">Sitio web</span></div>
                 <div class="mt-5 grid grid-cols-2 gap-2 border-t border-gray-100 pt-4"><button v-if="institution.phone" type="button" class="rounded-xl bg-[#25D366] px-3 py-2.5 text-xs font-black text-white" @click="whatsapp(institution.phone,institution.name)">WhatsApp</button><a v-if="institution.website" :href="url(institution.website)" target="_blank" rel="noopener noreferrer" class="rounded-xl bg-[#EAF9FC] px-3 py-2.5 text-center text-xs font-black text-[#0077B6]">Sitio web</a><button type="button" class="col-span-2 flex items-center justify-between rounded-xl px-1 py-2 text-left text-xs font-black text-[#0077B6]" @click="router.push({name:'InstitutionPublic',params:{id:institution.id}})"><span>Ver perfil institucional</span><span class="transition group-hover:translate-x-1">→</span></button></div>

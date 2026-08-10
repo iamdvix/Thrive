@@ -3,6 +3,7 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { supabase } from "../lib/supabaseClient";
+import BrandLogo from "../components/shared/BrandLogo.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -628,19 +629,7 @@ watch(
                         class="flex items-center gap-3 text-left"
                         @click="openEntrepreneurProfile"
                     >
-                        <img
-                            v-if="product.storeAvatar"
-                            :src="product.storeAvatar"
-                            :alt="product.store"
-                            class="h-11 w-11 rounded-xl border border-[#CAF0F8] bg-white p-1 object-contain"
-                        >
-
-                        <div
-                            v-else
-                            class="flex h-11 w-11 items-center justify-center rounded-full bg-[#CAF0F8] text-xs font-black text-[#0077B6]"
-                        >
-                            {{ getInitials(product.store) }}
-                        </div>
+                        <BrandLogo :src="product.storeAvatar" :alt="product.store" :name="product.store" size="sm"/>
 
                         <div>
                             <p class="text-sm font-black text-[#0077B6]">
