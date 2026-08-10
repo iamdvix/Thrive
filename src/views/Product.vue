@@ -454,540 +454,228 @@ watch(
 
 <template>
 <div class="min-h-screen bg-[#F7FAFB] pb-10 text-gray-700">
-    <!-- Cargando -->
-    <main
-        v-if="loading"
-        class="mx-auto max-w-[1200px] px-5 py-24 text-center"
-    >
+    <main v-if="loading" class="mx-auto max-w-[1200px] px-5 py-24 text-center">
         <div class="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div>
-        <p class="mt-4 text-sm font-semibold text-gray-400">
-            Cargando producto...
-        </p>
+        <p class="mt-4 text-sm font-semibold text-gray-400">Cargando producto...</p>
     </main>
 
-    <!-- Error -->
-    <main
-        v-else-if="loadError"
-        class="mx-auto max-w-[1200px] px-5 py-24 text-center"
-    >
-        <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100 font-black text-red-500">
-            !
-        </div>
-        <h1 class="mt-4 text-xl font-black text-gray-700">
-            No pudimos cargar el producto
-        </h1>
-        <p class="mt-2 text-sm text-gray-400">
-            {{ loadError }}
-        </p>
-        <button
-            type="button"
-            class="mt-5 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white"
-            @click="loadPage"
-        >
-            Intentar nuevamente
-        </button>
+    <main v-else-if="loadError" class="mx-auto max-w-[1200px] px-5 py-24 text-center">
+        <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100 font-black text-red-500">!</div>
+        <h1 class="mt-4 text-xl font-black text-gray-700">No pudimos cargar el producto</h1>
+        <p class="mt-2 text-sm text-gray-400">{{ loadError }}</p>
+        <button type="button" class="mt-5 rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white" @click="loadPage">Intentar nuevamente</button>
     </main>
 
-    <!-- Contenido -->
-    <main
-        v-else-if="product"
-        class="mx-auto max-w-[1250px] pb-10 sm:px-4 sm:pt-4 lg:px-6"
-    >
-        <div class="grid gap-4 lg:grid-cols-[1.08fr_.92fr] lg:items-start">
-
-            <!-- Galería -->
-            <section class="bg-white sm:rounded-[28px] sm:border sm:border-gray-200 sm:p-4">
-                <div class="relative overflow-hidden bg-gray-100 sm:rounded-[23px]">
-
-                    <!-- La foto llena el espacio sin dejar franjas blancas. -->
-                    <div class="relative h-[390px] w-full overflow-hidden bg-gray-100 sm:h-[460px] lg:h-[560px] lg:rounded-[26px]">
-                        <!-- object-cover adapta la foto al marco sin comprimir el archivo original. -->
-                        <img
-                            v-if="selectedImage"
-                            :src="selectedImage"
-                            :alt="product.name"
-                            class="h-full w-full object-cover object-center"
-                            loading="eager"
-                            decoding="async"
-                            fetchpriority="high"
-                        >
-                        <div
-                            v-else
-                            class="flex h-full w-full items-center justify-center text-sm font-bold text-gray-400"
-                        >
-                            Sin fotografía
-                        </div>
-                    </div>
-
-                    <!-- Isla superior. Solo regresar es interactivo. -->
-                    <div
-                        class="absolute left-3 right-3 top-3 z-20 flex h-11 items-center rounded-full bg-[#00B4D8] px-1.5 shadow-md sm:left-4 sm:right-4"
+    <main v-else-if="product" class="mx-auto max-w-[1220px] pb-10 sm:px-4 sm:pt-4 lg:px-6">
+        <div class="lg:grid lg:grid-cols-[1.05fr_.95fr] lg:gap-5 lg:items-start">
+            <!-- La galería conserva la foto grande, pero deja las categorías para la tarjeta blanca. -->
+            <section class="overflow-hidden bg-white sm:rounded-[28px] sm:border sm:border-gray-200">
+                <div class="relative h-[390px] w-full overflow-hidden bg-gray-100 sm:h-[470px] lg:h-[610px]">
+                    <img
+                        v-if="selectedImage"
+                        :src="selectedImage"
+                        :alt="product.name"
+                        class="h-full w-full object-cover object-center"
+                        loading="eager"
+                        decoding="async"
+                        fetchpriority="high"
                     >
-                        <button
-                            type="button"
-                            aria-label="Regresar"
-                            class="flex h-8 w-8 items-center justify-center rounded-full text-white transition hover:bg-white/20"
-                            @click="goBack"
-                        >
-                            <svg
-                                class="h-5 w-5"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="2"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M15 18l-6-6 6-6"
-                                ></path>
+                    <div v-else class="flex h-full w-full items-center justify-center text-sm font-bold text-gray-400">Sin fotografía</div>
+
+                    <!-- Isla superior igual al estilo que ya usa Thrive. -->
+                    <div class="absolute left-3 right-3 top-3 z-20 flex h-11 items-center rounded-full bg-[#00B4D8] px-1.5 shadow-md sm:left-4 sm:right-4">
+                        <button type="button" aria-label="Regresar" class="flex h-8 w-8 items-center justify-center rounded-full text-white transition hover:bg-white/20" @click="goBack">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6"></path>
                             </svg>
                         </button>
                     </div>
 
-                    <!-- Categorías dentro de la isla, como en la referencia. -->
-                    <div
-                        class="absolute bottom-3 left-3 right-3 z-20 flex items-center gap-1.5 overflow-x-auto rounded-full bg-[#00B4D8] p-1.5 shadow-md sm:left-4 sm:right-4"
-                    >
-                        <span
-                            v-if="!product.categories.length"
-                            class="shrink-0 rounded-full bg-white/20 px-4 py-1.5 text-[11px] font-semibold text-white"
-                        >
-                            Producto
-                        </span>
-
-                        <span
-                            v-for="category in product.categories"
-                            :key="category"
-                            class="shrink-0 rounded-full bg-white/20 px-4 py-1.5 text-[11px] font-semibold text-white"
-                        >
-                            {{ category }}
-                        </span>
-                    </div>
-
-                    <span
-                        v-if="productImages.length > 1"
-                        class="absolute right-5 top-[66px] rounded-full bg-black/45 px-2.5 py-1 text-[10px] font-bold text-white"
-                    >
-                        {{ selectedImageIndex + 1 }}/{{ productImages.length }}
+                    <span v-if="productImages.length>1" class="absolute right-5 top-[66px] rounded-full bg-black/45 px-2.5 py-1 text-[10px] font-bold text-white">
+                        {{ selectedImageIndex+1 }}/{{ productImages.length }}
                     </span>
 
-                    <template v-if="productImages.length > 1">
-                        <button
-                            type="button"
-                            aria-label="Imagen anterior"
-                            class="absolute left-3 top-1/2 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl text-gray-600 shadow sm:flex"
-                            @click="previousImage"
-                        >
-                            ‹
-                        </button>
-
-                        <button
-                            type="button"
-                            aria-label="Imagen siguiente"
-                            class="absolute right-3 top-1/2 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl text-gray-600 shadow sm:flex"
-                            @click="nextImage"
-                        >
-                            ›
-                        </button>
+                    <template v-if="productImages.length>1">
+                        <button type="button" aria-label="Imagen anterior" class="absolute left-3 top-1/2 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl text-gray-600 shadow sm:flex" @click="previousImage">‹</button>
+                        <button type="button" aria-label="Imagen siguiente" class="absolute right-3 top-1/2 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-xl text-gray-600 shadow sm:flex" @click="nextImage">›</button>
                     </template>
                 </div>
 
-                <!-- Miniaturas -->
-                <div
-                    v-if="productImages.length > 1"
-                    class="flex gap-2 overflow-x-auto px-3 py-3 sm:px-0 sm:pb-0"
-                >
+                <!-- Miniaturas: una franja blanca pequeña como en la referencia. -->
+                <div v-if="productImages.length>1" class="flex gap-2 overflow-x-auto bg-white px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-4">
                     <button
-                        v-for="(image, index) in productImages"
+                        v-for="(image,index) in productImages"
                         :key="image"
                         type="button"
-                        class="h-14 w-14 shrink-0 overflow-hidden rounded-xl border-2 sm:h-16 sm:w-16"
-                        :class="
-                            selectedImageIndex === index
-                                ? 'border-[#00B4D8]'
-                                : 'border-transparent'
-                        "
-                        @click="selectedImageIndex = index"
+                        class="h-12 w-12 shrink-0 overflow-hidden rounded-xl border-2 sm:h-16 sm:w-16"
+                        :class="selectedImageIndex===index?'border-[#00B4D8]':'border-transparent'"
+                        @click="selectedImageIndex=index"
                     >
-                        <img
-                            :src="image"
-                            alt="Fotografía del producto"
-                            class="h-full w-full object-cover"
-                        >
+                        <img :src="image" alt="Fotografía del producto" class="h-full w-full object-cover">
                     </button>
                 </div>
             </section>
 
-            <div class="space-y-4 px-3 sm:px-0">
+            <!-- Toda la información vive en una sola tarjeta, como la referencia. -->
+            <section class="relative bg-white px-4 pb-5 pt-3 sm:mt-4 sm:rounded-[26px] sm:border sm:border-gray-200 sm:p-6 lg:mt-0">
+                <!-- Las categorías ahora están dentro de la tarjeta blanca. -->
+                <div class="mb-4 flex w-full gap-1 overflow-x-auto rounded-full border-[3px] border-[#00B4D8] bg-white p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <span v-if="!product.categories.length" class="shrink-0 rounded-full bg-[#31C3E0] px-4 py-1.5 text-[10px] font-bold text-white">Producto</span>
+                    <span v-for="category in product.categories" :key="category" class="shrink-0 rounded-full bg-[#31C3E0] px-4 py-1.5 text-[10px] font-bold text-white">
+                        {{ category }}
+                    </span>
+                </div>
 
-                <!-- Información principal -->
-                <section class="rounded-[24px] border border-gray-200 bg-white p-5 sm:p-6">
-                    <!-- Emprendimiento -->
-                    <button
-                        type="button"
-                        class="flex items-center gap-3 text-left"
-                        @click="openEntrepreneurProfile"
-                    >
-                        <BrandLogo :src="product.storeAvatar" :alt="product.store" :name="product.store" size="sm"/>
+                <button type="button" class="flex items-center gap-3 text-left" @click="openEntrepreneurProfile">
+                    <BrandLogo :src="product.storeAvatar" :alt="product.store" :name="product.store" size="sm"/>
+                    <div class="min-w-0">
+                        <p class="truncate text-sm font-black text-[#0077B6]">{{ product.store }}</p>
+                        <p class="truncate text-xs text-gray-400">{{ product.district }}<span v-if="product.district&&product.department">, </span>{{ product.department }}</p>
+                    </div>
+                </button>
 
+                <div class="mt-4 flex items-start justify-between gap-3">
+                    <div class="min-w-0 flex-1">
+                        <h1 class="text-xl font-black leading-tight text-gray-800 sm:text-3xl">{{ product.name }}</h1>
+                        <div class="mt-1.5 flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+                            <span class="tracking-wide text-amber-400">★★★★★</span>
+                            <span class="font-bold text-gray-600">{{ averageRating.toFixed(1) }}</span>
+                            <span class="text-gray-400">({{ reviewCountText }})</span>
+                        </div>
+                    </div>
+                    <span v-if="hasDiscount" class="shrink-0 rounded-full bg-[#E5F8FC] px-3 py-1.5 text-xs font-black text-[#0099BC]">-{{ discountPercent }}%</span>
+                </div>
+
+                <div class="mt-4 flex flex-wrap items-end gap-2">
+                    <p class="text-2xl font-black text-[#00A9CF] sm:text-3xl">{{ formatPrice(finalPrice) }}</p>
+                    <p v-if="hasDiscount" class="pb-0.5 text-xs font-semibold text-gray-400 line-through sm:text-sm">{{ formatPrice(product.price) }}</p>
+                </div>
+
+                <div class="mt-4 border-t border-gray-100 pt-4">
+                    <p class="whitespace-pre-line text-sm leading-6 text-gray-600">{{ product.description || "Este producto todavía no tiene una descripción." }}</p>
+                </div>
+
+                <div class="mt-4 flex items-center justify-between rounded-2xl bg-[#F7FAFB] px-4 py-3">
+                    <span class="text-xs font-bold text-gray-500">Disponibilidad</span>
+                    <span class="text-xs font-black" :class="product.stock>0?'text-emerald-600':'text-red-500'">
+                        {{ product.stock>0?`${product.stock} disponibles`:"Agotado" }}
+                    </span>
+                </div>
+
+                <button type="button" class="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-black text-white transition hover:brightness-95" @click="contactWhatsApp">
+                    <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.009-.371-.011-.57-.011-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479s1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.262.489 1.693.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347"></path>
+                    </svg>
+                    Consultar por WhatsApp
+                </button>
+
+                <!-- Reseñas dentro de la misma tarjeta para conservar el diseño compacto de la referencia. -->
+                <div class="mt-5 border-t border-gray-100 pt-5">
+                    <div class="flex items-center justify-between gap-3">
                         <div>
-                            <p class="text-sm font-black text-[#0077B6]">
-                                {{ product.store }}
-                            </p>
-                            <p class="text-xs text-gray-400">
-                                {{ product.district }}<span v-if="product.district && product.department">, </span>{{ product.department }}
-                            </p>
+                            <h2 class="text-base font-black text-gray-800 sm:text-lg">Reseñas de producto</h2>
+                            <p class="mt-0.5 text-[11px] text-gray-400">Opiniones de clientes</p>
                         </div>
-                    </button>
-
-                    <div class="mt-5 flex flex-wrap items-start justify-between gap-3">
-                        <div class="min-w-0">
-                            <h1 class="text-xl font-black leading-tight text-gray-800 sm:text-3xl">
-                                {{ product.name }}
-                            </h1>
-
-                            <div class="mt-2 flex items-center gap-2 text-sm">
-                                <span class="tracking-wide text-amber-400">
-                                    ★★★★★
-                                </span>
-                                <span class="font-bold text-gray-600">
-                                    {{ averageRating.toFixed(1) }}
-                                </span>
-                                <span class="text-gray-400">
-                                    ({{ reviewCountText }})
-                                </span>
-                            </div>
-                        </div>
-
-                        <span
-                            v-if="hasDiscount"
-                            class="rounded-full bg-[#E5F8FC] px-3 py-1.5 text-xs font-black text-[#0099BC]"
-                        >
-                            -{{ discountPercent }}%
-                        </span>
-                    </div>
-
-                    <!-- Precio -->
-                    <div class="mt-5 flex flex-wrap items-end gap-3">
-                        <p class="text-3xl font-black text-[#00A9CF]">
-                            {{ formatPrice(finalPrice) }}
-                        </p>
-
-                        <p
-                            v-if="hasDiscount"
-                            class="pb-1 text-sm font-semibold text-gray-400 line-through"
-                        >
-                            {{ formatPrice(product.price) }}
-                        </p>
-                    </div>
-
-                    <!-- Descripción dentro de la misma tarjeta -->
-                    <div class="mt-5 border-t border-gray-100 pt-5">
-                        <h2 class="text-sm font-black text-gray-700">
-                            Descripción
-                        </h2>
-
-                        <p class="mt-2 whitespace-pre-line text-sm leading-6 text-gray-500">
-                            {{ product.description || "Este producto todavía no tiene una descripción." }}
-                        </p>
-                    </div>
-
-                    <!-- Disponibilidad -->
-                    <div class="mt-5 flex items-center justify-between rounded-2xl bg-[#F7FAFB] px-4 py-3">
-                        <span class="text-xs font-bold text-gray-500">
-                            Disponibilidad
-                        </span>
-
-                        <span
-                            class="text-xs font-black"
-                            :class="product.stock > 0 ? 'text-emerald-600' : 'text-red-500'"
-                        >
-                            {{ product.stock > 0 ? `${product.stock} disponibles` : "Agotado" }}
-                        </span>
-                    </div>
-
-                    <button
-                        type="button"
-                        class="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#25D366] px-5 py-3.5 text-sm font-black text-white transition hover:brightness-95"
-                        @click="contactWhatsApp"
-                    >
-                        <svg
-                            class="h-5 w-5"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            aria-hidden="true"
-                        >
-                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.009-.371-.011-.57-.011-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479s1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.262.489 1.693.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347"></path>
-                        </svg>
-                        Consultar por WhatsApp
-                    </button>
-                </section>
-
-                <!-- Reseñas -->
-                <section class="rounded-[24px] border border-gray-200 bg-white p-5 sm:p-6">
-                    <div class="flex items-center justify-between gap-4">
-                        <div>
-                            <h2 class="text-lg font-black text-gray-800">
-                                Reseñas de producto
-                            </h2>
-                            <p class="mt-1 text-xs text-gray-400">
-                                Opiniones de clientes
-                            </p>
-                        </div>
-
                         <div class="flex items-center gap-1.5">
                             <span class="text-lg text-amber-400">★</span>
-                            <span class="text-sm font-black text-gray-700">
-                                {{ averageRating.toFixed(1) }}
-                            </span>
-                            <span class="text-xs text-gray-400">
-                                ({{ reviews.length }})
-                            </span>
+                            <span class="text-sm font-black text-gray-700">{{ averageRating.toFixed(1) }}</span>
+                            <span class="text-xs text-gray-400">({{ reviews.length }})</span>
                         </div>
                     </div>
 
-                    <!-- Dejar reseña -->
-                    <div
-                        v-if="canReview && !myReview"
-                        class="mt-5 rounded-[18px] border border-gray-200 bg-[#FAFCFD] p-4"
-                    >
-                        <p class="text-sm font-black text-gray-700">
-                            Deja tu reseña
-                        </p>
-
-                        <div class="mt-2 flex items-center gap-0.5">
+                    <div v-if="canReview&&!myReview" class="mt-4">
+                        <div class="flex items-center gap-0.5">
                             <button
                                 v-for="star in 5"
                                 :key="star"
                                 type="button"
                                 :aria-label="`${star} estrellas`"
-                                class="text-2xl"
-                                :class="
-                                    star <= reviewForm.rating
-                                        ? 'text-amber-400'
-                                        : 'text-gray-200'
-                                "
-                                @click="reviewForm.rating = star"
-                            >
-                                ★
-                            </button>
+                                class="text-xl"
+                                :class="star<=reviewForm.rating?'text-amber-400':'text-gray-200'"
+                                @click="reviewForm.rating=star"
+                            >★</button>
                         </div>
-
-                        <div class="mt-3 flex items-end gap-2">
-                            <textarea
+                        <div class="mt-2 flex items-center gap-2">
+                            <input
                                 v-model="reviewForm.comment"
-                                rows="2"
                                 maxlength="800"
-                                placeholder="Escribe tu opinión..."
-                                class="min-h-[50px] flex-1 resize-none rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#00B4D8]"
-                            ></textarea>
-
-                            <button
-                                type="button"
-                                :disabled="reviewSaving"
-                                aria-label="Publicar reseña"
-                                class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#00B4D8] text-white disabled:opacity-50"
-                                @click="saveReview"
+                                placeholder="Deja tu reseña..."
+                                class="h-10 min-w-0 flex-1 rounded-full border border-gray-200 bg-white px-4 text-xs outline-none transition focus:border-[#00B4D8]"
+                                @keyup.enter="saveReview"
                             >
-                                <svg
-                                    class="h-5 w-5"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        d="M5 12h14M13 6l6 6-6 6"
-                                    ></path>
+                            <button type="button" :disabled="reviewSaving" aria-label="Publicar reseña" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#00B4D8] disabled:opacity-50" @click="saveReview">
+                                <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 11.5 21 4l-7.5 17-2.8-6.7L3 11.5Z"></path>
                                 </svg>
                             </button>
                         </div>
                     </div>
 
-                    <!-- Cargando reseñas -->
-                    <div
-                        v-if="reviewsLoading"
-                        class="py-10 text-center text-sm font-semibold text-gray-400"
-                    >
-                        Cargando reseñas...
+                    <div v-if="reviewsLoading" class="py-8 text-center text-sm font-semibold text-gray-400">Cargando reseñas...</div>
+                    <div v-else-if="!reviews.length" class="py-7 text-center">
+                        <p class="text-sm font-bold text-gray-600">Todavía no hay reseñas.</p>
+                        <p class="mt-1 text-xs text-gray-400">Sé la primera persona en compartir su experiencia.</p>
                     </div>
 
-                    <!-- Sin reseñas -->
-                    <div
-                        v-else-if="!reviews.length"
-                        class="py-10 text-center"
-                    >
-                        <p class="text-sm font-bold text-gray-600">
-                            Todavía no hay reseñas.
-                        </p>
-                        <p class="mt-1 text-xs text-gray-400">
-                            Sé la primera persona en compartir su experiencia.
-                        </p>
-                    </div>
-
-                    <!-- Lista -->
-                    <div
-                        v-else
-                        class="mt-5 divide-y divide-gray-100"
-                    >
-                        <article
-                            v-for="review in reviews"
-                            :key="review.id"
-                            class="py-4 first:pt-0 last:pb-0"
-                        >
+                    <div v-else class="mt-4 divide-y divide-gray-100">
+                        <article v-for="review in reviews" :key="review.id" class="py-4 first:pt-0 last:pb-0">
                             <div class="flex items-start gap-3">
-                                <img
-                                    v-if="review.avatarUrl"
-                                    :src="review.avatarUrl"
-                                    :alt="review.fullName"
-                                    class="h-10 w-10 shrink-0 rounded-full object-cover"
-                                >
-
-                                <div
-                                    v-else
-                                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#E4F8FC] text-xs font-black text-[#0077B6]"
-                                >
-                                    {{ getInitials(review.fullName) }}
-                                </div>
+                                <img v-if="review.avatarUrl" :src="review.avatarUrl" :alt="review.fullName" class="h-9 w-9 shrink-0 rounded-full object-cover">
+                                <div v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#E4F8FC] text-[10px] font-black text-[#0077B6]">{{ getInitials(review.fullName) }}</div>
 
                                 <div class="min-w-0 flex-1">
                                     <div class="flex items-start justify-between gap-3">
-                                        <div>
+                                        <div class="min-w-0">
                                             <div class="flex flex-wrap items-center gap-2">
-                                                <p class="text-sm font-black text-gray-700">
-                                                    {{ review.fullName }}
-                                                </p>
-
-                                                <span
-                                                    v-if="review.userId === currentUserId"
-                                                    class="rounded-full bg-[#E4F8FC] px-2 py-0.5 text-[9px] font-black text-[#0077B6]"
-                                                >
-                                                    Tú
-                                                </span>
+                                                <p class="truncate text-xs font-black text-gray-700 sm:text-sm">{{ review.fullName }}</p>
+                                                <span v-if="review.userId===currentUserId" class="rounded-full bg-[#E4F8FC] px-2 py-0.5 text-[9px] font-black text-[#0077B6]">Tú</span>
                                             </div>
-
                                             <div class="mt-0.5 flex items-center gap-2">
-                                                <span class="text-xs tracking-wide text-amber-400">
-                                                    {{ "★".repeat(review.rating) }}{{ "☆".repeat(5 - review.rating) }}
-                                                </span>
-
-                                                <span class="text-[10px] text-gray-400">
-                                                    {{ formatReviewDate(review.createdAt) }}
-                                                </span>
+                                                <span class="text-xs tracking-wide text-amber-400">{{ "★".repeat(review.rating) }}{{ "☆".repeat(5-review.rating) }}</span>
+                                                <span class="text-[10px] text-gray-400">{{ formatReviewDate(review.createdAt) }}</span>
                                             </div>
                                         </div>
 
-                                        <!-- Opciones de la reseña propia -->
-                                        <div
-                                            v-if="
-                                                review.userId === currentUserId &&
-                                                editingReviewId !== review.id
-                                            "
-                                            class="relative"
-                                        >
-                                            <button
-                                                type="button"
-                                                aria-label="Opciones"
-                                                class="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100"
-                                                @click.stop="toggleReviewMenu(review.id)"
-                                            >
-                                                <svg
-                                                    class="h-5 w-5"
-                                                    viewBox="0 0 24 24"
-                                                    fill="currentColor"
-                                                >
+                                        <div v-if="review.userId===currentUserId&&editingReviewId!==review.id" class="relative">
+                                            <button type="button" aria-label="Opciones" class="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100" @click.stop="toggleReviewMenu(review.id)">
+                                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
                                                     <circle cx="12" cy="5" r="1.7"></circle>
                                                     <circle cx="12" cy="12" r="1.7"></circle>
                                                     <circle cx="12" cy="19" r="1.7"></circle>
                                                 </svg>
                                             </button>
-
-                                            <div
-                                                v-if="openReviewMenuId === review.id"
-                                                class="absolute right-0 top-9 z-30 w-32 overflow-hidden rounded-xl border border-gray-100 bg-white py-1 shadow-lg"
-                                            >
-                                                <button
-                                                    type="button"
-                                                    class="w-full px-4 py-2.5 text-left text-xs font-bold text-gray-600 hover:bg-gray-50"
-                                                    @click.stop="startEditingReview(review)"
-                                                >
-                                                    Editar
-                                                </button>
-
-                                                <button
-                                                    type="button"
-                                                    class="w-full px-4 py-2.5 text-left text-xs font-bold text-red-500 hover:bg-red-50"
-                                                    @click.stop="deleteMyReview(review)"
-                                                >
-                                                    Eliminar
-                                                </button>
+                                            <div v-if="openReviewMenuId===review.id" class="absolute right-0 top-9 z-30 w-32 overflow-hidden rounded-xl border border-gray-100 bg-white py-1 shadow-lg">
+                                                <button type="button" class="w-full px-4 py-2.5 text-left text-xs font-bold text-gray-600 hover:bg-gray-50" @click.stop="startEditingReview(review)">Editar</button>
+                                                <button type="button" class="w-full px-4 py-2.5 text-left text-xs font-bold text-red-500 hover:bg-red-50" @click.stop="deleteMyReview(review)">Eliminar</button>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <template v-if="editingReviewId !== review.id">
-                                        <p class="mt-2 whitespace-pre-line text-sm leading-6 text-gray-500">
-                                            {{ review.comment }}
-                                        </p>
-                                    </template>
+                                    <p v-if="editingReviewId!==review.id" class="mt-2 whitespace-pre-line text-sm leading-5 text-gray-500">{{ review.comment }}</p>
 
-                                    <!-- Edición de la reseña -->
-                                    <div
-                                        v-else
-                                        class="mt-3 rounded-2xl border border-gray-200 bg-[#FAFCFD] p-3"
-                                    >
+                                    <div v-else class="mt-3 rounded-2xl border border-gray-200 bg-[#FAFCFD] p-3">
                                         <div class="flex gap-0.5">
                                             <button
                                                 v-for="star in 5"
                                                 :key="`edit-${review.id}-${star}`"
                                                 type="button"
                                                 class="text-xl"
-                                                :class="
-                                                    star <= editReviewForm.rating
-                                                        ? 'text-amber-400'
-                                                        : 'text-gray-200'
-                                                "
-                                                @click="editReviewForm.rating = star"
-                                            >
-                                                ★
-                                            </button>
+                                                :class="star<=editReviewForm.rating?'text-amber-400':'text-gray-200'"
+                                                @click="editReviewForm.rating=star"
+                                            >★</button>
                                         </div>
-
-                                        <textarea
-                                            v-model="editReviewForm.comment"
-                                            rows="3"
-                                            maxlength="800"
-                                            class="mt-2 w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#00B4D8]"
-                                        ></textarea>
-
+                                        <textarea v-model="editReviewForm.comment" rows="3" maxlength="800" class="mt-2 w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#00B4D8]"></textarea>
                                         <div class="mt-2 flex gap-2">
-                                            <button
-                                                type="button"
-                                                :disabled="reviewSaving"
-                                                class="rounded-xl bg-[#00B4D8] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
-                                                @click="updateMyReview(review)"
-                                            >
-                                                Guardar
-                                            </button>
-
-                                            <button
-                                                type="button"
-                                                class="rounded-xl border border-gray-200 px-4 py-2 text-xs font-bold text-gray-500"
-                                                @click="cancelEditingReview"
-                                            >
-                                                Cancelar
-                                            </button>
+                                            <button type="button" :disabled="reviewSaving" class="rounded-xl bg-[#00B4D8] px-4 py-2 text-xs font-bold text-white disabled:opacity-50" @click="updateMyReview(review)">Guardar</button>
+                                            <button type="button" class="rounded-xl border border-gray-200 px-4 py-2 text-xs font-bold text-gray-500" @click="cancelEditingReview">Cancelar</button>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </article>
                     </div>
-                </section>
-            </div>
+                </div>
+            </section>
         </div>
     </main>
 </div>
