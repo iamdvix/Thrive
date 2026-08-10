@@ -27,21 +27,21 @@ onMounted(load);
 
         <div v-if="loading" class="py-24 text-center"><div class="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#CAF0F8] border-t-[#00B4D8]"></div></div>
         <div v-else-if="errorText" class="bg-white p-10 text-center sm:rounded-[22px]">{{ errorText }}</div>
-        <div v-else class="grid gap-4 lg:grid-cols-[1fr_330px]">
+        <div v-else class="grid items-start gap-4 lg:grid-cols-[1fr_330px]">
             <!-- El mapa ocupa el mayor espacio y evita adornos que compitan con él. -->
-            <section class="overflow-hidden bg-white p-1.5 shadow-sm sm:rounded-[22px] sm:ring-1 sm:ring-[#CAF0F8]"><LocationMap :locations="filtered" height="min(72vh,720px)" @select="select"/></section>
+            <section class="h-fit overflow-hidden bg-white p-1.5 shadow-sm sm:rounded-[22px] sm:ring-1 sm:ring-[#CAF0F8]"><LocationMap :locations="filtered" height="clamp(360px,68vh,680px)" @select="select"/></section>
 
             <aside class="bg-white sm:rounded-[22px] sm:border sm:border-gray-100">
                 <article v-if="selected" class="p-5">
-                    <div class="flex items-center gap-3"><img v-if="selected.logoUrl" :src="selected.logoUrl" :alt="selected.businessName" class="h-14 w-14 rounded-full object-cover ring-2 ring-[#CAF0F8]"><div v-else class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#EAF9FC] font-black text-[#0077B6]">{{ initials(selected.businessName) }}</div><div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[.12em] text-[#00B4D8]">{{ selected.isPrimary?'Local principal':'Sucursal' }}</p><h2 class="mt-1 truncate text-lg font-black text-gray-700">{{ selected.businessName }}</h2><p class="mt-1 text-xs font-bold text-amber-500">★ {{ selected.averageRating.toFixed(1) }} <span class="font-medium text-gray-400">· {{ selected.reviewCount }} reseñas</span></p></div></div>
+                    <div class="flex items-center gap-3"><img v-if="selected.logoUrl" :src="selected.logoUrl" :alt="selected.businessName" class="h-14 w-14 rounded-[16px] bg-white p-1 object-contain ring-2 ring-[#CAF0F8]"><div v-else class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#EAF9FC] font-black text-[#0077B6]">{{ initials(selected.businessName) }}</div><div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[.12em] text-[#00B4D8]">{{ selected.isPrimary?'Local principal':'Sucursal' }}</p><h2 class="mt-1 truncate text-lg font-black text-gray-700">{{ selected.businessName }}</h2><p class="mt-1 text-xs font-bold text-amber-500">★ {{ selected.averageRating.toFixed(1) }} <span class="font-medium text-gray-400">· {{ selected.reviewCount }} reseñas</span></p></div></div>
                     <div class="mt-5 border-y border-gray-100 py-4"><p class="font-bold text-gray-700">{{ selected.locationName }}</p><p class="mt-1 text-sm leading-6 text-gray-500">{{ selected.address }}</p><p class="mt-2 text-xs font-semibold text-[#0077B6]">{{ selected.district||selected.department }}</p></div>
                     <button class="mt-4 w-full rounded-xl bg-[#00B4D8] px-5 py-3 text-sm font-bold text-white" @click="openBusiness">Ver perfil</button>
                 </article>
                 <div v-else class="p-6 text-sm text-gray-500">No hay locales que coincidan con estos filtros.</div>
 
                 <!-- En laptop se puede cambiar de local sin abrir otra pantalla. -->
-                <div v-if="filtered.length" class="max-h-[280px] overflow-y-auto border-t border-gray-100 px-3 py-2">
-                    <button v-for="point in filtered" :key="point.id" type="button" class="flex w-full items-center gap-3 border-l-4 px-3 py-3 text-left" :class="selected?.id===point.id?'border-[#00B4D8] bg-[#F5FCFD]':'border-transparent hover:bg-gray-50'" @click="select(point)"><img v-if="point.logoUrl" :src="point.logoUrl" class="h-9 w-9 rounded-full object-cover"><div v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#EAF9FC] text-[9px] font-black text-[#0077B6]">{{ initials(point.businessName) }}</div><div class="min-w-0"><p class="truncate text-xs font-bold text-gray-700">{{ point.businessName }}</p><p class="truncate text-[10px] text-gray-400">{{ point.locationName }}</p></div></button>
+                <div v-if="filtered.length" class="border-t border-gray-100 px-3 py-2">
+                    <button v-for="point in filtered" :key="point.id" type="button" class="flex w-full items-center gap-3 border-l-4 px-3 py-3 text-left" :class="selected?.id===point.id?'border-[#00B4D8] bg-[#F5FCFD]':'border-transparent hover:bg-gray-50'" @click="select(point)"><img v-if="point.logoUrl" :src="point.logoUrl" class="h-9 w-9 rounded-xl bg-white p-0.5 object-contain"><div v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#EAF9FC] text-[9px] font-black text-[#0077B6]">{{ initials(point.businessName) }}</div><div class="min-w-0"><p class="truncate text-xs font-bold text-gray-700">{{ point.businessName }}</p><p class="truncate text-[10px] text-gray-400">{{ point.locationName }}</p></div></button>
                 </div>
             </aside>
         </div>

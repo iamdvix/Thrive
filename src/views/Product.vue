@@ -498,19 +498,25 @@ watch(
             <section class="bg-white sm:rounded-[28px] sm:border sm:border-gray-200 sm:p-4">
                 <div class="relative overflow-hidden bg-gray-100 sm:rounded-[23px]">
 
+                    <!-- La altura cambia según el dispositivo para evitar agrandar demasiado la foto. -->
+                <div class="relative flex h-[330px] w-full items-center justify-center overflow-hidden bg-[#F4F7F8] sm:h-[430px] lg:h-[560px] lg:rounded-[26px]">
+                    <!-- La imagen se reduce si hace falta, pero nunca se fuerza a crecer ni se recorta. -->
                     <img
                         v-if="selectedImage"
                         :src="selectedImage"
                         :alt="product.name"
-                        class="aspect-[4/5] w-full object-cover sm:aspect-square"
+                        class="max-h-full max-w-full object-contain object-center"
+                        loading="eager"
+                        decoding="async"
+                        fetchpriority="high"
                     >
-
                     <div
                         v-else
-                        class="flex aspect-[4/5] w-full items-center justify-center text-sm font-bold text-gray-400 sm:aspect-square"
+                        class="flex h-full w-full items-center justify-center text-sm font-bold text-gray-400"
                     >
                         Sin fotografía
                     </div>
+                </div>
 
                     <!-- Isla superior. Solo regresar es interactivo. -->
                     <div
@@ -626,7 +632,7 @@ watch(
                             v-if="product.storeAvatar"
                             :src="product.storeAvatar"
                             :alt="product.store"
-                            class="h-11 w-11 rounded-full border border-gray-100 object-cover"
+                            class="h-11 w-11 rounded-xl border border-[#CAF0F8] bg-white p-1 object-contain"
                         >
 
                         <div
