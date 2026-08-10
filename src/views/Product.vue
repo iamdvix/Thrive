@@ -593,15 +593,16 @@ watch(
             <div class="relative z-30 -mt-8 space-y-4 px-2 sm:-mt-6 sm:px-0 lg:mt-0">
 
                 <!-- Información principal -->
-                <section class="relative rounded-[26px] border border-[#CBEAF0] bg-white px-5 pb-5 pt-10 shadow-[0_4px_16px_rgba(0,0,0,0.03)] sm:px-6 sm:pb-6 sm:pt-11">
-                    <!-- La barra vive en el borde superior de la tarjeta y se superpone con la foto. -->
-                    <div class="absolute left-2 right-2 top-0 z-20 -translate-y-1/2 flex items-center gap-1.5 overflow-x-auto rounded-full bg-[#00B4D8] p-1.5 shadow-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:left-3 sm:right-3">
+                <section class="relative rounded-[26px] border border-[#CBEAF0] bg-white px-1.5 pb-5 pt-1.5 shadow-[0_4px_16px_rgba(0,0,0,0.03)] sm:px-2 sm:pb-6 sm:pt-2">
+                    <!-- La isla de categorías queda completamente dentro de la tarjeta blanca. -->
+                    <div class="flex w-full items-center gap-1.5 overflow-x-auto rounded-full bg-[#00B4D8] p-1.5 shadow-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                         <span v-if="!product.categories.length" class="shrink-0 rounded-full bg-[#31C3E0] px-4 py-1.5 text-[10px] font-bold text-white sm:text-[11px]">Producto</span>
                         <span v-for="category in product.categories" :key="category" class="shrink-0 rounded-full bg-[#31C3E0] px-4 py-1.5 text-[10px] font-bold text-white sm:text-[11px]">
                             {{ category }}
                         </span>
                     </div>
 
+                    <div class="px-3.5 pt-4 sm:px-4 sm:pt-5">
                     <!-- Emprendimiento -->
                     <button
                         type="button"
@@ -701,6 +702,7 @@ watch(
                         </svg>
                         Consultar por WhatsApp
                     </button>
+                    </div>
                 </section>
 
                 <!-- Reseñas -->
