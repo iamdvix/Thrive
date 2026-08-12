@@ -241,6 +241,7 @@ function formatReviewDate(value) {
 function emptyHours(){return weekdays.map((_,weekday)=>({weekday,isClosed:weekday===6,openTime:weekday===5?"09:00":"08:00",closeTime:weekday===5?"14:00":"18:00"}));}
 async function setNoPhysicalStore(enabled){
     if(noPhysicalStoreSaving.value||!entrepreneur.value?.id)return;
+    if(!requireSubscription())return;
     if(enabled&&locations.value.length){alert("Primero elimina tus locales registrados para indicar que no cuentas con un local físico.");return;}
     noPhysicalStoreSaving.value=true;
     try{
@@ -257,6 +258,8 @@ async function setNoPhysicalStore(enabled){
     }
 }
 function openLocation(location=null){
+    // Crear un local nuevo es una función exclusiva del plan activo.
+    if(!location&&!requireSubscription())return;
     if(location){
         locationForm.value={id:location.id,name:location.name,address:location.address,latitude:location.latitude,longitude:location.longitude,isPrimary:location.isPrimary,active:location.active,hours:weekdays.map((_,weekday)=>{const hour=location.hours.find(item=>item.weekday===weekday);return hour?{weekday,isClosed:hour.is_closed,openTime:String(hour.open_time||"08:00").slice(0,5),closeTime:String(hour.close_time||"18:00").slice(0,5)}:emptyHours()[weekday];})};
     }else{
@@ -272,6 +275,8 @@ async function loadLocations(userId){
 }
 async function saveLocation(){
     if(locationSaving.value)return;
+    // Revalidamos antes de insertar para evitar crear locales sin suscripción aunque se intente saltar la interfaz.
+    if(!locationForm.value.id&&!requireSubscription())return;
     if(!locationForm.value.name.trim()||!locationForm.value.address.trim()||!Number.isFinite(Number(locationForm.value.latitude))||!Number.isFinite(Number(locationForm.value.longitude))){alert("Completa el nombre, dirección y coloca el punto exacto en el mapa.");return;}
     locationSaving.value=true;
     try{

@@ -70,12 +70,12 @@ async function loadProducts() {
         id, entrepreneur_id, name, description, categories, price, discount_percent, stock, featured, active, created_at,
         entrepreneurs (id, business_name, department, district, logo_url),
         product_images (id, image_url, sort_order)
-    `).eq("active", true).order("created_at", { ascending:false });
+    `).eq("active", true);
     if (error) throw error;
     const rows = data || [];
     const summary = await reviewSummary(rows.map(r => r.id));
     const phones = await loadWhatsappMap(rows.map(r => r.entrepreneur_id));
-    products.value = rows.map((p) => {
+    const mappedProducts = rows.map((p) => {
         const store = p.entrepreneurs || {};
         const images = (p.product_images || []).slice().sort((a,b) => a.sort_order-b.sort_order);
         const s = summary[p.id];
@@ -87,6 +87,12 @@ async function loadProducts() {
             averageRating:s?.count ? s.total/s.count : 0, reviewCount:s?.count || 0
         };
     });
+    // Barajamos el catálogo en cada carga para que el orden no dependa de cuándo se registró cada producto.
+    for (let i = mappedProducts.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [mappedProducts[i], mappedProducts[j]] = [mappedProducts[j], mappedProducts[i]];
+    }
+    products.value = mappedProducts;
 }
 async function loadFavorites() { try { favoriteProductIds.value = await loadMyFavoriteProductIds(); } catch { favoriteProductIds.value = []; } }
 async function toggleFavorite(id) {
